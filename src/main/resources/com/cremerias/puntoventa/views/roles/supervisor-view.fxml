@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ToggleButton?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+<?import org.kordamp.ikonli.javafx.FontIcon?>
+
+<!-- Panel del supervisor: vender en caja y cortes de caja de su sucursal -->
+<BorderPane styleClass="panel-supervisor" xmlns:fx="http://javafx.com/fxml"
+            fx:controller="com.cremerias.puntoventa.ui.supervisor.SupervisorController">
+    <left>
+        <VBox styleClass="menu-lateral" spacing="6" prefWidth="236">
+            <Label text="SUPERVISIÓN" styleClass="menu-titulo"/>
+
+            <ToggleButton fx:id="opcionCaja" styleClass="menu-opcion" maxWidth="Infinity" onAction="#onCaja">
+                <graphic>
+                    <HBox spacing="12" alignment="CENTER_LEFT">
+                        <FontIcon iconLiteral="mdi2c-cash-register"/>
+                        <VBox>
+                            <Label text="Caja" styleClass="menu-opcion-titulo"/>
+                            <Label text="Vender y cobrar" styleClass="menu-opcion-detalle"/>
+                        </VBox>
+                    </HBox>
+                </graphic>
+            </ToggleButton>
+
+            <ToggleButton fx:id="opcionCortes" styleClass="menu-opcion" maxWidth="Infinity" onAction="#onCortes">
+                <graphic>
+                    <HBox spacing="12" alignment="CENTER_LEFT">
+                        <FontIcon iconLiteral="mdi2c-calculator-variant-outline"/>
+                        <VBox>
+                            <Label text="Cortes de caja" styleClass="menu-opcion-titulo"/>
+                            <Label text="De tu sucursal" styleClass="menu-opcion-detalle"/>
+                        </VBox>
+                        <Region HBox.hgrow="ALWAYS"/>
+                        <Label fx:id="contadorAbiertas" styleClass="menu-contador"/>
+                    </HBox>
+                </graphic>
+            </ToggleButton>
+
+            <Region VBox.vgrow="ALWAYS"/>
+
+            <VBox styleClass="menu-sucursal" spacing="2">
+                <Label text="SUCURSAL" styleClass="menu-sucursal-etiqueta"/>
+                <Label fx:id="nombreSucursal" styleClass="menu-sucursal-nombre">
+                    <graphic>
+                        <FontIcon iconLiteral="mdi2s-storefront-outline"/>
+                    </graphic>
+                </Label>
+                <Label text="Solo ves y cierras las cajas de esta sucursal." styleClass="menu-sucursal-detalle"
+                       wrapText="true"/>
+            </VBox>
+        </VBox>
+    </left>
+    <center>
+        <StackPane fx:id="contenido" styleClass="supervisor-contenido"/>
+    </center>
+</BorderPane>

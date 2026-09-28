@@ -1,0 +1,1876 @@
+/* =====================================================================
+   Estilos del Punto de Venta Cremería
+   Base: AtlantaFX Primer (claro/oscuro). Aquí solo se ajusta la marca.
+   ===================================================================== */
+
+/* ---------- Paleta de marca (ámbar / crema) ---------- */
+.root {
+    -fx-font-family: "Inter";
+    -fx-font-size: 14px;
+
+    -color-accent-fg: #b45309;
+    -color-accent-emphasis: #d97706;
+    -color-accent-muted: rgba(217, 119, 6, 0.4);
+    -color-accent-subtle: #fef3c7;
+
+    /* Escala completa de acento (AtlantaFX la usa para hover/foco/selección). */
+    -color-accent-0: #fffbeb;
+    -color-accent-1: #fef3c7;
+    -color-accent-2: #fde68a;
+    -color-accent-3: #fcd34d;
+    -color-accent-4: #fbbf24;
+    -color-accent-5: #f59e0b;
+    -color-accent-6: #d97706;
+    -color-accent-7: #b45309;
+    -color-accent-8: #92400e;
+    -color-accent-9: #78350f;
+
+    -rol-administrador: #7c3aed;
+    -rol-supervisor: #2563eb;
+    -rol-cajero: #059669;
+    /* Marca en un solo color (sin degradados). */
+    -marca: #d97706;
+    -exito-solido: #059669;
+    /* Fondo gris; los componentes van en blanco (-color-bg-default). */
+    -fondo-app: #f1f3f5;
+}
+
+.root.oscuro {
+    -color-accent-fg: #fbbf24;
+    -color-accent-emphasis: #d97706;
+    -color-accent-muted: rgba(245, 158, 11, 0.4);
+    -color-accent-subtle: rgba(245, 158, 11, 0.15);
+
+    -rol-administrador: #a78bfa;
+    -rol-supervisor: #60a5fa;
+    -rol-cajero: #34d399;
+    -fondo-app: -color-bg-default;
+}
+
+.app-raiz {
+    -fx-background-color: -fondo-app;
+}
+
+/* =====================================================================
+   LOGIN
+   ===================================================================== */
+
+/* ---------- Panel de marca ---------- */
+.login-marca {
+    -fx-background-color: -marca;
+    -fx-padding: 48 56 48 56;
+}
+
+.login-marca .decoracion {
+    -fx-fill: rgba(255, 255, 255, 0.07);
+}
+
+.login-marca .decoracion-suave {
+    -fx-fill: rgba(255, 255, 255, 0.10);
+}
+
+.marca-logo {
+    -fx-background-color: rgba(255, 255, 255, 0.16);
+    -fx-background-radius: 22;
+    -fx-border-color: rgba(255, 255, 255, 0.28);
+    -fx-border-radius: 22;
+    -fx-padding: 18;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.18), 24, 0, 0, 8);
+}
+
+.marca-logo .ikonli-font-icon {
+    -fx-icon-color: white;
+    -fx-icon-size: 46px;
+}
+
+.marca-titulo {
+    -fx-text-fill: white;
+    -fx-font-size: 46px;
+    -fx-font-weight: 800;
+}
+
+.marca-subtitulo {
+    -fx-text-fill: rgba(255, 255, 255, 0.82);
+    -fx-font-size: 20px;
+    -fx-font-weight: 500;
+}
+
+.marca-lema {
+    -fx-text-fill: rgba(255, 255, 255, 0.92);
+    -fx-font-size: 16px;
+    -fx-line-spacing: 3px;
+}
+
+.marca-caracteristica .label {
+    -fx-text-fill: white;
+    -fx-font-size: 14px;
+    -fx-font-weight: 500;
+}
+
+.marca-caracteristica-icono {
+    -fx-background-color: rgba(255, 255, 255, 0.16);
+    -fx-background-radius: 10;
+    -fx-min-width: 36;
+    -fx-min-height: 36;
+    -fx-max-width: 36;
+    -fx-max-height: 36;
+}
+
+.marca-caracteristica-icono .ikonli-font-icon {
+    -fx-icon-color: white;
+    -fx-icon-size: 18px;
+}
+
+.marca-pie {
+    -fx-text-fill: rgba(255, 255, 255, 0.6);
+    -fx-font-size: 12px;
+}
+
+/* ---------- Panel del formulario ---------- */
+.login-panel {
+    -fx-background-color: -color-bg-default;
+    -fx-padding: 32;
+}
+
+.login-titulo {
+    -fx-font-size: 32px;
+    -fx-font-weight: 800;
+    -fx-text-fill: -color-fg-default;
+}
+
+.login-subtitulo {
+    -fx-font-size: 15px;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.campo-etiqueta {
+    -fx-font-size: 13px;
+    -fx-font-weight: 600;
+    -fx-text-fill: -color-fg-default;
+}
+
+.campo-login {
+    -fx-pref-height: 46px;
+    -fx-font-size: 15px;
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+}
+
+.campo-login .ikonli-font-icon {
+    -fx-icon-size: 20px;
+    -fx-icon-color: -color-fg-muted;
+}
+
+.campo-login:focused .ikonli-font-icon {
+    -fx-icon-color: -color-accent-fg;
+}
+
+.campo-login .icono-accion:hover {
+    -fx-icon-color: -color-accent-fg;
+}
+
+.aviso-mayusculas {
+    -fx-text-fill: -color-warning-fg;
+    -fx-font-size: 12px;
+}
+
+.aviso-mayusculas .ikonli-font-icon {
+    -fx-icon-color: -color-warning-fg;
+}
+
+.boton-entrar {
+    -fx-pref-height: 48px;
+    -fx-font-size: 15px;
+    -fx-font-weight: 700;
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+    -fx-effect: dropshadow(gaussian, rgba(217, 119, 6, 0.35), 16, 0, 0, 5);
+}
+
+.boton-entrar .ikonli-font-icon {
+    -fx-icon-size: 18px;
+    -fx-icon-color: white;
+}
+
+.boton-entrar .progress-indicator > .determinate-indicator > .indicator,
+.boton-entrar .progress-indicator > .spinner {
+    -fx-background-color: white;
+}
+
+.login-ayuda {
+    -fx-text-fill: -color-fg-subtle;
+    -fx-font-size: 12px;
+}
+
+/* ---------- Indicador de conexión ---------- */
+.chip-estado {
+    -fx-background-color: -color-warning-subtle;
+    -fx-background-radius: 999;
+    -fx-padding: 6 12 6 10;
+}
+
+.chip-estado .label {
+    -fx-text-fill: -color-warning-fg;
+    -fx-font-size: 12px;
+    -fx-font-weight: 600;
+}
+
+.chip-estado .ikonli-font-icon {
+    -fx-icon-color: -color-warning-fg;
+    -fx-icon-size: 15px;
+}
+
+.chip-estado:en-linea {
+    -fx-background-color: -color-success-subtle;
+}
+
+.chip-estado:en-linea .label {
+    -fx-text-fill: -color-success-fg;
+}
+
+.chip-estado:en-linea .ikonli-font-icon {
+    -fx-icon-color: -color-success-fg;
+}
+
+.chip-pendientes {
+    -fx-text-fill: -color-fg-muted;
+    -fx-font-size: 12px;
+    -fx-graphic-text-gap: 6;
+}
+
+.chip-pendientes .ikonli-font-icon {
+    -fx-icon-color: -color-fg-muted;
+    -fx-icon-size: 15px;
+}
+
+/* =====================================================================
+   PANTALLA PRINCIPAL (después del login)
+   ===================================================================== */
+
+.barra-superior {
+    -fx-background-color: -color-bg-default;
+    -fx-border-color: transparent transparent -color-border-default transparent;
+    -fx-padding: 12 20 12 20;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.05), 10, 0, 0, 2);
+}
+
+.barra-logo {
+    -fx-background-color: -marca;
+    -fx-background-radius: 10;
+    -fx-min-width: 40;
+    -fx-min-height: 40;
+    -fx-max-width: 40;
+    -fx-max-height: 40;
+}
+
+.barra-logo .ikonli-font-icon {
+    -fx-icon-color: white;
+    -fx-icon-size: 22px;
+}
+
+.barra-titulo {
+    -fx-font-size: 16px;
+    -fx-font-weight: 800;
+}
+
+.barra-sucursal {
+    -fx-font-size: 12px;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.barra-sucursal .ikonli-font-icon {
+    -fx-icon-color: -color-fg-muted;
+    -fx-icon-size: 13px;
+}
+
+/* Insignia del rol */
+.rol-insignia {
+    -fx-background-radius: 999;
+    -fx-padding: 5 12 5 10;
+    -fx-font-size: 12px;
+    -fx-font-weight: 700;
+    -fx-graphic-text-gap: 6;
+}
+
+.rol-insignia.rol-administrador { -fx-background-color: derive(-rol-administrador, 85%); -fx-text-fill: -rol-administrador; }
+.rol-insignia.rol-supervisor    { -fx-background-color: derive(-rol-supervisor, 85%);    -fx-text-fill: -rol-supervisor; }
+.rol-insignia.rol-cajero        { -fx-background-color: derive(-rol-cajero, 85%);        -fx-text-fill: -rol-cajero; }
+
+.oscuro .rol-insignia.rol-administrador { -fx-background-color: derive(-rol-administrador, -70%); }
+.oscuro .rol-insignia.rol-supervisor    { -fx-background-color: derive(-rol-supervisor, -70%); }
+.oscuro .rol-insignia.rol-cajero        { -fx-background-color: derive(-rol-cajero, -70%); }
+
+.rol-insignia.rol-administrador .ikonli-font-icon { -fx-icon-color: -rol-administrador; }
+.rol-insignia.rol-supervisor .ikonli-font-icon    { -fx-icon-color: -rol-supervisor; }
+.rol-insignia.rol-cajero .ikonli-font-icon        { -fx-icon-color: -rol-cajero; }
+
+/* Usuario */
+.avatar {
+    -fx-min-width: 38;
+    -fx-min-height: 38;
+    -fx-max-width: 38;
+    -fx-max-height: 38;
+    -fx-background-radius: 999;
+    -fx-alignment: center;
+    -fx-text-fill: white;
+    -fx-font-weight: 700;
+    -fx-font-size: 13px;
+}
+
+.avatar.rol-administrador { -fx-background-color: -rol-administrador; }
+.avatar.rol-supervisor    { -fx-background-color: -rol-supervisor; }
+.avatar.rol-cajero        { -fx-background-color: -rol-cajero; }
+
+.usuario-nombre {
+    -fx-font-weight: 700;
+    -fx-font-size: 13px;
+}
+
+.usuario-rol {
+    -fx-text-fill: -color-fg-muted;
+    -fx-font-size: 12px;
+}
+
+.boton-salir {
+    -fx-text-fill: -color-danger-fg;
+    -fx-font-weight: 600;
+}
+
+.boton-salir .ikonli-font-icon {
+    -fx-icon-color: -color-danger-fg;
+}
+
+/* Contenido de cada rol */
+.inicio-contenido {
+    -fx-padding: 40;
+}
+
+.panel-rol {
+    -fx-background-color: -color-bg-default;
+    -fx-background-radius: 20;
+    -fx-border-color: -color-border-muted;
+    -fx-border-radius: 20;
+    -fx-padding: 48 56 44 56;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.06), 30, 0, 0, 10);
+}
+
+.panel-rol-icono {
+    -fx-background-radius: 24;
+    -fx-padding: 22;
+}
+
+.panel-rol-icono .ikonli-font-icon {
+    -fx-icon-color: white;
+    -fx-icon-size: 44px;
+}
+
+.rol-administrador .panel-rol-icono { -fx-background-color: -rol-administrador; }
+.rol-supervisor .panel-rol-icono    { -fx-background-color: -rol-supervisor; }
+.rol-cajero .panel-rol-icono        { -fx-background-color: -rol-cajero; }
+
+.panel-rol-saludo {
+    -fx-text-fill: -color-fg-muted;
+    -fx-font-size: 16px;
+    -fx-font-weight: 500;
+}
+
+.panel-rol-titulo {
+    -fx-font-size: 30px;
+    -fx-font-weight: 800;
+}
+
+.panel-rol-descripcion {
+    -fx-text-fill: -color-fg-muted;
+    -fx-font-size: 15px;
+    -fx-text-alignment: center;
+}
+
+.panel-rol-sesion {
+    -fx-background-color: -color-bg-subtle;
+    -fx-background-radius: 999;
+    -fx-padding: 8 16 8 14;
+}
+
+.panel-rol-sesion .label {
+    -fx-text-fill: -color-fg-muted;
+    -fx-font-size: 12px;
+}
+
+.panel-rol-sesion .ikonli-font-icon {
+    -fx-icon-color: -color-fg-muted;
+    -fx-icon-size: 15px;
+}
+
+.inicio-contenido.sin-margen {
+    -fx-padding: 0;
+}
+
+/* =====================================================================
+   COMPONENTES COMUNES
+   ===================================================================== */
+
+.kbd {
+    -fx-background-color: -color-bg-subtle;
+    -fx-border-color: -color-border-default;
+    -fx-border-width: 1 1 2 1;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+    -fx-padding: 1 6 1 6;
+    -fx-font-size: 11px;
+    -fx-font-weight: 700;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.kbd.kbd-claro {
+    -fx-background-color: rgba(255, 255, 255, 0.2);
+    -fx-border-color: rgba(255, 255, 255, 0.35);
+    -fx-text-fill: white;
+}
+
+.texto-error {
+    -fx-text-fill: -color-danger-fg;
+    -fx-font-size: 13px;
+}
+
+.texto-ayuda, .texto-secundario {
+    -fx-text-fill: -color-fg-muted;
+    -fx-font-size: 12px;
+}
+
+.texto-negrita {
+    -fx-font-weight: 700;
+}
+
+.campo-grande {
+    -fx-pref-height: 44px;
+    -fx-font-size: 15px;
+}
+
+.campo-dinero {
+    -fx-pref-height: 58px;
+    -fx-font-size: 26px;
+    -fx-font-weight: 700;
+}
+
+.campo-dinero-signo {
+    -fx-font-size: 22px;
+    -fx-font-weight: 700;
+    -fx-text-fill: -color-fg-muted;
+    -fx-padding: 0 4 0 6;
+}
+
+.chip-rapido {
+    -fx-background-radius: 999;
+    -fx-border-radius: 999;
+    -fx-padding: 6 14 6 14;
+    -fx-font-weight: 600;
+}
+
+/* Avisos flotantes */
+.avisos .aviso {
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.18), 18, 0, 0, 6);
+}
+
+/* =====================================================================
+   DIÁLOGOS
+   ===================================================================== */
+
+.modal-app {
+    -fx-background-color: rgba(15, 23, 42, 0.45);
+}
+
+.dialogo {
+    -fx-background-color: -color-bg-default;
+    -fx-background-radius: 18;
+    -fx-border-color: -color-border-muted;
+    -fx-border-radius: 18;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.28), 40, 0, 0, 14);
+}
+
+.dialogo-encabezado {
+    -fx-padding: 22 22 6 24;
+}
+
+.dialogo-cuerpo {
+    -fx-padding: 14 24 18 24;
+}
+
+.dialogo-pie {
+    -fx-padding: 14 24 20 24;
+    -fx-border-color: -color-border-muted transparent transparent transparent;
+}
+
+.dialogo-icono {
+    -fx-min-width: 46;
+    -fx-min-height: 46;
+    -fx-max-width: 46;
+    -fx-max-height: 46;
+    -fx-background-radius: 14;
+}
+
+.dialogo-icono .ikonli-font-icon {
+    -fx-icon-size: 24px;
+}
+
+.tono-acento .dialogo-icono { -fx-background-color: -color-accent-subtle; }
+.tono-acento .dialogo-icono .ikonli-font-icon { -fx-icon-color: -color-accent-fg; }
+.tono-exito .dialogo-icono { -fx-background-color: -color-success-subtle; }
+.tono-exito .dialogo-icono .ikonli-font-icon { -fx-icon-color: -color-success-fg; }
+.tono-peligro .dialogo-icono { -fx-background-color: -color-danger-subtle; }
+.tono-peligro .dialogo-icono .ikonli-font-icon { -fx-icon-color: -color-danger-fg; }
+.tono-advertencia .dialogo-icono { -fx-background-color: -color-warning-subtle; }
+.tono-advertencia .dialogo-icono .ikonli-font-icon { -fx-icon-color: -color-warning-fg; }
+.tono-info .dialogo-icono { -fx-background-color: -color-neutral-muted; }
+.tono-info .dialogo-icono .ikonli-font-icon { -fx-icon-color: -color-fg-default; }
+
+.dialogo-titulo {
+    -fx-font-size: 19px;
+    -fx-font-weight: 800;
+}
+
+.dialogo-subtitulo {
+    -fx-font-size: 13px;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.dialogo-texto {
+    -fx-font-size: 14px;
+    -fx-text-fill: -color-fg-default;
+}
+
+.dialogo-pie .button.large {
+    -fx-font-weight: 700;
+}
+
+/* Cantidad / peso */
+.campo-cantidad {
+    -fx-alignment: center-left;
+}
+
+.cantidad-vista-previa {
+    -fx-font-size: 16px;
+    -fx-font-weight: 700;
+    -fx-text-fill: -color-accent-fg;
+}
+
+.boton-cantidad-grande {
+    -fx-min-width: 58;
+    -fx-min-height: 58;
+    -fx-background-radius: 12;
+}
+
+.boton-cantidad-grande .ikonli-font-icon {
+    -fx-icon-size: 22px;
+}
+
+/* Cobro */
+.cobro-total {
+    -fx-background-color: -exito-solido;
+    -fx-background-radius: 16;
+    -fx-padding: 16;
+}
+
+.cobro-total-etiqueta {
+    -fx-text-fill: rgba(255, 255, 255, 0.8);
+    -fx-font-size: 12px;
+    -fx-font-weight: 700;
+}
+
+.cobro-total-monto {
+    -fx-text-fill: white;
+    -fx-font-size: 44px;
+    -fx-font-weight: 800;
+}
+
+.cobro-forma {
+    -fx-background-radius: 14;
+    -fx-border-radius: 14;
+    -fx-padding: 12 8 10 8;
+    -fx-background-color: -color-bg-subtle;
+    -fx-border-color: -color-border-default;
+    -fx-border-width: 1.5;
+}
+
+.cobro-forma .ikonli-font-icon {
+    -fx-icon-size: 26px;
+    -fx-icon-color: -color-fg-muted;
+}
+
+.cobro-forma .label {
+    -fx-font-weight: 700;
+}
+
+.cobro-forma:selected {
+    -fx-background-color: -color-success-subtle;
+    -fx-border-color: -color-success-emphasis;
+}
+
+.cobro-forma:selected .ikonli-font-icon {
+    -fx-icon-color: -color-success-fg;
+}
+
+.cobro-forma:selected .label {
+    -fx-text-fill: -color-success-fg;
+}
+
+.cobro-instruccion {
+    -fx-font-size: 14px;
+    -fx-graphic-text-gap: 10;
+    -fx-padding: 12;
+    -fx-background-color: -color-bg-subtle;
+    -fx-background-radius: 10;
+}
+
+.cobro-instruccion .ikonli-font-icon {
+    -fx-icon-size: 22px;
+    -fx-icon-color: -color-accent-fg;
+}
+
+.cobro-resultado {
+    -fx-background-color: -color-success-subtle;
+    -fx-background-radius: 14;
+    -fx-padding: 14 18 14 18;
+}
+
+.cobro-resultado-etiqueta {
+    -fx-font-size: 15px;
+    -fx-font-weight: 700;
+    -fx-text-fill: -color-success-fg;
+    -fx-wrap-text: true;
+}
+
+.cobro-resultado-monto {
+    -fx-font-size: 34px;
+    -fx-font-weight: 800;
+    -fx-text-fill: -color-success-fg;
+}
+
+.cobro-resultado:falta {
+    -fx-background-color: -color-danger-subtle;
+}
+
+.cobro-resultado:falta .cobro-resultado-etiqueta,
+.cobro-resultado:falta .cobro-resultado-monto {
+    -fx-text-fill: -color-danger-fg;
+}
+
+.boton-cobrar-final {
+    -fx-min-width: 180;
+}
+
+/* Venta exitosa */
+.exito-cambio {
+    -fx-background-color: -exito-solido;
+    -fx-background-radius: 18;
+    -fx-padding: 22;
+}
+
+.exito-cambio-etiqueta {
+    -fx-text-fill: rgba(255, 255, 255, 0.85);
+    -fx-font-size: 13px;
+    -fx-font-weight: 800;
+}
+
+.exito-cambio-monto {
+    -fx-text-fill: white;
+    -fx-font-size: 56px;
+    -fx-font-weight: 800;
+}
+
+.exito-detalle {
+    -fx-padding: 4 6 0 6;
+}
+
+/* Ticket */
+.ticket-scroll {
+    -fx-background-color: -color-bg-subtle;
+    -fx-background-radius: 12;
+    -fx-padding: 16;
+}
+
+.ticket-scroll > .viewport {
+    -fx-background-color: transparent;
+}
+
+.ticket-papel {
+    -fx-background-color: white;
+    -fx-padding: 18 16 22 16;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.14), 12, 0, 0, 3);
+}
+
+.ticket-texto {
+    -fx-font-family: "Menlo", "Consolas", "Monospaced";
+    -fx-font-size: 12px;
+    -fx-text-fill: #111827;
+}
+
+/* Corte */
+.corte-resumen {
+    -fx-background-color: -color-bg-subtle;
+    -fx-background-radius: 14;
+    -fx-padding: 16 18 16 18;
+}
+
+.corte-titulo {
+    -fx-font-size: 12px;
+    -fx-font-weight: 800;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.corte-fila .label {
+    -fx-font-size: 14px;
+}
+
+.corte-fila-destacada .label {
+    -fx-font-size: 15px;
+    -fx-font-weight: 800;
+}
+
+.corte-denominacion {
+    -fx-font-size: 13px;
+    -fx-min-width: 100;
+}
+
+.corte-piezas {
+    -fx-alignment: center-right;
+    -fx-pref-width: 72;
+    -fx-font-size: 15px;
+    -fx-font-weight: 700;
+}
+
+.corte-subtotal {
+    -fx-text-fill: -color-fg-muted;
+    -fx-font-size: 13px;
+}
+
+.corte-contado {
+    -fx-background-color: -color-accent-subtle;
+    -fx-background-radius: 14;
+    -fx-padding: 14;
+}
+
+.corte-contado-etiqueta {
+    -fx-font-size: 12px;
+    -fx-font-weight: 800;
+    -fx-text-fill: -color-accent-fg;
+}
+
+.corte-contado-monto {
+    -fx-font-size: 34px;
+    -fx-font-weight: 800;
+}
+
+.corte-diferencia {
+    -fx-font-weight: 700;
+    -fx-text-fill: -color-success-fg;
+}
+
+.corte-diferencia:faltante {
+    -fx-text-fill: -color-danger-fg;
+}
+
+.corte-diferencia:sobrante {
+    -fx-text-fill: -color-accent-fg;
+}
+
+/* Ventas del turno / espera */
+.chip-estado-venta {
+    -fx-background-radius: 999;
+    -fx-padding: 2 10 2 10;
+    -fx-font-size: 12px;
+    -fx-font-weight: 700;
+}
+
+.chip-estado-venta.pagada {
+    -fx-background-color: -color-success-subtle;
+    -fx-text-fill: -color-success-fg;
+}
+
+.chip-estado-venta.cancelada {
+    -fx-background-color: -color-danger-subtle;
+    -fx-text-fill: -color-danger-fg;
+}
+
+.columna-derecha {
+    -fx-alignment: center-right;
+}
+
+.lista-espera .list-cell {
+    -fx-padding: 10 12 10 12;
+}
+
+.espera-icono {
+    -fx-background-color: -color-accent-subtle;
+    -fx-background-radius: 10;
+    -fx-min-width: 40;
+    -fx-min-height: 40;
+}
+
+.espera-icono .ikonli-font-icon {
+    -fx-icon-color: -color-accent-fg;
+    -fx-icon-size: 20px;
+}
+
+.espera-total {
+    -fx-font-size: 17px;
+    -fx-font-weight: 800;
+}
+
+.tipo-movimiento {
+    -fx-pref-height: 42;
+    -fx-font-weight: 700;
+}
+
+/* =====================================================================
+   CAJA
+   ===================================================================== */
+
+.caja {
+    -fx-background-color: -fondo-app;
+}
+
+.caja-principal {
+    -fx-padding: 20 14 16 20;
+}
+
+/* Búsqueda */
+.campo-busqueda {
+    -fx-pref-height: 60px;
+    -fx-font-size: 18px;
+    -fx-background-radius: 14;
+    -fx-border-radius: 14;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.06), 12, 0, 0, 3);
+}
+
+.campo-busqueda > .ikonli-font-icon,
+.campo-busqueda .ikonli-font-icon {
+    -fx-icon-size: 26px;
+    -fx-icon-color: -color-accent-fg;
+}
+
+.campo-busqueda .kbd {
+    -fx-font-size: 12px;
+}
+
+.boton-buscar {
+    -fx-min-width: 60;
+    -fx-min-height: 60;
+    -fx-background-radius: 14;
+    -fx-border-radius: 14;
+}
+
+.boton-buscar .ikonli-font-icon {
+    -fx-icon-size: 24px;
+}
+
+.chip-multiplicador {
+    -fx-background-color: -color-accent-emphasis;
+    -fx-text-fill: white;
+    -fx-font-size: 20px;
+    -fx-font-weight: 800;
+    -fx-background-radius: 14;
+    -fx-padding: 14 18 14 18;
+}
+
+/* Área del carrito */
+.caja-area-carrito {
+    -fx-background-color: -color-bg-default;
+    -fx-background-radius: 16;
+    -fx-border-color: -color-border-muted;
+    -fx-border-radius: 16;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.05), 16, 0, 0, 4);
+}
+
+.tabla-carrito {
+    -fx-background-color: transparent;
+    -fx-background-radius: 16;
+    -fx-border-width: 0;
+    -fx-padding: 4;
+}
+
+.tabla-carrito .column-header-background {
+    -fx-background-color: transparent;
+}
+
+.tabla-carrito .column-header .label {
+    -fx-font-size: 12px;
+    -fx-font-weight: 700;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.tabla-carrito .table-row-cell {
+    -fx-border-color: transparent transparent -color-border-muted transparent;
+}
+
+.tabla-carrito .table-row-cell:selected {
+    -fx-background-color: -color-accent-subtle;
+}
+
+.tabla-carrito .table-row-cell:selected .table-cell {
+    -fx-text-fill: -color-fg-default;
+}
+
+.tabla-carrito .table-row-cell:resaltada {
+    -fx-background-color: derive(-color-accent-emphasis, 70%);
+}
+
+.oscuro .tabla-carrito .table-row-cell:resaltada {
+    -fx-background-color: rgba(245, 158, 11, 0.35);
+}
+
+.tabla-carrito .table-cell {
+    -fx-alignment: center-left;
+    -fx-font-size: 15px;
+}
+
+.celda-numero {
+    -fx-text-fill: -color-fg-subtle;
+    -fx-font-weight: 700;
+}
+
+.celda-producto-nombre {
+    -fx-font-size: 16px;
+    -fx-font-weight: 700;
+}
+
+.celda-producto-detalle {
+    -fx-font-size: 12px;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.celda-precio {
+    -fx-text-fill: -color-fg-muted;
+}
+
+.celda-importe {
+    -fx-font-size: 17px;
+    -fx-font-weight: 800;
+}
+
+.celda-cantidad-valor {
+    -fx-font-size: 17px;
+    -fx-font-weight: 800;
+    -fx-min-width: 42;
+    -fx-alignment: center;
+}
+
+.boton-cantidad {
+    -fx-min-width: 34;
+    -fx-min-height: 34;
+    -fx-max-width: 34;
+    -fx-max-height: 34;
+}
+
+.boton-peso {
+    -fx-font-size: 15px;
+    -fx-font-weight: 800;
+    -fx-background-radius: 999;
+    -fx-border-radius: 999;
+    -fx-padding: 6 14 6 12;
+    -fx-graphic-text-gap: 8;
+}
+
+.boton-peso .ikonli-font-icon {
+    -fx-icon-color: -color-accent-fg;
+}
+
+.carrito-vacio-icono {
+    -fx-background-color: -color-accent-subtle;
+    -fx-background-radius: 999;
+    -fx-min-width: 104;
+    -fx-min-height: 104;
+    -fx-max-width: 104;
+    -fx-max-height: 104;
+}
+
+.carrito-vacio-icono .ikonli-font-icon {
+    -fx-icon-size: 52px;
+    -fx-icon-color: -color-accent-fg;
+}
+
+.carrito-vacio-titulo {
+    -fx-font-size: 20px;
+    -fx-font-weight: 800;
+}
+
+.carrito-vacio-ayuda {
+    -fx-font-size: 14px;
+    -fx-text-fill: -color-fg-muted;
+}
+
+/* Resultados de búsqueda */
+.panel-resultados {
+    -fx-background-color: -color-bg-default;
+    -fx-background-radius: 16;
+    -fx-border-color: -color-accent-muted;
+    -fx-border-width: 1.5;
+    -fx-border-radius: 16;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.22), 30, 0, 0, 10);
+    -fx-padding: 6;
+}
+
+.resultados-encabezado {
+    -fx-padding: 8 10 8 10;
+}
+
+.resultados-titulo {
+    -fx-font-weight: 800;
+    -fx-font-size: 13px;
+}
+
+.resultados-ayuda {
+    -fx-font-size: 12px;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.lista-resultados {
+    -fx-background-color: transparent;
+    -fx-border-width: 0;
+}
+
+.lista-resultados .list-cell {
+    -fx-padding: 6 12 6 10;
+    -fx-background-radius: 10;
+}
+
+.lista-resultados .list-cell:selected {
+    -fx-background-color: -color-accent-subtle;
+}
+
+.lista-resultados .list-cell:selected .label {
+    -fx-text-fill: -color-fg-default;
+}
+
+.resultado-icono {
+    -fx-min-width: 40;
+    -fx-min-height: 40;
+    -fx-max-width: 40;
+    -fx-max-height: 40;
+    -fx-background-radius: 10;
+}
+
+.resultado-icono.granel { -fx-background-color: -color-accent-subtle; }
+.resultado-icono.granel .ikonli-font-icon { -fx-icon-color: -color-accent-fg; -fx-icon-size: 20px; }
+.resultado-icono.pieza { -fx-background-color: -color-neutral-muted; }
+.resultado-icono.pieza .ikonli-font-icon { -fx-icon-color: -color-fg-muted; -fx-icon-size: 20px; }
+
+.resultado-nombre {
+    -fx-font-size: 15px;
+    -fx-font-weight: 700;
+}
+
+.resultado-detalle, .resultado-unidad {
+    -fx-font-size: 12px;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.resultado-precio {
+    -fx-font-size: 16px;
+    -fx-font-weight: 800;
+}
+
+.chip-existencia {
+    -fx-background-radius: 999;
+    -fx-padding: 2 10 2 10;
+    -fx-font-size: 12px;
+    -fx-font-weight: 700;
+}
+
+.chip-existencia.normal { -fx-background-color: -color-success-subtle; -fx-text-fill: -color-success-fg; }
+.chip-existencia.baja { -fx-background-color: -color-warning-subtle; -fx-text-fill: -color-warning-fg; }
+.chip-existencia.agotado { -fx-background-color: -color-danger-subtle; -fx-text-fill: -color-danger-fg; }
+
+/* Barra de atajos */
+.barra-atajos {
+    -fx-padding: 2 4 0 4;
+}
+
+.atajo-texto {
+    -fx-font-size: 12px;
+    -fx-text-fill: -color-fg-muted;
+}
+
+/* Panel lateral */
+.tarjeta-total {
+    -fx-background-color: -marca;
+    -fx-background-radius: 20;
+    -fx-padding: 20 22 20 22;
+    -fx-effect: dropshadow(gaussian, rgba(180, 83, 9, 0.35), 24, 0, 0, 8);
+}
+
+.total-etiqueta {
+    -fx-text-fill: rgba(255, 255, 255, 0.82);
+    -fx-font-size: 13px;
+    -fx-font-weight: 800;
+}
+
+.total-articulos {
+    -fx-text-fill: white;
+    -fx-font-size: 13px;
+    -fx-font-weight: 700;
+    -fx-background-color: rgba(255, 255, 255, 0.18);
+    -fx-background-radius: 999;
+    -fx-padding: 3 10 3 8;
+    -fx-graphic-text-gap: 6;
+}
+
+.total-articulos .ikonli-font-icon {
+    -fx-icon-color: white;
+}
+
+.total-monto {
+    -fx-text-fill: white;
+    -fx-font-size: 58px;
+    -fx-font-weight: 800;
+}
+
+.total-renglones {
+    -fx-text-fill: rgba(255, 255, 255, 0.8);
+    -fx-font-size: 13px;
+}
+
+.tarjeta-ultimo {
+    -fx-background-color: -color-bg-default;
+    -fx-background-radius: 16;
+    -fx-border-color: -color-border-muted;
+    -fx-border-radius: 16;
+    -fx-padding: 12 16 12 16;
+}
+
+.ultimo-etiqueta {
+    -fx-font-size: 11px;
+    -fx-font-weight: 800;
+    -fx-text-fill: -color-fg-subtle;
+}
+
+.ultimo-nombre {
+    -fx-font-size: 15px;
+    -fx-font-weight: 700;
+}
+
+.ultimo-detalle {
+    -fx-font-size: 13px;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.ultimo-importe {
+    -fx-font-size: 20px;
+    -fx-font-weight: 800;
+    -fx-text-fill: -color-success-fg;
+}
+
+.boton-cobrar {
+    -fx-background-color: -exito-solido;
+    -fx-background-radius: 16;
+    -fx-border-width: 0;
+    -fx-pref-height: 74;
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(5, 150, 105, 0.4), 18, 0, 0, 6);
+}
+
+.boton-cobrar:hover {
+    -fx-background-color: #047857;
+}
+
+.boton-cobrar:pressed {
+    -fx-background-color: #065f46;
+}
+
+.boton-cobrar:disabled {
+    -fx-opacity: 0.45;
+}
+
+.boton-cobrar .ikonli-font-icon {
+    -fx-icon-color: white;
+    -fx-icon-size: 28px;
+}
+
+.boton-cobrar-texto {
+    -fx-text-fill: white;
+    -fx-font-size: 24px;
+    -fx-font-weight: 800;
+}
+
+.boton-accion {
+    -fx-background-color: -color-bg-default;
+    -fx-border-color: -color-border-default;
+    -fx-pref-height: 50;
+    -fx-background-radius: 12;
+    -fx-border-radius: 12;
+    -fx-alignment: center-left;
+    -fx-padding: 6 12 6 12;
+}
+
+.boton-accion .ikonli-font-icon {
+    -fx-icon-size: 20px;
+    -fx-icon-color: -color-accent-fg;
+}
+
+.accion-texto {
+    -fx-font-size: 13px;
+    -fx-font-weight: 700;
+}
+
+.boton-accion.accion-peligro .ikonli-font-icon {
+    -fx-icon-color: -color-danger-fg;
+}
+
+.boton-accion .accion-texto:con-pendientes {
+    -fx-text-fill: -color-accent-fg;
+}
+
+HBox:con-pendientes .accion-texto {
+    -fx-text-fill: -color-accent-fg;
+}
+
+.info-turno {
+    -fx-background-color: -color-bg-default;
+    -fx-background-radius: 14;
+    -fx-border-color: -color-border-muted;
+    -fx-border-radius: 14;
+    -fx-padding: 12 14 12 14;
+}
+
+.info-turno .ikonli-font-icon {
+    -fx-icon-color: -color-fg-muted;
+    -fx-icon-size: 16px;
+}
+
+.info-turno-texto {
+    -fx-font-size: 12px;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.boton-accion:hover {
+    -fx-background-color: -color-bg-subtle;
+}
+
+.oscuro .boton-accion {
+    -fx-background-color: -color-button-bg;
+}
+
+.oscuro .boton-accion:hover {
+    -fx-background-color: -color-button-bg-hover;
+}
+
+/* Componentes blancos con borde suave sobre el fondo gris */
+.boton-buscar {
+    -fx-background-color: -color-bg-default;
+    -fx-border-color: -color-border-default;
+}
+
+.oscuro .boton-buscar {
+    -fx-background-color: -color-button-bg;
+}
+
+/* =====================================================================
+   PANEL DEL SUPERVISOR
+   ===================================================================== */
+
+.inicio-contenido.sin-margen > .panel-supervisor {
+    -fx-background-color: -fondo-app;
+}
+
+.menu-lateral {
+    -fx-background-color: -color-bg-default;
+    -fx-border-color: transparent -color-border-muted transparent transparent;
+    -fx-padding: 22 14 18 14;
+}
+
+.menu-titulo {
+    -fx-font-size: 11px;
+    -fx-font-weight: 800;
+    -fx-text-fill: -color-fg-subtle;
+    -fx-padding: 0 10 8 10;
+}
+
+.menu-opcion {
+    -fx-background-color: transparent;
+    -fx-background-radius: 12;
+    -fx-border-width: 0;
+    -fx-padding: 10 12 10 12;
+    -fx-alignment: center-left;
+    -fx-cursor: hand;
+}
+
+.menu-opcion:hover {
+    -fx-background-color: -color-bg-subtle;
+}
+
+.menu-opcion:selected {
+    -fx-background-color: -color-accent-subtle;
+}
+
+.menu-opcion .ikonli-font-icon {
+    -fx-icon-size: 22px;
+    -fx-icon-color: -color-fg-muted;
+}
+
+.menu-opcion:selected .ikonli-font-icon {
+    -fx-icon-color: -color-accent-fg;
+}
+
+.menu-opcion-titulo {
+    -fx-font-size: 14px;
+    -fx-font-weight: 700;
+}
+
+.menu-opcion:selected .menu-opcion-titulo {
+    -fx-text-fill: -color-accent-fg;
+}
+
+.menu-opcion-detalle {
+    -fx-font-size: 12px;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.menu-contador {
+    -fx-background-color: -marca;
+    -fx-text-fill: white;
+    -fx-font-size: 11px;
+    -fx-font-weight: 800;
+    -fx-background-radius: 999;
+    -fx-padding: 1 7 1 7;
+}
+
+.menu-sucursal {
+    -fx-background-color: -color-bg-subtle;
+    -fx-background-radius: 12;
+    -fx-padding: 12;
+}
+
+.menu-sucursal-etiqueta {
+    -fx-font-size: 10px;
+    -fx-font-weight: 800;
+    -fx-text-fill: -color-fg-subtle;
+}
+
+.menu-sucursal-nombre {
+    -fx-font-size: 14px;
+    -fx-font-weight: 700;
+    -fx-graphic-text-gap: 6;
+}
+
+.menu-sucursal-nombre .ikonli-font-icon {
+    -fx-icon-color: -color-accent-fg;
+}
+
+.menu-sucursal-detalle {
+    -fx-font-size: 11px;
+    -fx-text-fill: -color-fg-muted;
+}
+
+/* Página de cortes */
+.cortes-scroll, .cortes-scroll > .viewport {
+    -fx-background-color: -fondo-app;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+    -fx-border-width: 0;
+}
+
+.pagina-titulo {
+    -fx-font-size: 26px;
+    -fx-font-weight: 800;
+}
+
+.pagina-subtitulo {
+    -fx-font-size: 14px;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.boton-blanco {
+    -fx-background-color: -color-bg-default;
+    -fx-border-color: -color-border-default;
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+    -fx-font-weight: 600;
+}
+
+.oscuro .boton-blanco {
+    -fx-background-color: -color-button-bg;
+}
+
+.seccion-titulo {
+    -fx-font-size: 17px;
+    -fx-font-weight: 800;
+}
+
+.seccion-contador {
+    -fx-background-color: -color-neutral-muted;
+    -fx-background-radius: 999;
+    -fx-padding: 1 9 1 9;
+    -fx-font-size: 12px;
+    -fx-font-weight: 700;
+}
+
+.indicador {
+    -fx-background-color: -color-bg-default;
+    -fx-background-radius: 16;
+    -fx-border-color: -color-border-muted;
+    -fx-border-radius: 16;
+    -fx-padding: 16 18 16 18;
+}
+
+.indicador-titulo {
+    -fx-font-size: 13px;
+    -fx-text-fill: -color-fg-muted;
+    -fx-font-weight: 600;
+}
+
+.indicador-icono {
+    -fx-background-color: -color-accent-subtle;
+    -fx-background-radius: 10;
+    -fx-min-width: 34;
+    -fx-min-height: 34;
+    -fx-max-width: 34;
+    -fx-max-height: 34;
+}
+
+.indicador-icono .ikonli-font-icon {
+    -fx-icon-color: -color-accent-fg;
+    -fx-icon-size: 18px;
+}
+
+.indicador-valor {
+    -fx-font-size: 24px;
+    -fx-font-weight: 800;
+}
+
+.indicador-nota {
+    -fx-font-size: 12px;
+    -fx-font-weight: 700;
+}
+
+.indicador-nota.alerta {
+    -fx-text-fill: -color-danger-fg;
+}
+
+.indicador-nota.positiva {
+    -fx-text-fill: -color-accent-fg;
+}
+
+/* Tarjeta de caja abierta */
+.tarjeta-caja {
+    -fx-background-color: -color-bg-default;
+    -fx-background-radius: 16;
+    -fx-border-color: -color-border-muted;
+    -fx-border-radius: 16;
+    -fx-padding: 18;
+}
+
+.tarjeta-caja-icono {
+    -fx-background-color: -color-accent-subtle;
+    -fx-background-radius: 12;
+    -fx-min-width: 44;
+    -fx-min-height: 44;
+    -fx-max-width: 44;
+    -fx-max-height: 44;
+}
+
+.tarjeta-caja-icono .ikonli-font-icon {
+    -fx-icon-color: -color-accent-fg;
+    -fx-icon-size: 22px;
+}
+
+.tarjeta-caja-nombre {
+    -fx-font-size: 16px;
+    -fx-font-weight: 800;
+}
+
+.chip-esta-caja {
+    -fx-background-color: -color-neutral-muted;
+    -fx-background-radius: 999;
+    -fx-padding: 1 8 1 8;
+    -fx-font-size: 11px;
+    -fx-font-weight: 700;
+}
+
+.chip-abierta {
+    -fx-background-color: -color-success-subtle;
+    -fx-text-fill: -color-success-fg;
+    -fx-background-radius: 999;
+    -fx-padding: 3 10 3 10;
+    -fx-font-size: 12px;
+    -fx-font-weight: 700;
+}
+
+.tarjeta-caja-etiqueta {
+    -fx-font-size: 12px;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.tarjeta-caja-valor {
+    -fx-font-size: 13px;
+    -fx-font-weight: 600;
+}
+
+.tarjeta-caja-bloque {
+    -fx-background-color: -color-bg-subtle;
+    -fx-background-radius: 12;
+    -fx-padding: 10 14 10 14;
+}
+
+.tarjeta-caja-efectivo {
+    -fx-font-size: 24px;
+    -fx-font-weight: 800;
+}
+
+.boton-corte {
+    -fx-pref-height: 42;
+    -fx-font-weight: 700;
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+}
+
+.tarjeta-vacia {
+    -fx-background-color: -color-bg-default;
+    -fx-background-radius: 16;
+    -fx-border-color: -color-border-muted;
+    -fx-border-radius: 16;
+    -fx-padding: 28;
+}
+
+.tarjeta-vacia-icono {
+    -fx-icon-size: 34px;
+    -fx-icon-color: -color-success-fg;
+}
+
+/* Tabla de cortes */
+.tabla-cortes {
+    -fx-background-color: -color-bg-default;
+    -fx-background-radius: 16;
+    -fx-border-color: -color-border-muted;
+    -fx-border-radius: 16;
+    -fx-padding: 6;
+}
+
+.tabla-cortes .column-header-background {
+    -fx-background-color: transparent;
+}
+
+.tabla-cortes .column-header .label {
+    -fx-font-size: 12px;
+    -fx-font-weight: 700;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.tabla-cortes .table-cell {
+    -fx-alignment: center-left;
+    -fx-font-size: 13px;
+}
+
+.tabla-cortes .columna-derecha.table-cell,
+.tabla-cortes .table-cell.columna-derecha {
+    -fx-alignment: center-right;
+}
+
+.chip-diferencia {
+    -fx-background-radius: 999;
+    -fx-padding: 2 10 2 10;
+    -fx-font-size: 12px;
+    -fx-font-weight: 700;
+}
+
+.chip-diferencia.exacto { -fx-background-color: -color-success-subtle; -fx-text-fill: -color-success-fg; }
+.chip-diferencia.faltante { -fx-background-color: -color-danger-subtle; -fx-text-fill: -color-danger-fg; }
+.chip-diferencia.sobrante { -fx-background-color: -color-accent-subtle; -fx-text-fill: -color-accent-fg; }
+
+/* =====================================================================
+   PANEL DEL ADMINISTRADOR
+   ===================================================================== */
+
+.panel-admin,
+.admin-contenido,
+.pagina-admin {
+    -fx-background-color: -fondo-app;
+}
+
+.menu-scroll,
+.menu-scroll > .viewport {
+    -fx-background-color: -color-bg-default;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+    -fx-border-width: 0;
+}
+
+.menu-scroll {
+    -fx-border-color: transparent -color-border-muted transparent transparent;
+    -fx-border-width: 0 1 0 0;
+}
+
+.panel-admin .menu-lateral {
+    -fx-border-width: 0;
+    -fx-padding: 14 12 18 12;
+}
+
+.panel-admin .menu-titulo {
+    -fx-padding: 14 10 4 10;
+}
+
+.panel-admin .menu-opcion {
+    -fx-padding: 9 12 9 12;
+}
+
+.panel-admin .menu-opcion .ikonli-font-icon {
+    -fx-icon-size: 20px;
+}
+
+.panel-admin .menu-opcion-titulo {
+    -fx-font-size: 13px;
+}
+
+/* Botones */
+.boton-principal {
+    -fx-font-weight: 700;
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+    -fx-padding: 9 16 9 14;
+}
+
+.accion-fila .ikonli-font-icon {
+    -fx-icon-size: 17px;
+    -fx-icon-color: -color-fg-muted;
+}
+
+.accion-fila:hover .ikonli-font-icon {
+    -fx-icon-color: -color-accent-fg;
+}
+
+.accion-fila.danger .ikonli-font-icon {
+    -fx-icon-color: -color-danger-fg;
+}
+
+/* Chips de estado */
+.chip {
+    -fx-background-radius: 999;
+    -fx-padding: 2 10 2 10;
+    -fx-font-size: 12px;
+    -fx-font-weight: 700;
+}
+
+.chip-exito { -fx-background-color: -color-success-subtle; -fx-text-fill: -color-success-fg; }
+.chip-peligro { -fx-background-color: -color-danger-subtle; -fx-text-fill: -color-danger-fg; }
+.chip-advertencia { -fx-background-color: -color-warning-subtle; -fx-text-fill: -color-warning-fg; }
+.chip-acento { -fx-background-color: -color-accent-subtle; -fx-text-fill: -color-accent-fg; }
+.chip-neutro { -fx-background-color: -color-neutral-muted; -fx-text-fill: -color-fg-default; }
+.chip-tachado { -fx-background-color: -color-neutral-subtle; -fx-text-fill: -color-fg-subtle; -fx-strikethrough: true; }
+.chip-morado { -fx-background-color: derive(-rol-administrador, 85%); -fx-text-fill: -rol-administrador; }
+.chip-azul { -fx-background-color: derive(-rol-supervisor, 85%); -fx-text-fill: -rol-supervisor; }
+
+.oscuro .chip-morado { -fx-background-color: derive(-rol-administrador, -70%); }
+.oscuro .chip-azul { -fx-background-color: derive(-rol-supervisor, -70%); }
+
+/* Tablas blancas */
+.tabla-admin {
+    -fx-background-color: -color-bg-default;
+    -fx-background-radius: 14;
+    -fx-border-color: -color-border-muted;
+    -fx-border-radius: 14;
+    -fx-padding: 6;
+}
+
+.tabla-admin .column-header-background {
+    -fx-background-color: transparent;
+}
+
+.tabla-admin .column-header .label {
+    -fx-font-size: 12px;
+    -fx-font-weight: 700;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.tabla-admin .table-cell {
+    -fx-alignment: center-left;
+    -fx-font-size: 13px;
+}
+
+.tabla-admin .table-cell.columna-derecha,
+.tabla-admin .columna-derecha.table-cell {
+    -fx-alignment: center-right;
+}
+
+.tabla-admin .table-row-cell:selected {
+    -fx-background-color: -color-accent-subtle;
+}
+
+.tabla-admin .table-row-cell:selected .table-cell,
+.tabla-admin .table-row-cell:selected .label {
+    -fx-text-fill: -color-fg-default;
+}
+
+.celda-principal {
+    -fx-font-size: 13px;
+    -fx-font-weight: 700;
+}
+
+.celda-secundaria {
+    -fx-font-size: 11px;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.texto-id {
+    -fx-font-family: "Menlo", "Consolas", "Monospaced";
+    -fx-font-size: 11px;
+    -fx-text-fill: -color-fg-subtle;
+}
+
+.texto-apagado {
+    -fx-text-fill: -color-fg-subtle;
+}
+
+.campo-tabla {
+    -fx-pref-height: 32px;
+}
+
+.buscador {
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+}
+
+/* Tarjetas blancas */
+.tarjeta-admin {
+    -fx-background-color: -color-bg-default;
+    -fx-background-radius: 16;
+    -fx-border-color: -color-border-muted;
+    -fx-border-radius: 16;
+    -fx-padding: 18;
+}
+
+.tarjeta-admin-titulo {
+    -fx-font-size: 16px;
+    -fx-font-weight: 800;
+}
+
+.tarjeta-admin .tabla-admin {
+    -fx-border-color: -color-border-muted;
+}
+
+/* Formularios */
+.grid-presentaciones, .grid-horario {
+    -fx-padding: 4 0 4 0;
+}
+
+.campo-solo-lectura {
+    -fx-background-color: -color-bg-subtle;
+}
+
+.texto-ayuda {
+    -fx-wrap-text: true;
+}
+
+.total-grande-etiqueta {
+    -fx-font-size: 11px;
+    -fx-font-weight: 800;
+    -fx-text-fill: -color-accent-fg;
+}
+
+.total-grande {
+    -fx-font-size: 30px;
+    -fx-font-weight: 800;
+}
+
+.caja-total-plana {
+    -fx-background-color: -color-accent-subtle;
+    -fx-background-radius: 14;
+    -fx-padding: 12 16 12 16;
+}
+
+/* Surtido */
+.surtido-captura {
+    -fx-background-color: -color-bg-subtle;
+    -fx-background-radius: 12;
+    -fx-padding: 10;
+}
+
+.scroll-surtido,
+.scroll-surtido > .viewport {
+    -fx-background-color: -color-bg-default;
+}
+
+.grid-surtido {
+    -fx-padding: 4;
+}
+
+.campo-cantidad-surtido {
+    -fx-font-weight: 700;
+}
+
+.campo-cantidad-surtido:error,
+.existencia-almacen:error {
+    -fx-text-fill: -color-danger-fg;
+    -fx-border-color: -color-danger-emphasis;
+}
+
+.existencia-almacen:error {
+    -fx-border-width: 0;
+}
+
+.boton-precios {
+    -fx-background-color: -color-bg-default;
+    -fx-border-color: -color-border-default;
+    -fx-background-radius: 8;
+    -fx-border-radius: 8;
+    -fx-font-size: 12px;
+}
+
+.boton-precios:error {
+    -fx-border-color: -color-danger-emphasis;
+    -fx-text-fill: -color-danger-fg;
+}
+
+.surtido-resumen {
+    -fx-background-color: -color-bg-subtle;
+    -fx-background-radius: 16;
+    -fx-padding: 18;
+}
+
+.surtido-etiqueta {
+    -fx-font-size: 11px;
+    -fx-font-weight: 800;
+    -fx-text-fill: -color-fg-muted;
+}
+
+/* El dinero que se envía, en grande y de un solo color. */
+.surtido-total {
+    -fx-font-size: 40px;
+    -fx-font-weight: 800;
+    -fx-text-fill: -marca;
+}
+
+.oscuro .surtido-total {
+    -fx-text-fill: -color-accent-fg;
+}
+
+.surtido-valor {
+    -fx-font-size: 24px;
+    -fx-font-weight: 800;
+}
+
+.surtido-detalle {
+    -fx-font-size: 13px;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.surtido-saldo {
+    -fx-font-size: 15px;
+    -fx-font-weight: 800;
+    -fx-text-fill: -color-warning-fg;
+}
+
+.tabla-admin .campo-tabla {
+    -fx-background-color: -color-bg-default;
+    -fx-border-color: -color-border-default;
+    -fx-background-radius: 6;
+    -fx-border-radius: 6;
+    -fx-font-weight: 700;
+}
+
+.tabla-admin .campo-tabla:focused {
+    -fx-border-color: -color-accent-emphasis;
+}
+
+.gramaje-neto {
+    -fx-font-size: 14px;
+    -fx-font-weight: 800;
+    -fx-text-fill: -color-accent-fg;
+}

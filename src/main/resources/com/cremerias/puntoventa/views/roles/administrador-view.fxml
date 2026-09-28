@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+
+<!-- Panel del administrador (almacén central). El menú se arma en el controlador. -->
+<BorderPane styleClass="panel-admin" xmlns:fx="http://javafx.com/fxml"
+            fx:controller="com.cremerias.puntoventa.ui.admin.AdminController">
+    <left>
+        <ScrollPane styleClass="menu-scroll" fitToWidth="true" hbarPolicy="NEVER" prefWidth="264" minWidth="264">
+            <VBox fx:id="menu" styleClass="menu-lateral" spacing="4"/>
+        </ScrollPane>
+    </left>
+    <center>
+        <StackPane fx:id="contenido" styleClass="admin-contenido"/>
+    </center>
+</BorderPane>

@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import atlantafx.base.controls.CustomTextField?>
+<?import atlantafx.base.controls.Spacer?>
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ListView?>
+<?import javafx.scene.control.TableView?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.FlowPane?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+<?import org.kordamp.ikonli.javafx.FontIcon?>
+
+<!-- Pantalla de caja del cajero -->
+<BorderPane fx:id="raiz" styleClass="caja" xmlns:fx="http://javafx.com/fxml"
+            fx:controller="com.cremerias.puntoventa.ui.caja.CajaController">
+
+    <!-- ============ Zona de captura y carrito ============ -->
+    <center>
+        <VBox styleClass="caja-principal" spacing="14">
+            <HBox styleClass="caja-busqueda" spacing="10" alignment="CENTER_LEFT">
+                <Label fx:id="multiplicador" styleClass="chip-multiplicador"/>
+                <CustomTextField fx:id="campoBusqueda" styleClass="campo-busqueda" HBox.hgrow="ALWAYS"
+                                 promptText="Escanea el código de barras o escribe el nombre del producto">
+                    <left>
+                        <FontIcon iconLiteral="mdi2b-barcode-scan"/>
+                    </left>
+                    <right>
+                        <Label text="F1" styleClass="kbd"/>
+                    </right>
+                </CustomTextField>
+                <Button fx:id="botonBuscar" onAction="#onBuscar" styleClass="boton-buscar" focusTraversable="false">
+                    <graphic>
+                        <FontIcon iconLiteral="mdi2m-magnify"/>
+                    </graphic>
+                </Button>
+            </HBox>
+
+            <StackPane styleClass="caja-area-carrito" VBox.vgrow="ALWAYS">
+                <TableView fx:id="tablaCarrito" styleClass="tabla-carrito"/>
+
+                <VBox fx:id="panelResultados" styleClass="panel-resultados" StackPane.alignment="TOP_CENTER"
+                      maxHeight="-Infinity">
+                    <HBox styleClass="resultados-encabezado" alignment="CENTER_LEFT" spacing="8">
+                        <Label fx:id="resultadosTitulo" styleClass="resultados-titulo"/>
+                        <Spacer/>
+                        <Label text="↑ ↓ elegir   ·   Enter agregar   ·   Esc cerrar" styleClass="resultados-ayuda"/>
+                    </HBox>
+                    <ListView fx:id="listaResultados" styleClass="lista-resultados"/>
+                </VBox>
+            </StackPane>
+
+            <FlowPane fx:id="barraAtajos" styleClass="barra-atajos" hgap="14" vgap="6"/>
+        </VBox>
+    </center>
+
+    <!-- ============ Totales y acciones ============ -->
+    <right>
+        <VBox styleClass="caja-lateral" spacing="14" prefWidth="400" minWidth="360">
+            <VBox fx:id="tarjetaTotal" styleClass="tarjeta-total" spacing="4">
+                <HBox alignment="CENTER_LEFT">
+                    <Label text="TOTAL A PAGAR" styleClass="total-etiqueta"/>
+                    <Spacer/>
+                    <Label fx:id="etiquetaArticulos" styleClass="total-articulos">
+                        <graphic>
+                            <FontIcon iconLiteral="mdi2c-cart-outline"/>
+                        </graphic>
+                    </Label>
+                </HBox>
+                <Label fx:id="etiquetaTotal" styleClass="total-monto" text="\$0.00"/>
+                <Label fx:id="etiquetaRenglones" styleClass="total-renglones"/>
+            </VBox>
+
+            <VBox fx:id="tarjetaUltimo" styleClass="tarjeta-ultimo" spacing="2">
+                <Label text="ÚLTIMO AGREGADO" styleClass="ultimo-etiqueta"/>
+                <HBox alignment="CENTER_LEFT" spacing="10">
+                    <VBox HBox.hgrow="ALWAYS" spacing="2">
+                        <Label fx:id="ultimoNombre" styleClass="ultimo-nombre"/>
+                        <Label fx:id="ultimoDetalle" styleClass="ultimo-detalle"/>
+                    </VBox>
+                    <Label fx:id="ultimoImporte" styleClass="ultimo-importe"/>
+                </HBox>
+            </VBox>
+
+            <Button fx:id="botonCobrar" onAction="#onCobrar" styleClass="boton-cobrar" maxWidth="Infinity">
+                <graphic>
+                    <HBox alignment="CENTER" spacing="12">
+                        <FontIcon iconLiteral="mdi2c-cash-register"/>
+                        <Label text="Cobrar" styleClass="boton-cobrar-texto"/>
+                        <Label text="F12" styleClass="kbd, kbd-claro"/>
+                    </HBox>
+                </graphic>
+            </Button>
+
+            <GridPane fx:id="gridAcciones" styleClass="grid-acciones" hgap="10" vgap="10"/>
+
+            <Region VBox.vgrow="ALWAYS"/>
+
+            <VBox styleClass="info-turno" spacing="4">
+                <HBox alignment="CENTER_LEFT" spacing="8">
+                    <FontIcon iconLiteral="mdi2c-clock-outline"/>
+                    <Label fx:id="infoTurno" styleClass="info-turno-texto" text="Sin turno"/>
+                </HBox>
+                <HBox alignment="CENTER_LEFT" spacing="8">
+                    <FontIcon iconLiteral="mdi2r-receipt-text-outline"/>
+                    <Label fx:id="infoVentas" styleClass="info-turno-texto"/>
+                </HBox>
+            </VBox>
+            <padding>
+                <Insets top="20" right="20" bottom="20" left="6"/>
+            </padding>
+        </VBox>
+    </right>
+</BorderPane>

@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.DatePicker?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.TableView?>
+<?import javafx.scene.layout.FlowPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+<?import org.kordamp.ikonli.javafx.FontIcon?>
+
+<!-- Cortes de caja de todas las cajas de la sucursal del supervisor -->
+<ScrollPane fx:id="scroll" styleClass="cortes-scroll" fitToWidth="true" xmlns:fx="http://javafx.com/fxml"
+            fx:controller="com.cremerias.puntoventa.ui.supervisor.CortesController">
+    <VBox styleClass="cortes" spacing="18">
+        <padding>
+            <Insets top="24" right="28" bottom="28" left="28"/>
+        </padding>
+
+        <HBox alignment="CENTER_LEFT" spacing="12">
+            <VBox spacing="2">
+                <Label text="Cortes de caja" styleClass="pagina-titulo"/>
+                <Label fx:id="subtitulo" styleClass="pagina-subtitulo"/>
+            </VBox>
+            <Region HBox.hgrow="ALWAYS"/>
+            <ComboBox fx:id="filtroSucursal" prefWidth="240" visible="false" managed="false"/>
+            <Button text="Actualizar" onAction="#onActualizar" styleClass="boton-blanco">
+                <graphic>
+                    <FontIcon iconLiteral="mdi2r-refresh"/>
+                </graphic>
+            </Button>
+        </HBox>
+
+        <!-- Resumen del día -->
+        <HBox fx:id="indicadores" spacing="14"/>
+
+        <HBox alignment="CENTER_LEFT" spacing="10">
+            <Label text="Cajas abiertas" styleClass="seccion-titulo"/>
+            <Label fx:id="etiquetaAbiertas" styleClass="seccion-contador"/>
+        </HBox>
+        <StackPane>
+            <FlowPane fx:id="tarjetasAbiertas" hgap="16" vgap="16"/>
+            <VBox fx:id="sinAbiertas" styleClass="tarjeta-vacia" alignment="CENTER" spacing="6">
+                <FontIcon iconLiteral="mdi2c-check-circle-outline" styleClass="tarjeta-vacia-icono"/>
+                <Label text="No hay cajas abiertas en esta sucursal" styleClass="texto-negrita"/>
+                <Label text="Todas las cajas tienen su corte hecho." styleClass="texto-secundario"/>
+            </VBox>
+        </StackPane>
+
+        <HBox alignment="CENTER_LEFT" spacing="10">
+            <Label text="Cortes realizados" styleClass="seccion-titulo"/>
+            <Label fx:id="etiquetaCortes" styleClass="seccion-contador"/>
+            <Region HBox.hgrow="ALWAYS"/>
+            <Label text="Fecha" styleClass="campo-etiqueta"/>
+            <DatePicker fx:id="fecha" prefWidth="170" editable="false"/>
+        </HBox>
+        <TableView fx:id="tablaCortes" styleClass="tabla-cortes" prefHeight="360" minHeight="220"/>
+    </VBox>
+</ScrollPane>
