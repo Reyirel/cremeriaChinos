@@ -1,5 +1,6 @@
 package com.cremerias.puntoventa.ui.admin;
 
+import com.cremerias.puntoventa.model.Sucursal;
 import com.cremerias.puntoventa.repository.OrdenRepository;
 import com.cremerias.puntoventa.service.AccesoService;
 import com.cremerias.puntoventa.service.admin.AlertaService;
@@ -10,6 +11,7 @@ import javafx.collections.FXCollections;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TableView;
@@ -31,6 +33,7 @@ public class AvisosPagina extends Pagina {
     private TableView<OrdenRepository.Orden> ordenes;
     private TableView<AccesoService.Bloqueo> bloqueos;
     private TableView<AlertaService.SinVenta> sinVenta;
+    private ComboBox<Sucursal> sucursalAviso;
     private TextField dias;
 
     public AvisosPagina(AdminContexto a) {
@@ -66,17 +69,25 @@ public class AvisosPagina extends Pagina {
                     return dar;
                 })));
 
+        sucursalAviso = new ComboBox<>();
+        sucursalAviso.setPromptText("Sucursal");
+        sucursalAviso.valueProperty().addListener((o, x, y) -> cargarDias());
         dias = new TextField();
         Campos.soloNumeros(dias, 0);
         dias.setPrefColumnCount(4);
         Button guardarDias = Ui.secundario("Guardar", "mdi2c-check");
         guardarDias.setOnAction(e -> {
+            Sucursal s = sucursalAviso.getValue();
+            if (s == null) {
+                a.avisos().error("Elige la sucursal.");
+                return;
+            }
             int valor = dias.getText().isBlank() ? 0 : Integer.parseInt(dias.getText());
-            a.ejecutar("Configuración guardada", () -> a.admin().alertas().guardarDiasSinVenta(valor, a.usuario()));
+            a.ejecutar("Configuración guardada", () -> a.admin().alertas().guardarDiasSinVenta(s, valor, a.usuario()));
             alMostrar();
         });
-        HBox configuracion = new HBox(8, new Label("Avisar si un producto con existencia no se vende en"), dias,
-                new Label("días"), guardarDias);
+        HBox configuracion = new HBox(8, new Label("Avisar en"), sucursalAviso,
+                new Label("si un producto con existencia no se vende en"), dias, new Label("días"), guardarDias);
         configuracion.setAlignment(Pos.CENTER_LEFT);
         sinVenta = tablaCorta("Todos los productos con existencia se han vendido recientemente.");
         sinVenta.getColumns().setAll(List.of(
@@ -114,11 +125,26 @@ public class AvisosPagina extends Pagina {
         ordenes.setItems(FXCollections.observableArrayList(o));
         bloqueos.setItems(FXCollections.observableArrayList(b));
         sinVenta.setItems(FXCollections.observableArrayList(s));
-        dias.setText(String.valueOf(a.admin().alertas().diasSinVenta()));
+
+        Sucursal actual = sucursalAviso.getValue();
+        List<Sucursal> activas = a.admin().sucursales().activas();
+        sucursalAviso.setItems(FXCollections.observableArrayList(activas));
+        if (actual != null) {
+            activas.stream().filter(sc -> sc.id().equals(actual.id())).findFirst().ifPresent(sucursalAviso::setValue);
+        } else if (!activas.isEmpty()) {
+            sucursalAviso.setValue(activas.getFirst());
+        }
+        cargarDias();
+
         indicadores.getChildren().setAll(
                 Ui.indicador("Órdenes por aprobar", String.valueOf(o.size()), "mdi2c-clipboard-list-outline"),
                 Ui.indicador("Accesos bloqueados", String.valueOf(b.size()), "mdi2a-account-lock-outline"),
                 Ui.indicador("Productos sin venta", String.valueOf(s.size()), "mdi2t-timer-sand"));
+    }
+
+    private void cargarDias() {
+        Sucursal s = sucursalAviso.getValue();
+        dias.setText(s == null ? "" : String.valueOf(a.admin().alertas().diasSinVenta(s.id())));
     }
 
     private void darAcceso(AccesoService.Bloqueo b) {

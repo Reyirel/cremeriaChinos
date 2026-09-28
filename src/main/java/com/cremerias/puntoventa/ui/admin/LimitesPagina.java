@@ -70,8 +70,9 @@ public class LimitesPagina extends Pagina {
         guardar = Ui.principal("Guardar cambios", "mdi2c-check");
         guardar.setOnAction(e -> guardar());
         VBox pagina = Ui.pagina("Mínimos y máximos",
-                "Por sucursal. Al llegar al mínimo, la sucursal genera sola una orden por lo que falta para el máximo. "
-                        + "Deja 0 para no controlar el producto.", guardar);
+                "Por sucursal, solo de los productos que ya se le han surtido (no todas venden lo mismo). Al llegar "
+                        + "al mínimo, la sucursal genera sola una orden por lo que falta para el máximo. Deja 0 para "
+                        + "no controlar el producto.", guardar);
         sucursal = new ComboBox<>();
         sucursal.setPromptText("Elige la sucursal");
         sucursal.valueProperty().addListener((o, x, y) -> cargar());

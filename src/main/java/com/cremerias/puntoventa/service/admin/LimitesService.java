@@ -17,8 +17,10 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /** Mínimos y máximos de cada producto en cada sucursal (los define el administrador). */
 public class LimitesService {
@@ -49,6 +51,21 @@ public class LimitesService {
 
     public List<Fila> listar(String sucursalId) {
         return database.con(c -> {
+            // Un producto es de la sucursal cuando ya se le surtió ahí (tiene lote) o ya
+            // tiene mínimo/máximo capturado: no todas las sucursales venden lo mismo.
+            Set<String> asignados = new HashSet<>();
+            try (PreparedStatement ps = c.prepareStatement("""
+                    SELECT producto_id FROM lotes WHERE sucursal_id = ?
+                    UNION
+                    SELECT producto_id FROM limites_sucursal WHERE sucursal_id = ?""")) {
+                ps.setString(1, sucursalId);
+                ps.setString(2, sucursalId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        asignados.add(rs.getString(1));
+                    }
+                }
+            }
             Map<String, BigDecimal[]> limites = new HashMap<>();
             try (PreparedStatement ps = c.prepareStatement(
                     "SELECT producto_id, minimo, maximo FROM limites_sucursal WHERE sucursal_id = ?")) {
@@ -71,7 +88,7 @@ public class LimitesService {
             }
             List<Fila> filas = new ArrayList<>();
             for (ProductoCatalogo p : productos.listar(c)) {
-                if (!p.activo()) {
+                if (!p.activo() || !asignados.contains(p.id())) {
                     continue;
                 }
                 BigDecimal[] l = limites.getOrDefault(p.id(), new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO});
