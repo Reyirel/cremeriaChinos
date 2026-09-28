@@ -24,9 +24,10 @@ public class ProductoAdminService {
      * Datos capturados en el formulario. {@code id} nulo = producto nuevo.
      * Gramaje y merma en gramos, por unidad base (por pieza, o por kilo en productos por kilo).
      */
-    public record Datos(String id, String nombre, String categoria, String clave, Unidad unidad, boolean sujetoMerma,
-                        Disponibilidad disponibilidad, List<Presentacion> presentaciones,
-                        List<String> presentacionesEliminadas, BigDecimal gramajeGramos, BigDecimal mermaGramos) {
+    public record Datos(String id, String nombre, String categoria, String clave, String codigoInventario,
+                        Unidad unidad, boolean sujetoMerma, Disponibilidad disponibilidad,
+                        List<Presentacion> presentaciones, List<String> presentacionesEliminadas,
+                        BigDecimal gramajeGramos, BigDecimal mermaGramos) {
     }
 
     private static final BigDecimal MIL = new BigDecimal("1000");
@@ -58,6 +59,13 @@ public class ProductoAdminService {
             if (claveUsada.isPresent()) {
                 throw new IllegalArgumentException("La clave " + clave + " ya la usa " + claveUsada.get() + ".");
             }
+            String codigoInventario = d.codigoInventario() == null || d.codigoInventario().isBlank()
+                    ? null : d.codigoInventario().strip();
+            var codigoInventarioUsado = productos.usoDeCodigoInventario(c, codigoInventario, d.id() == null ? "" : d.id());
+            if (codigoInventarioUsado.isPresent()) {
+                throw new IllegalArgumentException("El código de inventario " + codigoInventario + " ya lo usa "
+                        + codigoInventarioUsado.get() + ".");
+            }
             for (Presentacion p : d.presentaciones()) {
                 var codigoUsado = productos.usoDeCodigo(c, p.codigoBarras(), p.id() == null ? "" : p.id());
                 if (codigoUsado.isPresent()) {
@@ -72,11 +80,11 @@ public class ProductoAdminService {
             BigDecimal gramaje = d.unidad() == Unidad.KG ? MIL : d.gramajeGramos();
             BigDecimal merma = d.sujetoMerma() && d.mermaGramos() != null ? d.mermaGramos() : BigDecimal.ZERO;
             if (nuevo) {
-                productos.insertar(c, id, d.nombre().strip(), categoriaId, clave, d.unidad(), d.sujetoMerma(),
-                        d.disponibilidad(), gramaje, merma);
+                productos.insertar(c, id, d.nombre().strip(), categoriaId, clave, codigoInventario, d.unidad(),
+                        d.sujetoMerma(), d.disponibilidad(), gramaje, merma);
             } else {
-                productos.actualizar(c, id, d.nombre().strip(), categoriaId, clave, d.sujetoMerma(), d.disponibilidad(),
-                        gramaje, merma);
+                productos.actualizar(c, id, d.nombre().strip(), categoriaId, clave, codigoInventario, d.sujetoMerma(),
+                        d.disponibilidad(), gramaje, merma);
             }
             for (String eliminada : d.presentacionesEliminadas()) {
                 productos.eliminarPresentacion(c, eliminada);

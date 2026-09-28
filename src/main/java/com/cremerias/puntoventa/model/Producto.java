@@ -24,6 +24,7 @@ public record Producto(
         String productoId,
         String codigoBarras,
         String clave,
+        String codigoInventario,
         String nombre,
         String categoria,
         Unidad unidad,

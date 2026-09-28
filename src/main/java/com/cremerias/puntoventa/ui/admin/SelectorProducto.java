@@ -42,7 +42,8 @@ final class SelectorProducto {
             String t = normalizar(texto);
             Platform.runLater(() -> {
                 filtrados.setPredicate(p -> t.isEmpty() || normalizar(p.nombre()).contains(t)
-                        || (p.clave() != null && p.clave().equalsIgnoreCase(t)));
+                        || (p.clave() != null && p.clave().equalsIgnoreCase(t))
+                        || (p.codigoInventario() != null && p.codigoInventario().equalsIgnoreCase(t)));
                 if (!t.isEmpty() && !combo.isShowing() && combo.isFocused() && !filtrados.isEmpty()) {
                     combo.show();
                 }

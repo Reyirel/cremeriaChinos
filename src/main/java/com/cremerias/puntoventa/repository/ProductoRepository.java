@@ -34,8 +34,8 @@ public class ProductoRepository {
         Map<String, List<Presentacion>> presentaciones = presentaciones(c, null);
         List<ProductoCatalogo> lista = new ArrayList<>();
         try (PreparedStatement ps = c.prepareStatement("""
-                SELECT p.id, p.nombre, p.categoria_id, c.nombre AS categoria, p.clave, p.unidad, p.sujeto_merma,
-                       p.disponibilidad, p.activo, p.gramaje_gramos, p.merma_gramos
+                SELECT p.id, p.nombre, p.categoria_id, c.nombre AS categoria, p.clave, p.codigo_inventario, p.unidad,
+                       p.sujeto_merma, p.disponibilidad, p.activo, p.gramaje_gramos, p.merma_gramos
                 FROM productos p LEFT JOIN categorias c ON c.id = p.categoria_id
                 WHERE p.eliminado_en IS NULL
                 ORDER BY p.nombre COLLATE NOCASE""");
@@ -49,8 +49,8 @@ public class ProductoRepository {
 
     public Optional<ProductoCatalogo> porId(Connection c, String id) throws SQLException {
         try (PreparedStatement ps = c.prepareStatement("""
-                SELECT p.id, p.nombre, p.categoria_id, c.nombre AS categoria, p.clave, p.unidad, p.sujeto_merma,
-                       p.disponibilidad, p.activo, p.gramaje_gramos, p.merma_gramos
+                SELECT p.id, p.nombre, p.categoria_id, c.nombre AS categoria, p.clave, p.codigo_inventario, p.unidad,
+                       p.sujeto_merma, p.disponibilidad, p.activo, p.gramaje_gramos, p.merma_gramos
                 FROM productos p LEFT JOIN categorias c ON c.id = p.categoria_id
                 WHERE p.id = ? AND p.eliminado_en IS NULL""")) {
             ps.setString(1, id);
@@ -126,45 +126,48 @@ public class ProductoRepository {
         }
     }
 
-    public void insertar(Connection c, String id, String nombre, String categoriaId, String clave, Unidad unidad,
-                         boolean sujetoMerma, Disponibilidad disponibilidad, BigDecimal gramaje, BigDecimal merma)
-            throws SQLException {
+    public void insertar(Connection c, String id, String nombre, String categoriaId, String clave,
+                         String codigoInventario, Unidad unidad, boolean sujetoMerma, Disponibilidad disponibilidad,
+                         BigDecimal gramaje, BigDecimal merma) throws SQLException {
         String ahora = Tiempo.ahora();
         try (PreparedStatement ps = c.prepareStatement("""
-                INSERT INTO productos (id, nombre, categoria_id, clave, unidad, precio_centavos, sujeto_merma,
-                                       disponibilidad, gramaje_gramos, merma_gramos, creado_en, actualizado_en)
-                VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)""")) {
+                INSERT INTO productos (id, nombre, categoria_id, clave, codigo_inventario, unidad, precio_centavos,
+                                       sujeto_merma, disponibilidad, gramaje_gramos, merma_gramos, creado_en,
+                                       actualizado_en)
+                VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)""")) {
             ps.setString(1, id);
             ps.setString(2, nombre);
             ps.setString(3, categoriaId);
             ps.setString(4, clave);
-            ps.setString(5, unidad.name());
-            ps.setBoolean(6, sujetoMerma);
-            ps.setString(7, disponibilidad.name());
-            ps.setBigDecimal(8, gramaje);
-            ps.setBigDecimal(9, merma);
-            ps.setString(10, ahora);
+            ps.setString(5, codigoInventario);
+            ps.setString(6, unidad.name());
+            ps.setBoolean(7, sujetoMerma);
+            ps.setString(8, disponibilidad.name());
+            ps.setBigDecimal(9, gramaje);
+            ps.setBigDecimal(10, merma);
             ps.setString(11, ahora);
+            ps.setString(12, ahora);
             ps.executeUpdate();
         }
     }
 
     public void actualizar(Connection c, String id, String nombre, String categoriaId, String clave,
-                           boolean sujetoMerma, Disponibilidad disponibilidad, BigDecimal gramaje, BigDecimal merma)
-            throws SQLException {
+                           String codigoInventario, boolean sujetoMerma, Disponibilidad disponibilidad,
+                           BigDecimal gramaje, BigDecimal merma) throws SQLException {
         try (PreparedStatement ps = c.prepareStatement("""
-                UPDATE productos SET nombre = ?, categoria_id = ?, clave = ?, sujeto_merma = ?, disponibilidad = ?,
-                                     gramaje_gramos = ?, merma_gramos = ?, actualizado_en = ?
+                UPDATE productos SET nombre = ?, categoria_id = ?, clave = ?, codigo_inventario = ?, sujeto_merma = ?,
+                                     disponibilidad = ?, gramaje_gramos = ?, merma_gramos = ?, actualizado_en = ?
                 WHERE id = ?""")) {
             ps.setString(1, nombre);
             ps.setString(2, categoriaId);
             ps.setString(3, clave);
-            ps.setBoolean(4, sujetoMerma);
-            ps.setString(5, disponibilidad.name());
-            ps.setBigDecimal(6, gramaje);
-            ps.setBigDecimal(7, merma);
-            ps.setString(8, Tiempo.ahora());
-            ps.setString(9, id);
+            ps.setString(4, codigoInventario);
+            ps.setBoolean(5, sujetoMerma);
+            ps.setString(6, disponibilidad.name());
+            ps.setBigDecimal(7, gramaje);
+            ps.setBigDecimal(8, merma);
+            ps.setString(9, Tiempo.ahora());
+            ps.setString(10, id);
             ps.executeUpdate();
         }
     }
@@ -182,8 +185,10 @@ public class ProductoRepository {
     /** Borrado lógico: el producto deja de verse pero su historial se conserva. */
     public void eliminar(Connection c, String id) throws SQLException {
         String ahora = Tiempo.ahora();
-        try (PreparedStatement ps = c.prepareStatement(
-                "UPDATE productos SET eliminado_en = ?, activo = 0, clave = NULL, actualizado_en = ? WHERE id = ?")) {
+        try (PreparedStatement ps = c.prepareStatement("""
+                UPDATE productos SET eliminado_en = ?, activo = 0, clave = NULL, codigo_inventario = NULL,
+                                     actualizado_en = ?
+                WHERE id = ?""")) {
             ps.setString(1, ahora);
             ps.setString(2, ahora);
             ps.setString(3, id);
@@ -253,6 +258,12 @@ public class ProductoRepository {
         return uso(c, "SELECT nombre FROM productos WHERE clave = ? COLLATE NOCASE AND id <> ?", clave, excluirProductoId);
     }
 
+    public Optional<String> usoDeCodigoInventario(Connection c, String codigoInventario, String excluirProductoId)
+            throws SQLException {
+        return uso(c, "SELECT nombre FROM productos WHERE codigo_inventario = ? COLLATE NOCASE AND id <> ?",
+                codigoInventario, excluirProductoId);
+    }
+
     public Optional<String> usoDeCodigo(Connection c, String codigo, String excluirPresentacionId) throws SQLException {
         return uso(c, """
                 SELECT p.nombre || ' · ' || pr.nombre FROM presentaciones pr JOIN productos p ON p.id = pr.producto_id
@@ -292,9 +303,10 @@ public class ProductoRepository {
 
     private static ProductoCatalogo mapear(ResultSet rs, List<Presentacion> presentaciones) throws SQLException {
         return new ProductoCatalogo(rs.getString("id"), rs.getString("nombre"), rs.getString("categoria_id"),
-                rs.getString("categoria"), rs.getString("clave"), Unidad.valueOf(rs.getString("unidad")),
-                rs.getBoolean("sujeto_merma"), Disponibilidad.valueOf(rs.getString("disponibilidad")),
-                rs.getBoolean("activo"), List.copyOf(presentaciones), gramos(rs, "gramaje_gramos"),
+                rs.getString("categoria"), rs.getString("clave"), rs.getString("codigo_inventario"),
+                Unidad.valueOf(rs.getString("unidad")), rs.getBoolean("sujeto_merma"),
+                Disponibilidad.valueOf(rs.getString("disponibilidad")), rs.getBoolean("activo"),
+                List.copyOf(presentaciones), gramos(rs, "gramaje_gramos"),
                 gramos(rs, "merma_gramos") == null ? BigDecimal.ZERO : gramos(rs, "merma_gramos"));
     }
 

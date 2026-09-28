@@ -1262,6 +1262,9 @@ public class CajaController {
         if (p.clave() != null) {
             partes.add("Clave " + p.clave());
         }
+        if (p.codigoInventario() != null) {
+            partes.add("Inv. " + p.codigoInventario());
+        }
         if (p.codigoBarras() != null) {
             partes.add(p.codigoBarras());
         }

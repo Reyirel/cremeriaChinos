@@ -285,16 +285,16 @@ class AdministracionTest {
                 null, true, true));
         // Sin gramaje no se puede guardar un producto por pieza.
         assertThrows(IllegalArgumentException.class, () -> admin.productos().guardar(new com.cremerias.puntoventa.service
-                .admin.ProductoAdminService.Datos(null, "Lapicero", "Papelería", null, com.cremerias.puntoventa.model.Unidad.PZA,
+                .admin.ProductoAdminService.Datos(null, "Lapicero", "Papelería", null, null, com.cremerias.puntoventa.model.Unidad.PZA,
                 false, com.cremerias.puntoventa.model.Disponibilidad.REGULAR, pieza, List.of(), null, null), administrador));
         // La merma debe ser menor que el gramaje.
         assertThrows(IllegalArgumentException.class, () -> admin.productos().guardar(new com.cremerias.puntoventa.service
-                .admin.ProductoAdminService.Datos(null, "Jabón", "Limpieza", null, com.cremerias.puntoventa.model.Unidad.PZA,
+                .admin.ProductoAdminService.Datos(null, "Jabón", "Limpieza", null, null, com.cremerias.puntoventa.model.Unidad.PZA,
                 true, com.cremerias.puntoventa.model.Disponibilidad.REGULAR, pieza, List.of(), new BigDecimal("150"),
                 new BigDecimal("150")), administrador));
 
         String folio = admin.productos().guardar(new com.cremerias.puntoventa.service.admin.ProductoAdminService.Datos(
-                null, "Queso de bola", "Quesos", null, com.cremerias.puntoventa.model.Unidad.PZA, true,
+                null, "Queso de bola", "Quesos", null, null, com.cremerias.puntoventa.model.Unidad.PZA, true,
                 com.cremerias.puntoventa.model.Disponibilidad.TEMPORADA, pieza, List.of(), new BigDecimal("1000"),
                 new BigDecimal("50")), administrador);
         assertTrue(folio.startsWith("PRD-"));
@@ -302,7 +302,7 @@ class AdministracionTest {
         assertEquals(0, new BigDecimal("950").compareTo(bola.gramajeNeto()));
         // Admite microgramos (0.0005 g = 500 µg).
         admin.productos().guardar(new com.cremerias.puntoventa.service.admin.ProductoAdminService.Datos(
-                null, "Vitamina", "Farmacia", null, com.cremerias.puntoventa.model.Unidad.PZA, false,
+                null, "Vitamina", "Farmacia", null, null, com.cremerias.puntoventa.model.Unidad.PZA, false,
                 com.cremerias.puntoventa.model.Disponibilidad.REGULAR, pieza, List.of(), new BigDecimal("0.0005"), null),
                 administrador);
         assertEquals("500 µg", com.cremerias.puntoventa.util.Masa.formatear(catalogoAdmin("Vitamina").gramajeGramos()));

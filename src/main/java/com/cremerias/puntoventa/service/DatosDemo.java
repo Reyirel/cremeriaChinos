@@ -106,7 +106,7 @@ public class DatosDemo {
     private void granel(Connection c, String plu, String nombre, String categoria, long precioKg, double kilos,
                         boolean merma) throws SQLException {
         String id = Ids.nuevo();
-        productos.insertar(c, id, nombre, categoria, plu, Unidad.KG, merma, Disponibilidad.REGULAR,
+        productos.insertar(c, id, nombre, categoria, plu, null, Unidad.KG, merma, Disponibilidad.REGULAR,
                 new BigDecimal("1000"), merma ? new BigDecimal("20") : BigDecimal.ZERO);
         String presentacion = Ids.nuevo();
         productos.insertarPresentacion(c, new Presentacion(presentacion, id, "Kilo", true, BigDecimal.ONE, null,
@@ -117,7 +117,7 @@ public class DatosDemo {
     private String pieza(Connection c, String nombre, String categoria, long precio, int piezas, int gramos)
             throws SQLException {
         String id = Ids.nuevo();
-        productos.insertar(c, id, nombre, categoria, null, Unidad.PZA, false, Disponibilidad.REGULAR,
+        productos.insertar(c, id, nombre, categoria, null, null, Unidad.PZA, false, Disponibilidad.REGULAR,
                 BigDecimal.valueOf(gramos), BigDecimal.ZERO);
         String presentacion = Ids.nuevo();
         String codigo = CodigoBarras.completarEan13("75010000%04d".formatted(consecutivo++));

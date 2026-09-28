@@ -37,7 +37,7 @@ public class ProductosPagina extends Pagina {
         nuevo.setOnAction(e -> DialogoProducto.mostrar(a, null, this::alMostrar));
         VBox pagina = Ui.pagina("Productos",
                 "Cada producto puede venderse en varias presentaciones. Los precios se fijan por sucursal al surtir.", nuevo);
-        buscador = Ui.buscador("Buscar por nombre, clave o código de barras");
+        buscador = Ui.buscador("Buscar por nombre, clave, código de barras o código de inventario");
         buscador.textProperty().addListener((o, x, y) -> filtrar());
         filtro = new ComboBox<>(FXCollections.observableArrayList("Todos", "Activos", "Deshabilitados",
                 "Edición especial", "De temporada", "Sujetos a merma", "Sin gramaje"));
@@ -52,6 +52,7 @@ public class ProductosPagina extends Pagina {
                     return v;
                 }),
                 Ui.texto("Clave", 80, p -> p.clave() == null ? "" : p.clave()),
+                Ui.texto("Cód. inventario", 110, p -> p.codigoInventario() == null ? "" : p.codigoInventario()),
                 Ui.texto("Se vende", 100, p -> p.unidad() == Unidad.KG ? "Por kilo" : "Por pieza"),
                 Ui.nodo("Gramaje", 170, p -> {
                     if (p.gramajeGramos() == null) {
@@ -112,6 +113,7 @@ public class ProductosPagina extends Pagina {
                 })
                 .filter(p -> t.isEmpty() || p.nombre().toLowerCase(Locale.ROOT).contains(t)
                         || (p.clave() != null && p.clave().toLowerCase(Locale.ROOT).startsWith(t))
+                        || (p.codigoInventario() != null && p.codigoInventario().toLowerCase(Locale.ROOT).startsWith(t))
                         || p.presentaciones().stream().anyMatch(pr -> pr.codigoBarras() != null && pr.codigoBarras().startsWith(t)))
                 .collect(Collectors.toList())));
     }

@@ -43,6 +43,7 @@ public class CatalogoService {
     private volatile List<Indexado> indice = List.of();
     private volatile Map<String, Producto> porCodigo = Map.of();
     private volatile Map<String, Producto> porClave = Map.of();
+    private volatile Map<String, Producto> porCodigoInventario = Map.of();
     private volatile Map<String, Producto> porId = Map.of();
 
     public CatalogoService(Database database, String sucursalId) {
@@ -59,6 +60,7 @@ public class CatalogoService {
         List<Indexado> nuevoIndice = new ArrayList<>(lista.size());
         Map<String, Producto> codigos = new HashMap<>();
         Map<String, Producto> claves = new HashMap<>();
+        Map<String, Producto> codigosInventario = new HashMap<>();
         Map<String, Producto> ids = new HashMap<>();
         for (Producto p : lista) {
             nuevoIndice.add(new Indexado(p, normalizar(p.nombre())));
@@ -70,11 +72,16 @@ public class CatalogoService {
                 claves.merge(p.clave().toLowerCase(Locale.ROOT), p,
                         (actual, nuevo) -> actual.unidad() == Unidad.KG ? actual : nuevo.unidad() == Unidad.KG ? nuevo : actual);
             }
+            if (p.codigoInventario() != null) {
+                codigosInventario.merge(p.codigoInventario().toLowerCase(Locale.ROOT), p,
+                        (actual, nuevo) -> actual.unidad() == Unidad.KG ? actual : nuevo.unidad() == Unidad.KG ? nuevo : actual);
+            }
             ids.put(p.id(), p);
         }
         indice = List.copyOf(nuevoIndice);
         porCodigo = Map.copyOf(codigos);
         porClave = Map.copyOf(claves);
+        porCodigoInventario = Map.copyOf(codigosInventario);
         porId = Map.copyOf(ids);
     }
 
@@ -108,7 +115,7 @@ public class CatalogoService {
         List<Producto> lista = new ArrayList<>();
         try (PreparedStatement ps = c.prepareStatement("""
                 SELECT pr.id, pr.producto_id, pr.nombre AS presentacion, pr.tipo, pr.factor, pr.codigo_barras,
-                       pr.es_principal, p.nombre, p.clave, p.unidad, c.nombre AS categoria
+                       pr.es_principal, p.nombre, p.clave, p.codigo_inventario, p.unidad, c.nombre AS categoria
                 FROM presentaciones pr
                 JOIN productos p ON p.id = pr.producto_id
                 LEFT JOIN categorias c ON c.id = p.categoria_id
@@ -125,8 +132,8 @@ public class CatalogoService {
                 boolean principal = rs.getBoolean("es_principal");
                 String nombre = rs.getString("nombre") + (principal ? "" : " · " + rs.getString("presentacion"));
                 lista.add(new Producto(
-                        rs.getString("id"), productoId, rs.getString("codigo_barras"), rs.getString("clave"), nombre,
-                        rs.getString("categoria"),
+                        rs.getString("id"), productoId, rs.getString("codigo_barras"), rs.getString("clave"),
+                        rs.getString("codigo_inventario"), nombre, rs.getString("categoria"),
                         "GRANEL".equals(rs.getString("tipo")) ? Unidad.KG : Unidad.PZA,
                         Unidad.valueOf(rs.getString("unidad")),
                         BigDecimal.valueOf(rs.getDouble("factor")).setScale(3, RoundingMode.HALF_UP),
@@ -143,7 +150,7 @@ public class CatalogoService {
         return Optional.ofNullable(porId.get(id));
     }
 
-    /** Código de barras exacto, clave/PLU exacta o etiqueta de báscula. */
+    /** Código de barras exacto, clave/PLU exacta, código de inventario exacto o etiqueta de báscula. */
     public Optional<Escaneo> resolverCodigo(String texto) {
         String codigo = texto.strip();
         if (codigo.isEmpty()) {
@@ -152,6 +159,9 @@ public class CatalogoService {
         Producto producto = porCodigo.get(codigo);
         if (producto == null) {
             producto = porClave.get(codigo.toLowerCase(Locale.ROOT));
+        }
+        if (producto == null) {
+            producto = porCodigoInventario.get(codigo.toLowerCase(Locale.ROOT));
         }
         if (producto != null) {
             return Optional.of(new Escaneo(producto, null));
@@ -178,6 +188,10 @@ public class CatalogoService {
             Producto p = item.producto();
             int puntaje = puntaje(item.nombreNormalizado(), consulta, palabras);
             if (puntaje < 0 && p.clave() != null && p.clave().toLowerCase(Locale.ROOT).startsWith(consulta)) {
+                puntaje = 0;
+            }
+            if (puntaje < 0 && p.codigoInventario() != null
+                    && p.codigoInventario().toLowerCase(Locale.ROOT).startsWith(consulta)) {
                 puntaje = 0;
             }
             if (puntaje < 0 && p.codigoBarras() != null && p.codigoBarras().startsWith(consulta)) {

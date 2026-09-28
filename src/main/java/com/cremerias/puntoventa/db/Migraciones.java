@@ -36,7 +36,8 @@ public class Migraciones {
             "V4__nombre_cajas.sql",
             "V5__almacen_administracion.sql",
             "V6__gramaje_productos.sql",
-            "V7__limites_y_alertas_por_sucursal.sql"
+            "V7__limites_y_alertas_por_sucursal.sql",
+            "V8__codigo_inventario_productos.sql"
     );
 
     private final Database database;

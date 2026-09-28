@@ -67,6 +67,8 @@ final class DialogoProducto {
         }
         TextField clave = new TextField(nuevo || p.clave() == null ? "" : p.clave());
         clave.setPromptText("PLU de báscula (opcional)");
+        TextField codigoInventario = new TextField(nuevo || p.codigoInventario() == null ? "" : p.codigoInventario());
+        codigoInventario.setPromptText("Control interno del almacén (opcional)");
         ComboBox<Unidad> unidad = new ComboBox<>(FXCollections.observableArrayList(Unidad.PZA, Unidad.KG));
         unidad.setConverter(new javafx.util.StringConverter<>() {
             @Override
@@ -209,7 +211,8 @@ final class DialogoProducto {
 
         d.setContenido(
                 Ui.fila(Ui.campo("Nombre", nombre), Ui.campo("Categoría", categoria)),
-                Ui.fila(Ui.campo("Se maneja", unidad), Ui.campo("Clave / PLU", clave), Ui.campo("Disponibilidad", disponibilidad)),
+                Ui.fila(Ui.campo("Se maneja", unidad), Ui.campo("Clave / PLU", clave),
+                        Ui.campo("Código de inventario", codigoInventario), Ui.campo("Disponibilidad", disponibilidad)),
                 bloqueGramaje, presentaciones);
 
         Runnable guardar = () -> {
@@ -222,8 +225,8 @@ final class DialogoProducto {
                         f.codigo.getText(), f.principal.isSelected(), f.activa.isSelected()));
             }
             var datos = new ProductoAdminService.Datos(nuevo ? null : p.id(), nombre.getText(),
-                    categoria.getEditor().getText(), clave.getText(), unidad.getValue(), merma.isSelected(),
-                    disponibilidad.getValue(), lista, eliminadas, gramaje.gramos().orElse(null),
+                    categoria.getEditor().getText(), clave.getText(), codigoInventario.getText(), unidad.getValue(),
+                    merma.isSelected(), disponibilidad.getValue(), lista, eliminadas, gramaje.gramos().orElse(null),
                     merma.isSelected() ? cantidadMerma.gramos().orElse(null) : null);
             if (a.ejecutar(nuevo ? "Producto creado" : "Producto actualizado",
                     () -> a.admin().productos().guardar(datos, a.usuario()))) {

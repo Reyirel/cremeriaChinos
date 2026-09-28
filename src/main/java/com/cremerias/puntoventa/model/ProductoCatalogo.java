@@ -10,6 +10,7 @@ public record ProductoCatalogo(
         String categoriaId,
         String categoria,
         String clave,
+        String codigoInventario,
         Unidad unidad,
         boolean sujetoMerma,
         Disponibilidad disponibilidad,

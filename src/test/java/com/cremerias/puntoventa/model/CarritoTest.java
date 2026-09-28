@@ -10,7 +10,7 @@ class CarritoTest {
 
     private static Producto producto(String id, Unidad unidad, long precio) {
         Tarifa.Tramo lote = new Tarifa.Tramo("lote-" + id, BigDecimal.valueOf(100), precio);
-        return new Producto(id, "prod-" + id, null, null, "P" + id, null, unidad, unidad, BigDecimal.ONE, precio,
+        return new Producto(id, "prod-" + id, null, null, null, "P" + id, null, unidad, unidad, BigDecimal.ONE, precio,
                 BigDecimal.TEN, BigDecimal.ZERO, java.util.List.of(lote), lote);
     }
 
@@ -19,7 +19,7 @@ class CarritoTest {
         // 3 piezas a $10 (lote viejo) y el resto a $12 (lote nuevo).
         Tarifa.Tramo viejo = new Tarifa.Tramo("viejo", new BigDecimal("3"), 1000);
         Tarifa.Tramo nuevo = new Tarifa.Tramo("nuevo", new BigDecimal("10"), 1200);
-        Producto p = new Producto("pz", "prod", null, null, "Leche", null, Unidad.PZA, Unidad.PZA, BigDecimal.ONE,
+        Producto p = new Producto("pz", "prod", null, null, null, "Leche", null, Unidad.PZA, Unidad.PZA, BigDecimal.ONE,
                 1000, new BigDecimal("13"), BigDecimal.ZERO, java.util.List.of(viejo, nuevo), nuevo);
         Carrito carrito = new Carrito();
         carrito.agregar(p, new BigDecimal("2"));
@@ -31,7 +31,7 @@ class CarritoTest {
     @Test
     void unaCajaConsumeDoceUnidadesDelLote() {
         Tarifa.Tramo lote = new Tarifa.Tramo("l", new BigDecimal("24"), 32000); // precio por caja
-        Producto caja = new Producto("cj", "prod", null, null, "Leche · Caja", null, Unidad.PZA, Unidad.PZA,
+        Producto caja = new Producto("cj", "prod", null, null, null, "Leche · Caja", null, Unidad.PZA, Unidad.PZA,
                 new BigDecimal("12"), 32000, new BigDecimal("24"), BigDecimal.ZERO, java.util.List.of(lote), lote);
         java.util.Map<String, BigDecimal> consumido = new java.util.HashMap<>();
         Tarifa.Cotizacion cot = caja.cotizar(consumido, new BigDecimal("2"));
