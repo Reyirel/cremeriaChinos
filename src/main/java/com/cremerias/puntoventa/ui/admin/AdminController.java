@@ -136,6 +136,7 @@ public class AdminController {
 
     private void actualizarContadores() {
         try {
+            contexto.admin().productos().revisarTemporadas();
             int ordenes = contexto.admin().ordenes().contarPendientes();
             int bloqueos = contexto.ctx().auth().accesos().contarPendientes();
             int sinVenta = contexto.admin().alertas().productosSinVenta().size();

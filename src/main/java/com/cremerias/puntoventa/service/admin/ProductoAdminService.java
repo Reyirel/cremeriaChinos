@@ -6,6 +6,7 @@ import com.cremerias.puntoventa.model.AvisoSinVenta;
 import com.cremerias.puntoventa.model.Disponibilidad;
 import com.cremerias.puntoventa.model.Presentacion;
 import com.cremerias.puntoventa.model.ProductoCatalogo;
+import com.cremerias.puntoventa.model.Temporada;
 import com.cremerias.puntoventa.model.Unidad;
 import com.cremerias.puntoventa.model.Usuario;
 import com.cremerias.puntoventa.repository.BitacoraRepository;
@@ -14,6 +15,8 @@ import com.cremerias.puntoventa.util.Ids;
 import com.cremerias.puntoventa.util.Masa;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -27,18 +30,20 @@ public class ProductoAdminService {
      * {@code avisoSinVenta} es opcional (nulo = sin aviso propio).
      */
     public record Datos(String id, String nombre, String categoria, String clave, String codigoInventario,
-                        Unidad unidad, boolean sujetoMerma, Disponibilidad disponibilidad,
+                        Unidad unidad, boolean sujetoMerma, Disponibilidad disponibilidad, Temporada temporada,
                         List<Presentacion> presentaciones, List<String> presentacionesEliminadas,
                         BigDecimal gramajeGramos, BigDecimal mermaGramos, AvisoSinVenta avisoSinVenta) {
     }
 
     private final Database database;
+    private final Clock reloj;
     private final String dispositivoId;
     private final ProductoRepository productos = new ProductoRepository();
     private final BitacoraRepository bitacora = new BitacoraRepository();
 
-    public ProductoAdminService(Database database, String dispositivoId) {
+    public ProductoAdminService(Database database, Clock reloj, String dispositivoId) {
         this.database = database;
+        this.reloj = reloj;
         this.dispositivoId = dispositivoId;
     }
 
@@ -87,6 +92,11 @@ public class ProductoAdminService {
                         d.disponibilidad(), gramaje, merma);
             }
             productos.guardarAviso(c, id, d.avisoSinVenta());
+            Temporada temporada = d.disponibilidad() == Disponibilidad.TEMPORADA ? d.temporada() : null;
+            productos.guardarTemporada(c, id, temporada);
+            if (temporada != null) {
+                productos.cambiarActivo(c, id, temporada.vigente(LocalDate.now(reloj)));
+            }
             for (String eliminada : d.presentacionesEliminadas()) {
                 productos.eliminarPresentacion(c, eliminada);
             }
@@ -111,10 +121,70 @@ public class ProductoAdminService {
     }
 
     public String cambiarActivo(ProductoCatalogo producto, boolean activo, Usuario quien) {
+        if (producto.disponibilidad() == Disponibilidad.REGULAR) {
+            throw new IllegalArgumentException(
+                    "Los productos regulares no se deshabilitan a mano; cambia su disponibilidad si ya no se vende.");
+        }
         return database.enTransaccion(c -> {
             productos.cambiarActivo(c, producto.id(), activo);
             return bitacora.registrar(c, activo ? AccionBitacora.PRODUCTO_HABILITADO : AccionBitacora.PRODUCTO_DESHABILITADO,
                     quien, dispositivoId, "productos", producto.id(), producto.nombre());
+        });
+    }
+
+    /** Habilita de nuevo un producto de temporada ya vencido, con su nueva ventana de fechas. */
+    public String renovarTemporada(ProductoCatalogo producto, Temporada nueva, Usuario quien) {
+        if (producto.disponibilidad() != Disponibilidad.TEMPORADA) {
+            throw new IllegalArgumentException("Solo los productos de temporada tienen ventana de fechas.");
+        }
+        validarTemporada(nueva);
+        boolean activo = nueva.vigente(LocalDate.now(reloj));
+        return database.enTransaccion(c -> {
+            productos.guardarTemporada(c, producto.id(), nueva);
+            productos.cambiarActivo(c, producto.id(), activo);
+            return bitacora.registrar(c, AccionBitacora.PRODUCTO_HABILITADO, quien, dispositivoId, "productos",
+                    producto.id(), producto.nombre() + " · nueva temporada del " + nueva.desde() + " al " + nueva.fin()
+                            + (activo ? "" : " (empieza después)")
+                            + (nueva.repite() ? " (se repite " + nueva.describirRepeticion() + ")" : ""));
+        });
+    }
+
+    /**
+     * Revisa los productos de temporada: deshabilita los que ya vencieron y, si se repiten,
+     * calcula su siguiente ciclo (reactivándolos de una vez si ya empezó). También reactiva los
+     * que ya vencidos y repetidos cayeron dentro de su ventana. No borra nada.
+     *
+     * @return cuántos productos cambiaron de estado
+     */
+    public int revisarTemporadas() {
+        LocalDate hoy = LocalDate.now(reloj);
+        return database.enTransaccion(c -> {
+            int cambios = 0;
+            for (ProductoCatalogo p : productos.listar(c)) {
+                if (p.disponibilidad() != Disponibilidad.TEMPORADA || p.temporada() == null) {
+                    continue;
+                }
+                Temporada t = p.temporada();
+                boolean activo = p.activo();
+                if (activo && t.vencida(hoy)) {
+                    productos.cambiarActivo(c, p.id(), false);
+                    bitacora.registrar(c, AccionBitacora.PRODUCTO_DESHABILITADO, null, dispositivoId, "productos",
+                            p.id(), p.nombre() + " · terminó la temporada (" + t.fin() + ")");
+                    activo = false;
+                    cambios++;
+                }
+                if (t.repite() && t.vencida(hoy)) {
+                    t = t.siguienteVigente(hoy);
+                    productos.guardarTemporada(c, p.id(), t);
+                }
+                if (!activo && t.vigente(hoy)) {
+                    productos.cambiarActivo(c, p.id(), true);
+                    bitacora.registrar(c, AccionBitacora.PRODUCTO_HABILITADO, null, dispositivoId, "productos",
+                            p.id(), p.nombre() + " · empieza la temporada (" + t.desde() + ")");
+                    cambios++;
+                }
+            }
+            return cambios;
         });
     }
 
@@ -124,6 +194,21 @@ public class ProductoAdminService {
             return bitacora.registrar(c, AccionBitacora.PRODUCTO_ELIMINADO, quien, dispositivoId, "productos",
                     producto.id(), producto.nombre());
         });
+    }
+
+    private static void validarTemporada(Temporada t) {
+        if (t == null || t.desde() == null || t.fin() == null) {
+            throw new IllegalArgumentException("Elige cuándo empieza y termina la temporada.");
+        }
+        if (!t.fin().isAfter(t.desde())) {
+            throw new IllegalArgumentException("La temporada debe terminar después de que empieza.");
+        }
+        if ((t.repetirCada() == null) != (t.repetirUnidad() == null)) {
+            throw new IllegalArgumentException("Falta la unidad o la cantidad para repetir la temporada.");
+        }
+        if (t.repetirCada() != null && t.repetirCada() <= 0) {
+            throw new IllegalArgumentException("La repetición debe ser mayor a cero.");
+        }
     }
 
     private static void validar(Datos d) {
@@ -143,6 +228,9 @@ public class ProductoAdminService {
                 throw new IllegalArgumentException(
                         "La merma debe ser menor que el gramaje (" + Masa.formatear(d.gramajeGramos()) + ").");
             }
+        }
+        if (d.disponibilidad() == Disponibilidad.TEMPORADA) {
+            validarTemporada(d.temporada());
         }
         AvisoSinVenta aviso = d.avisoSinVenta();
         if (aviso != null) {

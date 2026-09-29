@@ -5,6 +5,7 @@ import com.cremerias.puntoventa.model.AvisoSinVenta;
 import com.cremerias.puntoventa.model.Disponibilidad;
 import com.cremerias.puntoventa.model.Presentacion;
 import com.cremerias.puntoventa.model.ProductoCatalogo;
+import com.cremerias.puntoventa.model.Temporada;
 import com.cremerias.puntoventa.model.Unidad;
 import com.cremerias.puntoventa.repository.ProductoRepository;
 import com.cremerias.puntoventa.service.admin.ProductoAdminService;
@@ -13,11 +14,13 @@ import com.cremerias.puntoventa.ui.componentes.Campos;
 import com.cremerias.puntoventa.ui.componentes.Dialogo;
 import com.cremerias.puntoventa.util.Cantidades;
 import com.cremerias.puntoventa.util.Masa;
+import javafx.beans.binding.Bindings;
 import javafx.collections.FXCollections;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
+import javafx.scene.control.DatePicker;
 import javafx.scene.control.Label;
 import javafx.scene.control.RadioButton;
 import javafx.scene.control.ScrollPane;
@@ -160,6 +163,44 @@ final class DialogoProducto {
         sinAvisoPropio.managedProperty().bind(sinAvisoPropio.visibleProperty());
         VBox bloqueAviso = Ui.tarjeta("Aviso si no se vende", avisar, bloquePlazo, sinAvisoPropio);
 
+        // Temporada: ventana de fechas en que se vende y, opcional, cada cuánto se repite
+        Temporada temporadaActual = nuevo ? null : p.temporada();
+        DatePicker desdeTemporada = new DatePicker();
+        DatePicker hastaTemporada = new DatePicker();
+        desdeTemporada.setPromptText("Empieza");
+        hastaTemporada.setPromptText("Termina");
+        ToggleSwitch repetirTemporada = new ToggleSwitch("Se repite automáticamente");
+        TextField plazoTemporada = new TextField();
+        Campos.soloNumeros(plazoTemporada, 0);
+        plazoTemporada.setAlignment(Pos.CENTER_RIGHT);
+        plazoTemporada.setPromptText("Ej. 1");
+        plazoTemporada.setPrefColumnCount(5);
+        ComboBox<Temporada.Unidad> unidadTemporada = new ComboBox<>(
+                FXCollections.observableArrayList(Temporada.Unidad.values()));
+        unidadTemporada.setValue(Temporada.Unidad.ANIOS);
+        unidadTemporada.setPrefWidth(130);
+        if (temporadaActual != null) {
+            desdeTemporada.setValue(temporadaActual.desde());
+            hastaTemporada.setValue(temporadaActual.fin());
+            if (temporadaActual.repite()) {
+                repetirTemporada.setSelected(true);
+                plazoTemporada.setText(String.valueOf(temporadaActual.repetirCada()));
+                unidadTemporada.setValue(temporadaActual.repetirUnidad());
+            }
+        }
+        HBox campoRepetirTemporada = new HBox(8, plazoTemporada, unidadTemporada);
+        campoRepetirTemporada.setAlignment(Pos.CENTER_LEFT);
+        campoRepetirTemporada.visibleProperty().bind(repetirTemporada.selectedProperty());
+        campoRepetirTemporada.managedProperty().bind(campoRepetirTemporada.visibleProperty());
+        VBox bloqueTemporada = Ui.tarjeta("Temporada",
+                Ui.fila(Ui.campo("Desde", desdeTemporada), Ui.campo("Hasta", hastaTemporada)),
+                repetirTemporada, Ui.campo("Se repite", campoRepetirTemporada),
+                Ui.texto("Al terminar la temporada el producto se deshabilita solo (sin borrarse). Si se repite, "
+                        + "el sistema lo vuelve a habilitar solo en el siguiente ciclo; si no, tú eliges cuándo y "
+                        + "con qué fechas.", "texto-ayuda"));
+        bloqueTemporada.visibleProperty().bind(Bindings.equal(disponibilidad.valueProperty(), Disponibilidad.TEMPORADA));
+        bloqueTemporada.managedProperty().bind(bloqueTemporada.visibleProperty());
+
         // Presentaciones
         ToggleGroup principales = new ToggleGroup();
         List<Fila> filas = new ArrayList<>();
@@ -245,7 +286,7 @@ final class DialogoProducto {
                 Ui.fila(Ui.campo("Nombre", nombre), Ui.campo("Categoría", categoria)),
                 Ui.fila(Ui.campo("Se maneja", unidad), Ui.campo("Clave / PLU", clave),
                         Ui.campo("Código de inventario", codigoInventario), Ui.campo("Disponibilidad", disponibilidad)),
-                bloqueGramaje, bloqueAviso, presentaciones);
+                bloqueGramaje, bloqueTemporada, bloqueAviso, presentaciones);
         // El formulario es alto: en pantallas chicas se desplaza en lugar de salirse de la ventana.
         ScrollPane desplazable = new ScrollPane(formulario);
         desplazable.setFitToWidth(true);
@@ -269,10 +310,15 @@ final class DialogoProducto {
             AvisoSinVenta aviso = avisar.isSelected() ? new AvisoSinVenta(entero(plazo.getText()),
                     unidadPlazo.getValue(), avisarAdmin.isSelected(), avisarSupervisor.isSelected(),
                     avisarCaja.isSelected()) : null;
+            Temporada temporada = disponibilidad.getValue() == Disponibilidad.TEMPORADA
+                    ? new Temporada(desdeTemporada.getValue(), hastaTemporada.getValue(),
+                            repetirTemporada.isSelected() ? entero(plazoTemporada.getText()) : null,
+                            repetirTemporada.isSelected() ? unidadTemporada.getValue() : null)
+                    : null;
             var datos = new ProductoAdminService.Datos(nuevo ? null : p.id(), nombre.getText(),
                     categoria.getEditor().getText(), clave.getText(), codigoInventario.getText(), unidad.getValue(),
-                    merma.isSelected(), disponibilidad.getValue(), lista, eliminadas, gramaje.gramos().orElse(null),
-                    merma.isSelected() ? cantidadMerma.gramos().orElse(null) : null, aviso);
+                    merma.isSelected(), disponibilidad.getValue(), temporada, lista, eliminadas,
+                    gramaje.gramos().orElse(null), merma.isSelected() ? cantidadMerma.gramos().orElse(null) : null, aviso);
             if (a.ejecutar(nuevo ? "Producto creado" : "Producto actualizado",
                     () -> a.admin().productos().guardar(datos, a.usuario()))) {
                 d.cerrar();

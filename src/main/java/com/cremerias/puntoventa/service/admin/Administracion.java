@@ -24,7 +24,7 @@ public class Administracion {
         this.sucursales = new SucursalService(database, dispositivoId);
         String almacenId = sucursales.almacen().map(s -> s.id()).orElse(null);
         this.usuarios = new UsuarioService(database, hasher, dispositivoId);
-        this.productos = new ProductoAdminService(database, dispositivoId);
+        this.productos = new ProductoAdminService(database, reloj, dispositivoId);
         this.almacen = new AlmacenService(database, dispositivoId, almacenId);
         this.surtidos = new SurtidoService(database, dispositivoId, almacen);
         this.ordenes = new OrdenService(database, dispositivoId);

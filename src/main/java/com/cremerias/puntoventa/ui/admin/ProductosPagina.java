@@ -3,6 +3,7 @@ package com.cremerias.puntoventa.ui.admin;
 import com.cremerias.puntoventa.model.Disponibilidad;
 import com.cremerias.puntoventa.model.Presentacion;
 import com.cremerias.puntoventa.model.ProductoCatalogo;
+import com.cremerias.puntoventa.model.Temporada;
 import com.cremerias.puntoventa.model.Unidad;
 import com.cremerias.puntoventa.ui.componentes.DialogoConfirmacion;
 import com.cremerias.puntoventa.util.Masa;
@@ -18,12 +19,17 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.stream.Collectors;
 
 /** Catálogo de productos del almacén. */
 public class ProductosPagina extends Pagina {
+
+    private static final DateTimeFormatter FECHA_CORTA = DateTimeFormatter.ofPattern("dd/MM/yy");
 
     private TableView<ProductoCatalogo> tabla;
     private TextField buscador;
@@ -79,7 +85,13 @@ public class ProductosPagina extends Pagina {
                     // Las etiquetas pasan a otra línea si no caben (merma y aviso juntos).
                     FlowPane h = new FlowPane(4, 4);
                     h.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
-                    if (p.disponibilidad() != Disponibilidad.REGULAR) {
+                    if (p.disponibilidad() == Disponibilidad.TEMPORADA && p.temporada() != null) {
+                        Temporada t = p.temporada();
+                        Label chip = Ui.chip(p.disponibilidad().nombre() + (t.repite() ? " ↻" : ""), "acento");
+                        chip.setTooltip(new Tooltip(FECHA_CORTA.format(t.desde()) + " – " + FECHA_CORTA.format(t.fin())
+                                + (t.repite() ? " · se repite " + t.describirRepeticion() : "")));
+                        h.getChildren().add(chip);
+                    } else if (p.disponibilidad() != Disponibilidad.REGULAR) {
                         h.getChildren().add(Ui.chip(p.disponibilidad().nombre(), "acento"));
                     }
                     if (p.sujetoMerma()) {
@@ -96,11 +108,16 @@ public class ProductosPagina extends Pagina {
                 }),
                 Ui.nodo("Estado", 120, p -> p.activo() ? Ui.chip("Activo", "exito") : Ui.chip("Deshabilitado", "neutro")),
                 Ui.id(ProductoCatalogo::id),
-                Ui.nodo("", 130, p -> Ui.acciones(
-                        Ui.accion("mdi2p-pencil-outline", "Editar", () -> DialogoProducto.mostrar(a, p, this::alMostrar)),
-                        Ui.accion(p.activo() ? "mdi2e-eye-off-outline" : "mdi2e-eye-outline",
-                                p.activo() ? "Deshabilitar (deja de venderse)" : "Habilitar", () -> cambiarActivo(p)),
-                        Ui.accion("mdi2t-trash-can-outline", "Eliminar", () -> eliminar(p), "danger")))));
+                Ui.nodo("", 130, p -> {
+                    List<Node> botones = new ArrayList<>();
+                    botones.add(Ui.accion("mdi2p-pencil-outline", "Editar", () -> DialogoProducto.mostrar(a, p, this::alMostrar)));
+                    if (p.disponibilidad() != Disponibilidad.REGULAR) {
+                        botones.add(Ui.accion(p.activo() ? "mdi2e-eye-off-outline" : "mdi2e-eye-outline",
+                                p.activo() ? "Deshabilitar (deja de venderse)" : "Habilitar", () -> cambiarActivo(p)));
+                    }
+                    botones.add(Ui.accion("mdi2t-trash-can-outline", "Eliminar", () -> eliminar(p), "danger"));
+                    return Ui.acciones(botones.toArray(Node[]::new));
+                })));
         pagina.getChildren().addAll(new HBox(10, buscador, filtro), tabla);
         return pagina;
     }
@@ -132,6 +149,11 @@ public class ProductosPagina extends Pagina {
     }
 
     private void cambiarActivo(ProductoCatalogo p) {
+        if (!p.activo() && p.disponibilidad() == Disponibilidad.TEMPORADA && p.temporada() != null
+                && p.temporada().vencida(LocalDate.now())) {
+            DialogoTemporada.mostrarRenovar(a, p, this::alMostrar);
+            return;
+        }
         DialogoConfirmacion.mostrar(a.dialogos(), (p.activo() ? "¿Deshabilitar " : "¿Habilitar ") + p.nombre() + "?",
                 p.activo() ? "Dejará de venderse en las cajas y no se podrá surtir. No se borra: puedes habilitarlo después."
                         : "Volverá a venderse en las sucursales que tengan existencia.",

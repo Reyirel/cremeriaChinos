@@ -4,6 +4,7 @@ import com.cremerias.puntoventa.model.AvisoSinVenta;
 import com.cremerias.puntoventa.model.Disponibilidad;
 import com.cremerias.puntoventa.model.Presentacion;
 import com.cremerias.puntoventa.model.ProductoCatalogo;
+import com.cremerias.puntoventa.model.Temporada;
 import com.cremerias.puntoventa.model.Unidad;
 import com.cremerias.puntoventa.util.Ids;
 import com.cremerias.puntoventa.util.Tiempo;
@@ -15,6 +16,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -38,7 +40,8 @@ public class ProductoRepository {
         try (PreparedStatement ps = c.prepareStatement("""
                 SELECT p.id, p.nombre, p.categoria_id, c.nombre AS categoria, p.clave, p.codigo_inventario, p.unidad,
                        p.sujeto_merma, p.disponibilidad, p.activo, p.gramaje_gramos, p.merma_gramos,
-                       p.aviso_plazo, p.aviso_unidad, p.aviso_admin, p.aviso_supervisor, p.aviso_caja
+                       p.aviso_plazo, p.aviso_unidad, p.aviso_admin, p.aviso_supervisor, p.aviso_caja,
+                       p.temporada_desde, p.temporada_fin, p.temporada_repetir_cada, p.temporada_repetir_unidad
                 FROM productos p LEFT JOIN categorias c ON c.id = p.categoria_id
                 WHERE p.eliminado_en IS NULL
                 ORDER BY p.nombre COLLATE NOCASE""");
@@ -54,7 +57,8 @@ public class ProductoRepository {
         try (PreparedStatement ps = c.prepareStatement("""
                 SELECT p.id, p.nombre, p.categoria_id, c.nombre AS categoria, p.clave, p.codigo_inventario, p.unidad,
                        p.sujeto_merma, p.disponibilidad, p.activo, p.gramaje_gramos, p.merma_gramos,
-                       p.aviso_plazo, p.aviso_unidad, p.aviso_admin, p.aviso_supervisor, p.aviso_caja
+                       p.aviso_plazo, p.aviso_unidad, p.aviso_admin, p.aviso_supervisor, p.aviso_caja,
+                       p.temporada_desde, p.temporada_fin, p.temporada_repetir_cada, p.temporada_repetir_unidad
                 FROM productos p LEFT JOIN categorias c ON c.id = p.categoria_id
                 WHERE p.id = ? AND p.eliminado_en IS NULL""")) {
             ps.setString(1, id);
@@ -309,7 +313,7 @@ public class ProductoRepository {
         return new ProductoCatalogo(rs.getString("id"), rs.getString("nombre"), rs.getString("categoria_id"),
                 rs.getString("categoria"), rs.getString("clave"), rs.getString("codigo_inventario"),
                 Unidad.valueOf(rs.getString("unidad")), rs.getBoolean("sujeto_merma"),
-                Disponibilidad.valueOf(rs.getString("disponibilidad")), rs.getBoolean("activo"),
+                Disponibilidad.valueOf(rs.getString("disponibilidad")), temporada(rs), rs.getBoolean("activo"),
                 List.copyOf(presentaciones), gramos(rs, "gramaje_gramos"),
                 gramos(rs, "merma_gramos") == null ? BigDecimal.ZERO : gramos(rs, "merma_gramos"), aviso(rs));
     }
@@ -321,6 +325,19 @@ public class ProductoRepository {
         }
         return new AvisoSinVenta(plazo, AvisoSinVenta.Unidad.valueOf(rs.getString("aviso_unidad")),
                 rs.getBoolean("aviso_admin"), rs.getBoolean("aviso_supervisor"), rs.getBoolean("aviso_caja"));
+    }
+
+    private static Temporada temporada(ResultSet rs) throws SQLException {
+        String desde = rs.getString("temporada_desde");
+        String fin = rs.getString("temporada_fin");
+        if (desde == null || fin == null) {
+            return null;
+        }
+        int repetirCada = rs.getInt("temporada_repetir_cada");
+        Integer cada = rs.wasNull() ? null : repetirCada;
+        String unidad = rs.getString("temporada_repetir_unidad");
+        return new Temporada(LocalDate.parse(desde), LocalDate.parse(fin), cada,
+                unidad == null ? null : Temporada.Unidad.valueOf(unidad));
     }
 
     /** Aviso si el producto no se vende en cierto plazo; nulo lo quita. */
@@ -340,6 +357,31 @@ public class ProductoRepository {
             ps.setBoolean(4, aviso != null && aviso.supervisor());
             ps.setBoolean(5, aviso != null && aviso.caja());
             ps.setString(6, productoId);
+            ps.executeUpdate();
+        }
+    }
+
+    /** Ventana de temporada de un producto; nulo la quita (junto con su repetición). */
+    public void guardarTemporada(Connection c, String productoId, Temporada t) throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement("""
+                UPDATE productos SET temporada_desde = ?, temporada_fin = ?, temporada_repetir_cada = ?,
+                                     temporada_repetir_unidad = ?
+                WHERE id = ?""")) {
+            if (t == null) {
+                ps.setNull(1, Types.VARCHAR);
+                ps.setNull(2, Types.VARCHAR);
+            } else {
+                ps.setString(1, t.desde().toString());
+                ps.setString(2, t.fin().toString());
+            }
+            if (t == null || !t.repite()) {
+                ps.setNull(3, Types.INTEGER);
+                ps.setNull(4, Types.VARCHAR);
+            } else {
+                ps.setInt(3, t.repetirCada());
+                ps.setString(4, t.repetirUnidad().name());
+            }
+            ps.setString(5, productoId);
             ps.executeUpdate();
         }
     }

@@ -3,16 +3,20 @@ package com.cremerias.puntoventa.service;
 import com.cremerias.puntoventa.db.Database;
 import com.cremerias.puntoventa.db.Migraciones;
 import com.cremerias.puntoventa.model.AvisoSinVenta;
+import com.cremerias.puntoventa.model.Disponibilidad;
 import com.cremerias.puntoventa.model.HorarioDia;
 import com.cremerias.puntoventa.model.MetodoPago;
 import com.cremerias.puntoventa.model.ModoConexion;
 import com.cremerias.puntoventa.model.Pago;
+import com.cremerias.puntoventa.model.Presentacion;
 import com.cremerias.puntoventa.model.Producto;
 import com.cremerias.puntoventa.model.ProductoCatalogo;
 import com.cremerias.puntoventa.model.Rol;
 import com.cremerias.puntoventa.model.Sesion;
 import com.cremerias.puntoventa.model.Sucursal;
+import com.cremerias.puntoventa.model.Temporada;
 import com.cremerias.puntoventa.model.Turno;
+import com.cremerias.puntoventa.model.Unidad;
 import com.cremerias.puntoventa.model.Usuario;
 import com.cremerias.puntoventa.repository.DispositivoRepository;
 import com.cremerias.puntoventa.repository.OrdenRepository;
@@ -41,6 +45,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -330,24 +335,25 @@ class AdministracionTest {
         // Sin gramaje no se puede guardar un producto por pieza.
         assertThrows(IllegalArgumentException.class, () -> admin.productos().guardar(new com.cremerias.puntoventa.service
                 .admin.ProductoAdminService.Datos(null, "Lapicero", "Papelería", null, null, com.cremerias.puntoventa.model.Unidad.PZA,
-                false, com.cremerias.puntoventa.model.Disponibilidad.REGULAR, pieza, List.of(), null, null, null), administrador));
+                false, com.cremerias.puntoventa.model.Disponibilidad.REGULAR, null, pieza, List.of(), null, null, null), administrador));
         // La merma debe ser menor que el gramaje.
         assertThrows(IllegalArgumentException.class, () -> admin.productos().guardar(new com.cremerias.puntoventa.service
                 .admin.ProductoAdminService.Datos(null, "Jabón", "Limpieza", null, null, com.cremerias.puntoventa.model.Unidad.PZA,
-                true, com.cremerias.puntoventa.model.Disponibilidad.REGULAR, pieza, List.of(), new BigDecimal("150"),
+                true, com.cremerias.puntoventa.model.Disponibilidad.REGULAR, null, pieza, List.of(), new BigDecimal("150"),
                 new BigDecimal("150"), null), administrador));
 
         String folio = admin.productos().guardar(new com.cremerias.puntoventa.service.admin.ProductoAdminService.Datos(
                 null, "Queso de bola", "Quesos", null, null, com.cremerias.puntoventa.model.Unidad.PZA, true,
-                com.cremerias.puntoventa.model.Disponibilidad.TEMPORADA, pieza, List.of(), new BigDecimal("1000"),
-                new BigDecimal("50"), null), administrador);
+                com.cremerias.puntoventa.model.Disponibilidad.TEMPORADA,
+                new Temporada(LocalDate.of(2020, 1, 1), LocalDate.of(2030, 12, 31), null, null), pieza, List.of(),
+                new BigDecimal("1000"), new BigDecimal("50"), null), administrador);
         assertTrue(folio.startsWith("PRD-"));
         ProductoCatalogo bola = catalogoAdmin("Queso de bola");
         assertEquals(0, new BigDecimal("950").compareTo(bola.gramajeNeto()));
         // Admite microgramos (0.0005 g = 500 µg).
         admin.productos().guardar(new com.cremerias.puntoventa.service.admin.ProductoAdminService.Datos(
                 null, "Vitamina", "Farmacia", null, null, com.cremerias.puntoventa.model.Unidad.PZA, false,
-                com.cremerias.puntoventa.model.Disponibilidad.REGULAR, pieza, List.of(), new BigDecimal("0.0005"), null, null),
+                com.cremerias.puntoventa.model.Disponibilidad.REGULAR, null, pieza, List.of(), new BigDecimal("0.0005"), null, null),
                 administrador);
         assertEquals("500 µg", com.cremerias.puntoventa.util.Masa.formatear(catalogoAdmin("Vitamina").gramajeGramos()));
         assertEquals(0, new BigDecimal("1000").compareTo(catalogoAdmin("Queso Oaxaca").gramajeGramos()));
@@ -360,17 +366,100 @@ class AdministracionTest {
         // Sin gramaje tampoco se puede guardar un producto por kilo (ya no se fuerza a 1000 en automático).
         assertThrows(IllegalArgumentException.class, () -> admin.productos().guardar(new ProductoAdminService.Datos(
                 null, "Salmón ahumado", "Carnes frías", null, null, com.cremerias.puntoventa.model.Unidad.KG, false,
-                com.cremerias.puntoventa.model.Disponibilidad.REGULAR, granel, List.of(), null, null, null), administrador));
+                com.cremerias.puntoventa.model.Disponibilidad.REGULAR, null, granel, List.of(), null, null, null),
+                administrador));
 
         // Con 1200 g de referencia por kilo y 60 g de merma, el neto es 1140 g por kilo (no 980 g de un 1000 fijo).
         String folio = admin.productos().guardar(new ProductoAdminService.Datos(
                 null, "Salmón ahumado", "Carnes frías", null, null, com.cremerias.puntoventa.model.Unidad.KG, true,
-                com.cremerias.puntoventa.model.Disponibilidad.REGULAR, granel, List.of(), new BigDecimal("1200"),
+                com.cremerias.puntoventa.model.Disponibilidad.REGULAR, null, granel, List.of(), new BigDecimal("1200"),
                 new BigDecimal("60"), null), administrador);
         assertTrue(folio.startsWith("PRD-"));
         ProductoCatalogo salmon = catalogoAdmin("Salmón ahumado");
         assertEquals(0, new BigDecimal("1200").compareTo(salmon.gramajeGramos()));
         assertEquals(0, new BigDecimal("1140").compareTo(salmon.gramajeNeto()));
+    }
+
+    private ProductoCatalogo crearProductoDeTemporada(String nombre, Temporada temporada) {
+        var pieza = List.of(new Presentacion(null, null, "Pieza", false, BigDecimal.ONE, null, true, true));
+        admin.productos().guardar(new ProductoAdminService.Datos(null, nombre, "Temporada", null, null, Unidad.PZA,
+                false, Disponibilidad.TEMPORADA, temporada, pieza, List.of(), new BigDecimal("100"), null, null),
+                administrador);
+        return catalogoAdmin(nombre);
+    }
+
+    @Test
+    void unProductoRegularNoSeDeshabilitaAMano() {
+        ProductoCatalogo leche = catalogoAdmin("Leche entera 1 L");
+        assertThrows(IllegalArgumentException.class,
+                () -> admin.productos().cambiarActivo(leche, false, administrador));
+    }
+
+    @Test
+    void unProductoDeTemporadaSoloQuedaActivoDentroDeSuVentana() {
+        // "Hoy" es lunes 28 de septiembre de 2026 (ver Reloj en preparar()).
+        ProductoCatalogo vigente = crearProductoDeTemporada("Rosca de reyes",
+                new Temporada(LocalDate.of(2026, 9, 1), LocalDate.of(2026, 10, 15), null, null));
+        assertTrue(vigente.activo());
+
+        ProductoCatalogo futura = crearProductoDeTemporada("Pan de muerto",
+                new Temporada(LocalDate.of(2026, 12, 1), LocalDate.of(2027, 1, 6), null, null));
+        assertFalse(futura.activo());
+    }
+
+    @Test
+    void unProductoDeTemporadaSeDeshabilitaSoloAlVencerSinBorrarse() {
+        crearProductoDeTemporada("Buñuelos",
+                new Temporada(LocalDate.of(2026, 9, 20), LocalDate.of(2026, 9, 30), null, null));
+        reloj.ir(ZonedDateTime.of(2026, 10, 5, 10, 0, 0, 0, ZONA).toInstant());
+
+        assertEquals(1, admin.productos().revisarTemporadas());
+        assertFalse(catalogoAdmin("Buñuelos").activo());
+        // No se borra: sigue en el catálogo con su historial.
+        assertTrue(admin.productos().listar().stream().anyMatch(p -> p.nombre().equals("Buñuelos")));
+        // Ya deshabilitado, una segunda revisión no cuenta cambios de nuevo.
+        assertEquals(0, admin.productos().revisarTemporadas());
+    }
+
+    @Test
+    void unaTemporadaQueSeRepiteVuelveAHabilitarseSolaEnElSiguienteCiclo() {
+        crearProductoDeTemporada("Chiles en nogada",
+                new Temporada(LocalDate.of(2026, 9, 20), LocalDate.of(2026, 9, 30), 1, Temporada.Unidad.MESES));
+
+        // Cinco días después de vencida, pero antes de que empiece el siguiente ciclo (20-30 oct).
+        reloj.ir(ZonedDateTime.of(2026, 10, 5, 10, 0, 0, 0, ZONA).toInstant());
+        assertEquals(1, admin.productos().revisarTemporadas());
+        ProductoCatalogo trasVencer = catalogoAdmin("Chiles en nogada");
+        assertFalse(trasVencer.activo());
+        assertEquals(LocalDate.of(2026, 10, 20), trasVencer.temporada().desde());
+        assertEquals(LocalDate.of(2026, 10, 30), trasVencer.temporada().fin());
+
+        // Dentro del siguiente ciclo: se reactiva sola.
+        reloj.ir(ZonedDateTime.of(2026, 10, 25, 10, 0, 0, 0, ZONA).toInstant());
+        assertEquals(1, admin.productos().revisarTemporadas());
+        assertTrue(catalogoAdmin("Chiles en nogada").activo());
+    }
+
+    @Test
+    void renovarTemporadaValidaFechasYReactivaSoloSiYaEmpezo() {
+        crearProductoDeTemporada("Nieve de garrafa",
+                new Temporada(LocalDate.of(2026, 6, 1), LocalDate.of(2026, 8, 31), null, null));
+        reloj.ir(ZonedDateTime.of(2026, 9, 15, 10, 0, 0, 0, ZONA).toInstant());
+        admin.productos().revisarTemporadas();
+        ProductoCatalogo vencida = catalogoAdmin("Nieve de garrafa");
+        assertFalse(vencida.activo());
+
+        // Renovarla con una ventana futura no la activa todavía: empezará sola en su fecha.
+        admin.productos().renovarTemporada(vencida,
+                new Temporada(LocalDate.of(2027, 6, 1), LocalDate.of(2027, 8, 31), null, null), administrador);
+        ProductoCatalogo futura = catalogoAdmin("Nieve de garrafa");
+        assertFalse(futura.activo());
+        assertEquals(LocalDate.of(2027, 6, 1), futura.temporada().desde());
+
+        // Renovarla con una ventana que ya empezó sí la activa de inmediato.
+        admin.productos().renovarTemporada(futura,
+                new Temporada(LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30), null, null), administrador);
+        assertTrue(catalogoAdmin("Nieve de garrafa").activo());
     }
 
     @Test
@@ -420,8 +509,8 @@ class AdministracionTest {
 
     private String guardarConAviso(ProductoCatalogo p, AvisoSinVenta aviso) {
         return admin.productos().guardar(new ProductoAdminService.Datos(p.id(), p.nombre(), p.categoria(), p.clave(),
-                p.codigoInventario(), p.unidad(), p.sujetoMerma(), p.disponibilidad(), p.presentaciones(), List.of(),
-                p.gramajeGramos(), p.mermaGramos(), aviso), administrador);
+                p.codigoInventario(), p.unidad(), p.sujetoMerma(), p.disponibilidad(), p.temporada(),
+                p.presentaciones(), List.of(), p.gramajeGramos(), p.mermaGramos(), aviso), administrador);
     }
 
     private static List<String> productos(List<SinVentaService.SinVenta> lista) {

@@ -18,6 +18,7 @@ public record ProductoCatalogo(
         Unidad unidad,
         boolean sujetoMerma,
         Disponibilidad disponibilidad,
+        Temporada temporada,
         boolean activo,
         List<Presentacion> presentaciones,
         BigDecimal gramajeGramos,

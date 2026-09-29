@@ -99,8 +99,15 @@ public final class AppContext implements AutoCloseable {
         CatalogoService catalogo = new CatalogoService(database, sucursalId);
         catalogo.recargar();
         Clock reloj = Clock.systemDefaultZone();
+        Administracion administracion = new Administracion(database, hasher, reloj, dispositivoId);
+        try {
+            administracion.productos().revisarTemporadas();
+        } catch (RuntimeException e) {
+            // Una revisión fallida no debe impedir que la app arranque.
+            log.warn("No se pudieron revisar las temporadas de productos", e);
+        }
         return new AppContext(database, auth, new PreferenciasService(database), sincronizador, catalogo,
-                new CajaService(database, dispositivoId), new Administracion(database, hasher, reloj, dispositivoId));
+                new CajaService(database, dispositivoId), administracion);
     }
 
     private static Optional<String> sucursalPrincipal(java.sql.Connection c) throws java.sql.SQLException {
