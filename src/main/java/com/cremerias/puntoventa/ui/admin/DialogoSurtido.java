@@ -49,6 +49,8 @@ final class DialogoSurtido {
         final ProductoCatalogo producto;
         final TextField cantidad = new TextField();
         Map<String, Long> precios = new HashMap<>();
+        /** Precio promedio de los lotes que ya tiene la sucursal, en lugar de precio fijo. */
+        boolean promedio;
         SurtidoService.Costeo costeo;
         final Label existencia = new Label();
         final Label costo = new Label();
@@ -263,6 +265,11 @@ final class DialogoSurtido {
             javafx.application.Platform.runLater(selector::requestFocus);
             for (Linea l : lineas) {
                 l.precios = new HashMap<>(a.admin().surtidos().preciosSugeridos(s.id(), l.producto.id()));
+                if (l.promedio) {
+                    SurtidoService.PreciosPromedio promedio = a.admin().surtidos().preciosPromedio(s.id(), l.producto.id());
+                    l.promedio = promedio.lotes() > 0;
+                    l.precios.putAll(promedio.precios());
+                }
             }
             recalcular[0].run();
         });
@@ -339,7 +346,7 @@ final class DialogoSurtido {
             Long precio = l.precios.get(p.id());
             partes.add(p.nombre() + " " + (precio == null || precio <= 0 ? "—" : Dinero.formatear(precio)));
         }
-        return String.join(" · ", partes);
+        return (l.promedio ? "Promedio: " : "") + String.join(" · ", partes);
     }
 
     /** Precio de venta de cada presentación para este lote en la sucursal. */
@@ -351,10 +358,25 @@ final class DialogoSurtido {
         d.setPrefWidth(760);
         Map<String, Long> sugeridos = sucursal == null ? Map.of()
                 : a.admin().surtidos().preciosSugeridos(sucursal.id(), l.producto.id());
+        SurtidoService.PreciosPromedio promedio = sucursal == null ? null
+                : a.admin().surtidos().preciosPromedio(sucursal.id(), l.producto.id());
+        boolean hayPromedio = promedio != null && promedio.lotes() > 0;
+
+        // Precio fijo (se captura) o precio promedio de los lotes que ya tiene la sucursal
+        ToggleGroup modo = new ToggleGroup();
+        ToggleButton fijo = new ToggleButton("Precio fijo", new FontIcon("mdi2p-pencil-outline"));
+        ToggleButton promediado = new ToggleButton("Precio promedio", new FontIcon("mdi2s-scale-balance"));
+        fijo.getStyleClass().add("left-pill");
+        promediado.getStyleClass().add("right-pill");
+        fijo.setToggleGroup(modo);
+        promediado.setToggleGroup(modo);
+        promediado.setDisable(!hayPromedio);
+        (l.promedio && hayPromedio ? promediado : fijo).setSelected(true);
+        Label ayudaModo = Ui.texto("", "texto-ayuda");
         long costoBase = l.costeo == null || l.base().signum() == 0 ? 0
                 : BigDecimal.valueOf(l.costeo.costoCentavos()).divide(l.base(), 0, RoundingMode.HALF_UP).longValue();
         GridPane grid = new GridPane(12, 10);
-        String[] titulos = {"Presentación", "Contiene", "Costo aprox.", "Precio anterior", "Precio de venta"};
+        String[] titulos = {"Presentación", "Contiene", "Costo aprox.", "Precio anterior", "Promedio", "Precio de venta"};
         for (int i = 0; i < titulos.length; i++) {
             Label t = new Label(titulos[i]);
             t.getStyleClass().add("campo-etiqueta");
@@ -380,16 +402,71 @@ final class DialogoSurtido {
                 primero = campo;
             }
             long costoPresentacion = Dinero.importe(costoBase, p.factor());
+            Long precioPromedio = hayPromedio ? promedio.precios().get(p.id()) : null;
             Label[] celdas = {new Label(p.nombre() + (p.principal() ? " (principal)" : "")),
                     new Label(p.granel() ? "A granel (por kg)" : Cantidades.formatear(l.producto.unidad(), p.factor())),
                     new Label(costoBase == 0 ? "—" : Dinero.formatear(costoPresentacion)),
-                    new Label(sugeridos.containsKey(p.id()) ? Dinero.formatear(sugeridos.get(p.id())) : "Nuevo")};
+                    new Label(sugeridos.containsKey(p.id()) ? Dinero.formatear(sugeridos.get(p.id())) : "Nuevo"),
+                    new Label(precioPromedio == null ? "—" : Dinero.formatear(precioPromedio))};
             for (Label c : celdas) {
                 c.setMinWidth(javafx.scene.layout.Region.USE_PREF_SIZE);
             }
-            grid.addRow(r++, celdas[0], celdas[1], celdas[2], celdas[3], campo);
+            grid.addRow(r++, celdas[0], celdas[1], celdas[2], celdas[3], celdas[4], campo);
         }
-        d.setContenido(grid, Ui.texto("El costo aproximado sale del lote del almacén que se va a enviar.", "texto-ayuda"));
+
+        // Lo que se había escrito a mano, para regresarlo al volver a precio fijo.
+        Map<String, Long> manuales = new HashMap<>(l.promedio ? sugeridos : l.precios);
+        Runnable aplicarModo = () -> {
+            boolean conPromedio = promediado.isSelected();
+            boolean faltan = false;
+            for (Map.Entry<String, CampoDinero> e : campos.entrySet()) {
+                Long precioPromedio = hayPromedio ? promedio.precios().get(e.getKey()) : null;
+                CampoDinero campo = e.getValue();
+                if (conPromedio && precioPromedio != null) {
+                    campo.setCentavos(precioPromedio);
+                    campo.setDisable(true);
+                } else {
+                    if (!conPromedio && precioPromedio != null) {
+                        Long manual = manuales.get(e.getKey());
+                        if (manual != null && manual > 0) {
+                            campo.setCentavos(manual);
+                        } else {
+                            campo.clear();
+                        }
+                    }
+                    campo.setDisable(false);
+                    faltan |= conPromedio;
+                }
+            }
+            if (sucursal == null) {
+                ayudaModo.setText("Elige la sucursal para poder usar el precio promedio.");
+            } else if (!hayPromedio) {
+                ayudaModo.setText(sucursal.nombre() + " aún no tiene lotes de este producto: captura el precio.");
+            } else if (conPromedio) {
+                ayudaModo.setText((promedio.conExistencia()
+                        ? "Promedio de " + lotes(promedio.lotes()) + " con existencia en " + sucursal.nombre() + "."
+                        : "Ningún lote tiene existencia: promedio de " + lotes(promedio.lotes()) + " anteriores en "
+                        + sucursal.nombre() + ".")
+                        + (faltan ? " Las presentaciones sin lotes anteriores llevan el precio que captures." : ""));
+            } else {
+                ayudaModo.setText("Escribe el precio de cada presentación. El costo aproximado sale del lote del "
+                        + "almacén que se va a enviar.");
+            }
+        };
+        modo.selectedToggleProperty().addListener((o, antes, ahora) -> {
+            if (ahora == null) {
+                antes.setSelected(true);
+                return;
+            }
+            if (ahora == promediado) {
+                // Guarda lo escrito a mano antes de reemplazarlo por el promedio.
+                campos.forEach((id, campo) -> manuales.put(id, campo.centavosOCero()));
+            }
+            aplicarModo.run();
+        });
+        aplicarModo.run();
+        HBox selectorModo = new HBox(fijo, promediado);
+        d.setContenido(Ui.campo("Cómo se fija el precio de este lote", selectorModo), grid, ayudaModo);
         Runnable guardar = () -> {
             Map<String, Long> nuevos = new HashMap<>();
             for (Map.Entry<String, CampoDinero> e : campos.entrySet()) {
@@ -401,6 +478,7 @@ final class DialogoSurtido {
                 nuevos.put(e.getKey(), v);
             }
             l.precios = nuevos;
+            l.promedio = promediado.isSelected();
             d.cerrar();
             alGuardar.run();
         };
@@ -410,5 +488,9 @@ final class DialogoSurtido {
         d.setAlConfirmar(guardar);
         d.setFocoInicial(primero);
         a.dialogos().mostrar(d);
+    }
+
+    private static String lotes(int n) {
+        return n == 1 ? "1 lote" : n + " lotes";
     }
 }

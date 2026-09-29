@@ -135,6 +135,55 @@ public class SurtidoService {
         });
     }
 
+    /**
+     * Precio promedio de cada presentación entre los lotes que la sucursal ya tiene del producto.
+     *
+     * @param precios       presentación → promedio en centavos (solo las que tienen precio en algún lote)
+     * @param lotes         cuántos lotes se promediaron
+     * @param conExistencia true si se promediaron los lotes con existencia; false si ninguno tenía
+     *                      existencia y se usaron todos los lotes anteriores
+     */
+    public record PreciosPromedio(Map<String, Long> precios, int lotes, boolean conExistencia) {
+    }
+
+    /**
+     * Promedio simple de los precios de los lotes de la sucursal que aún tienen existencia. Si
+     * ninguno tiene, se promedian todos los lotes anteriores del producto en esa sucursal.
+     */
+    public PreciosPromedio preciosPromedio(String sucursalId, String productoId) {
+        return database.con(c -> {
+            Map<String, Map<String, Long>> precios = new HashMap<>();
+            try (PreparedStatement ps = c.prepareStatement("""
+                    SELECT lp.lote_id, lp.presentacion_id, lp.precio_centavos
+                    FROM lote_precios lp JOIN lotes l ON l.id = lp.lote_id
+                    WHERE l.sucursal_id = ? AND l.producto_id = ?""")) {
+                ps.setString(1, sucursalId);
+                ps.setString(2, productoId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        precios.computeIfAbsent(rs.getString(1), k -> new HashMap<>()).put(rs.getString(2), rs.getLong(3));
+                    }
+                }
+            }
+            List<LoteRepository.Lote> conPrecio = lotes.deProducto(c, productoId, sucursalId).stream()
+                    .filter(l -> precios.containsKey(l.id())).toList();
+            List<LoteRepository.Lote> conExistencia = conPrecio.stream().filter(l -> l.existencia().signum() > 0).toList();
+            List<LoteRepository.Lote> promediados = conExistencia.isEmpty() ? conPrecio : conExistencia;
+            Map<String, long[]> sumas = new LinkedHashMap<>(); // presentación → {suma, lotes}
+            for (LoteRepository.Lote lote : promediados) {
+                for (Map.Entry<String, Long> e : precios.get(lote.id()).entrySet()) {
+                    long[] s = sumas.computeIfAbsent(e.getKey(), k -> new long[2]);
+                    s[0] += e.getValue();
+                    s[1]++;
+                }
+            }
+            Map<String, Long> promedio = new LinkedHashMap<>();
+            sumas.forEach((presentacion, s) -> promedio.put(presentacion,
+                    BigDecimal.valueOf(s[0]).divide(BigDecimal.valueOf(s[1]), 0, RoundingMode.HALF_UP).longValue()));
+            return new PreciosPromedio(promedio, promediados.size(), !conExistencia.isEmpty());
+        });
+    }
+
     /** Valor de la mercancía al precio de venta de la presentación principal. */
     public static long valorVenta(ProductoCatalogo producto, BigDecimal cantidad, Map<String, Long> precios) {
         Presentacion principal = producto.principal();

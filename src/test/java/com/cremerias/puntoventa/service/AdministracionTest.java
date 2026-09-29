@@ -136,6 +136,43 @@ class AdministracionTest {
     }
 
     @Test
+    void elPrecioPromedioSaleDeLosLotesQueTieneLaSucursal() {
+        ProductoCatalogo queso = catalogoAdmin("Queso Oaxaca");
+        String kilo = queso.principal().id();
+        // En la sucursal hay un lote de ejemplo a $190/kg; se surten dos lotes más a $200 y $215.
+        for (long precio : new long[]{20000, 21500}) {
+            admin.surtidos().registrar(matriz, SurtidoService.FormaPago.EFECTIVO,
+                    List.of(new SurtidoService.Linea(queso, new BigDecimal("5"), Map.of(kilo, precio))),
+                    null, administrador, null);
+        }
+        var promedio = admin.surtidos().preciosPromedio(matriz.id(), queso.id());
+        assertEquals(3, promedio.lotes());
+        assertTrue(promedio.conExistencia());
+        assertEquals(20167L, promedio.precios().get(kilo)); // (19000 + 20000 + 21500) / 3 = 20166.67
+
+        // Se vende todo el lote de $190 (25 kg): ya solo cuentan los que tienen existencia.
+        Sesion cajero = entrar("cajero", "cajero123");
+        Turno turno = caja.abrir(cajero, 0);
+        vender(cajero, turno, "queso oaxaca", "25");
+        promedio = admin.surtidos().preciosPromedio(matriz.id(), queso.id());
+        assertEquals(2, promedio.lotes());
+        assertEquals(20750L, promedio.precios().get(kilo));
+
+        // Si ya no queda nada, se promedian todos los lotes anteriores.
+        vender(cajero, turno, "queso oaxaca", "10");
+        promedio = admin.surtidos().preciosPromedio(matriz.id(), queso.id());
+        assertEquals(3, promedio.lotes());
+        assertTrue(!promedio.conExistencia());
+        assertEquals(20167L, promedio.precios().get(kilo));
+
+        // Sucursal sin lotes del producto: no hay promedio.
+        admin.sucursales().guardar(null, "SUR", "Cremería Sur", null, null, administrador);
+        String sur = admin.sucursales().listar().stream().filter(s -> s.codigo().equals("SUR")).findFirst()
+                .orElseThrow().id();
+        assertEquals(0, admin.surtidos().preciosPromedio(sur, queso.id()).lotes());
+    }
+
+    @Test
     void enLaCajaSeVendePrimeroAlPrecioAnteriorYLuegoAlNuevo() {
         ProductoCatalogo queso = catalogoAdmin("Queso Oaxaca");
         admin.surtidos().registrar(matriz, SurtidoService.FormaPago.EFECTIVO,
