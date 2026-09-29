@@ -244,6 +244,10 @@ class AdministracionTest {
         assertInstanceOf(ResultadoLogin.Rechazado.class,
                 auth.iniciarSesion("cajero", "cajero123".toCharArray(), ModoConexion.OFFLINE));
         assertEquals(1, auth.accesos().pendientes().size());
+        // Un supervisor solo ve (y puede aprobar) los bloqueos de su propia sucursal.
+        assertEquals(1, auth.accesos().pendientesDeSucursal(matriz.id()).size());
+        assertEquals(0, auth.accesos().pendientesDeSucursal(
+                admin.sucursales().almacen().orElseThrow().id()).size());
 
         // Un cajero no puede autorizar; el administrador sí.
         assertThrows(IllegalStateException.class, () -> auth.accesos().autorizar(rechazo.bloqueoId(), cajero));
@@ -347,6 +351,26 @@ class AdministracionTest {
                 administrador);
         assertEquals("500 µg", com.cremerias.puntoventa.util.Masa.formatear(catalogoAdmin("Vitamina").gramajeGramos()));
         assertEquals(0, new BigDecimal("1000").compareTo(catalogoAdmin("Queso Oaxaca").gramajeGramos()));
+    }
+
+    @Test
+    void unProductoPorKiloPuedeCapturarSuPropioGramajeDeReferencia() {
+        var granel = List.of(new com.cremerias.puntoventa.model.Presentacion(null, null, "Kilo", true, BigDecimal.ONE,
+                null, true, true));
+        // Sin gramaje tampoco se puede guardar un producto por kilo (ya no se fuerza a 1000 en automático).
+        assertThrows(IllegalArgumentException.class, () -> admin.productos().guardar(new ProductoAdminService.Datos(
+                null, "Salmón ahumado", "Carnes frías", null, null, com.cremerias.puntoventa.model.Unidad.KG, false,
+                com.cremerias.puntoventa.model.Disponibilidad.REGULAR, granel, List.of(), null, null, null), administrador));
+
+        // Con 1200 g de referencia por kilo y 60 g de merma, el neto es 1140 g por kilo (no 980 g de un 1000 fijo).
+        String folio = admin.productos().guardar(new ProductoAdminService.Datos(
+                null, "Salmón ahumado", "Carnes frías", null, null, com.cremerias.puntoventa.model.Unidad.KG, true,
+                com.cremerias.puntoventa.model.Disponibilidad.REGULAR, granel, List.of(), new BigDecimal("1200"),
+                new BigDecimal("60"), null), administrador);
+        assertTrue(folio.startsWith("PRD-"));
+        ProductoCatalogo salmon = catalogoAdmin("Salmón ahumado");
+        assertEquals(0, new BigDecimal("1200").compareTo(salmon.gramajeGramos()));
+        assertEquals(0, new BigDecimal("1140").compareTo(salmon.gramajeNeto()));
     }
 
     @Test

@@ -32,8 +32,6 @@ public class ProductoAdminService {
                         BigDecimal gramajeGramos, BigDecimal mermaGramos, AvisoSinVenta avisoSinVenta) {
     }
 
-    private static final BigDecimal MIL = new BigDecimal("1000");
-
     private final Database database;
     private final String dispositivoId;
     private final ProductoRepository productos = new ProductoRepository();
@@ -79,7 +77,7 @@ public class ProductoAdminService {
                     : productos.categoria(c, d.categoria());
             boolean nuevo = d.id() == null;
             String id = nuevo ? Ids.nuevo() : d.id();
-            BigDecimal gramaje = d.unidad() == Unidad.KG ? MIL : d.gramajeGramos();
+            BigDecimal gramaje = d.gramajeGramos();
             BigDecimal merma = d.sujetoMerma() && d.mermaGramos() != null ? d.mermaGramos() : BigDecimal.ZERO;
             if (nuevo) {
                 productos.insertar(c, id, d.nombre().strip(), categoriaId, clave, codigoInventario, d.unidad(),
@@ -132,16 +130,18 @@ public class ProductoAdminService {
         if (d.nombre() == null || d.nombre().isBlank()) {
             throw new IllegalArgumentException("Escribe el nombre del producto.");
         }
-        if (d.unidad() != Unidad.KG && (d.gramajeGramos() == null || d.gramajeGramos().signum() <= 0)) {
-            throw new IllegalArgumentException("Escribe el gramaje del producto (lo que pesa una pieza).");
+        if (d.gramajeGramos() == null || d.gramajeGramos().signum() <= 0) {
+            throw new IllegalArgumentException(d.unidad() == Unidad.KG
+                    ? "Escribe el gramaje de referencia por kilo (normalmente 1000 g)."
+                    : "Escribe el gramaje del producto (lo que pesa una pieza).");
         }
         if (d.sujetoMerma()) {
-            BigDecimal gramaje = d.unidad() == Unidad.KG ? MIL : d.gramajeGramos();
             if (d.mermaGramos() == null || d.mermaGramos().signum() <= 0) {
                 throw new IllegalArgumentException("Escribe la merma del producto o desactiva «Sujeto a merma».");
             }
-            if (d.mermaGramos().compareTo(gramaje) >= 0) {
-                throw new IllegalArgumentException("La merma debe ser menor que el gramaje (" + Masa.formatear(gramaje) + ").");
+            if (d.mermaGramos().compareTo(d.gramajeGramos()) >= 0) {
+                throw new IllegalArgumentException(
+                        "La merma debe ser menor que el gramaje (" + Masa.formatear(d.gramajeGramos()) + ").");
             }
         }
         AvisoSinVenta aviso = d.avisoSinVenta();

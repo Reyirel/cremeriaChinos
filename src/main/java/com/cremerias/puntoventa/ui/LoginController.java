@@ -147,28 +147,8 @@ public class LoginController {
                 campoPassword.setText("");
                 mostrarError(rechazado.mensaje());
                 campoPassword.requestFocus();
-                if (rechazado.bloqueoId() != null) {
-                    ofrecerAutorizacion(usuario.strip(), rechazado.bloqueoId());
-                }
             }
         }
-    }
-
-    /** Un supervisor de su sucursal o un administrador puede dar el acceso ahí mismo. */
-    private void ofrecerAutorizacion(String usuario, String bloqueoId) {
-        var contexto = navegador.contexto();
-        com.cremerias.puntoventa.ui.caja.DialogoAutorizacion.mostrar(navegador.dialogos(), contexto.auth(),
-                "el acceso de " + usuario + " fuera de horario", autorizador -> {
-                    try {
-                        String folio = contexto.auth().accesos().autorizar(bloqueoId, autorizador);
-                        ocultarError();
-                        navegador.avisos().exito("Acceso autorizado (folio " + folio + "). " + usuario
-                                + ", escribe tu contraseña para entrar.");
-                        campoPassword.requestFocus();
-                    } catch (RuntimeException e) {
-                        mostrarError(e.getMessage());
-                    }
-                });
     }
 
     @FXML

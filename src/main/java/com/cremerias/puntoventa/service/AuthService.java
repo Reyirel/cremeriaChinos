@@ -77,8 +77,9 @@ public class AuthService {
                     bitacora.registrar(c, usuarioTexto, usuario.id(), dispositivoId, false, "FUERA_DE_HORARIO");
                     return new ResultadoLogin.Rechazado(Motivo.FUERA_DE_HORARIO,
                             "Acceso bloqueado: " + bloqueo.get().motivo().descripcion().toLowerCase()
-                                    + ". Un administrador o supervisor debe darte acceso (folio "
-                                    + bloqueo.get().folio() + ").", bloqueo.get().id());
+                                    + ". Un administrador o tu supervisor debe darte acceso desde su panel (folio "
+                                    + bloqueo.get().folio() + "). Intenta de nuevo en cuanto te avisen.",
+                            bloqueo.get().id());
                 }
                 String sesionId = Ids.nuevo();
                 usuarios.registrarAccesoExitoso(c, usuario.id(), ahora);

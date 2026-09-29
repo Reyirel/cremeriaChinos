@@ -68,6 +68,20 @@
                 </graphic>
             </ToggleButton>
 
+            <ToggleButton fx:id="opcionAccesos" styleClass="menu-opcion" maxWidth="Infinity" onAction="#onAccesos">
+                <graphic>
+                    <HBox spacing="12" alignment="CENTER_LEFT">
+                        <FontIcon iconLiteral="mdi2a-account-lock-outline"/>
+                        <VBox>
+                            <Label text="Accesos" styleClass="menu-opcion-titulo"/>
+                            <Label text="Bloqueados por horario" styleClass="menu-opcion-detalle"/>
+                        </VBox>
+                        <Region HBox.hgrow="ALWAYS"/>
+                        <Label fx:id="contadorAccesos" styleClass="menu-contador"/>
+                    </HBox>
+                </graphic>
+            </ToggleButton>
+
             <Region VBox.vgrow="ALWAYS"/>
 
             <VBox styleClass="menu-sucursal" spacing="2">

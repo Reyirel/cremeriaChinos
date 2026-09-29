@@ -4,3 +4,4 @@ target/
 .vscode/
 .DS_Store
 .claude
+src/main/java/com/cremerias/puntoventa/assets/

@@ -29,15 +29,19 @@ public class SupervisorController {
     private Navegador.Vista<CortesController> vistaCortes;
     private ProductosVista vistaProductos;
     private IndicadoresVista vistaIndicadores;
+    private AccesosVista vistaAccesos;
+    private int bloqueosAnteriores = -1;
 
     @FXML private ToggleButton opcionCaja;
     @FXML private ToggleButton opcionCortes;
     @FXML private ToggleButton opcionProductos;
     @FXML private ToggleButton opcionIndicadores;
+    @FXML private ToggleButton opcionAccesos;
     @FXML private StackPane contenido;
     @FXML private Label nombreSucursal;
     @FXML private Label contadorAbiertas;
     @FXML private Label contadorOfertar;
+    @FXML private Label contadorAccesos;
 
     public SupervisorController(Navegador navegador) {
         this.navegador = navegador;
@@ -50,6 +54,7 @@ public class SupervisorController {
         opcionCortes.setToggleGroup(menu);
         opcionProductos.setToggleGroup(menu);
         opcionIndicadores.setToggleGroup(menu);
+        opcionAccesos.setToggleGroup(menu);
         menu.selectedToggleProperty().addListener((o, antes, ahora) -> {
             if (ahora == null && antes != null) {
                 antes.setSelected(true);
@@ -58,6 +63,7 @@ public class SupervisorController {
         nombreSucursal.setText(navegador.contexto().nombreSucursal(sesion.usuario().sucursalId()));
         contadorAbiertas.managedProperty().bind(contadorAbiertas.visibleProperty());
         contadorOfertar.managedProperty().bind(contadorOfertar.visibleProperty());
+        contadorAccesos.managedProperty().bind(contadorAccesos.visibleProperty());
         contadorOfertar.setTooltip(new Tooltip("Productos que llevan tiempo sin venderse: ofértalos"));
         actualizarContador();
         onCaja();
@@ -118,6 +124,16 @@ public class SupervisorController {
         contenido.getChildren().setAll(vistaIndicadores.nodo());
     }
 
+    @FXML
+    private void onAccesos() {
+        opcionAccesos.setSelected(true);
+        if (vistaAccesos == null) {
+            vistaAccesos = new AccesosVista(navegador);
+        }
+        vistaAccesos.actualizar();
+        contenido.getChildren().setAll(vistaAccesos.nodo());
+    }
+
     private void actualizarContador() {
         String sucursal = sesion.usuario().sucursalId();
         int abiertas = sucursal == null ? 0 : navegador.contexto().caja().abiertosDeSucursal(sucursal).size();
@@ -126,5 +142,13 @@ public class SupervisorController {
         contadorOfertar.setText(String.valueOf(ofertar));
         contadorOfertar.setVisible(ofertar > 0);
         contadorAbiertas.setVisible(abiertas > 0);
+        int bloqueos = sucursal == null ? 0 : navegador.contexto().auth().accesos().pendientesDeSucursal(sucursal).size();
+        contadorAccesos.setText(String.valueOf(bloqueos));
+        contadorAccesos.setVisible(bloqueos > 0);
+        if (bloqueosAnteriores >= 0 && bloqueos > bloqueosAnteriores) {
+            navegador.avisos().conAccion("Un empleado de tu sucursal tiene el acceso bloqueado.", "Ver",
+                    this::onAccesos);
+        }
+        bloqueosAnteriores = bloqueos;
     }
 }

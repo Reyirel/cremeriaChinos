@@ -219,6 +219,11 @@ public class AccesoService {
         return pendientes().size();
     }
 
+    /** Solo los de una sucursal (para que un supervisor apruebe desde su propio panel). */
+    public List<Bloqueo> pendientesDeSucursal(String sucursalId) {
+        return database.con(c -> consultar(c, "WHERE b.estado = 'PENDIENTE' AND u.sucursal_id = ?", sucursalId));
+    }
+
     private Optional<Bloqueo> pendienteDe(Connection c, String usuarioId) throws SQLException {
         List<Bloqueo> lista = consultar(c, "WHERE b.estado = 'PENDIENTE' AND b.usuario_id = ?", usuarioId);
         return lista.isEmpty() ? Optional.empty() : Optional.of(lista.getFirst());

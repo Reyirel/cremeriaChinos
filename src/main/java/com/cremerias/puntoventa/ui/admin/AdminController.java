@@ -39,6 +39,7 @@ public class AdminController {
     private final Map<String, Label> contadores = new LinkedHashMap<>();
     private AdminContexto contexto;
     private int ordenesAnteriores = -1;
+    private int bloqueosAnteriores = -1;
 
     @FXML private VBox menu;
     @FXML private StackPane contenido;
@@ -144,6 +145,11 @@ public class AdminController {
                 contexto.avisos().conAccion("Llegó una nueva orden de reabastecimiento.", "Ver", () -> ir("ordenes"));
             }
             ordenesAnteriores = ordenes;
+            if (bloqueosAnteriores >= 0 && bloqueos > bloqueosAnteriores) {
+                contexto.avisos().conAccion("Un empleado tiene el acceso bloqueado por horario.", "Ver",
+                        () -> ir("avisos"));
+            }
+            bloqueosAnteriores = bloqueos;
         } catch (RuntimeException e) {
             // Los contadores no deben interrumpir el trabajo.
         }

@@ -106,12 +106,9 @@ final class DialogoProducto {
         bloqueMerma.managedProperty().bind(bloqueMerma.visibleProperty());
         Runnable actualizarGramaje = () -> {
             boolean porKilo = unidad.getValue() == Unidad.KG;
-            if (porKilo) {
-                gramaje.setGramos(new BigDecimal("1000"));
-            }
-            gramaje.setDisable(porKilo);
             ayudaGramaje.setText(porKilo
-                    ? "Se vende por peso: su gramaje es 1 kg por cada kilo. La merma se indica por kilo."
+                    ? "Peso de referencia por kilo vendido (normalmente 1000 g = 1 kg); ajústalo si lo necesitas. "
+                    + "La merma se resta de este valor."
                     : "Lo que pesa una pieza. Todos los productos lo llevan (sirve para comisiones por gramaje).");
             BigDecimal g = gramaje.gramos().orElse(null);
             BigDecimal m = merma.isSelected() ? cantidadMerma.gramos().orElse(BigDecimal.ZERO) : BigDecimal.ZERO;
@@ -233,9 +230,7 @@ final class DialogoProducto {
             for (Fila f : filas) {
                 configurarTipo(f, u);
             }
-            if (u != Unidad.KG) {
-                gramaje.setGramos(null);
-            }
+            gramaje.setGramos(u == Unidad.KG ? new BigDecimal("1000") : null);
             actualizarGramaje.run();
         });
         actualizarGramaje.run();
