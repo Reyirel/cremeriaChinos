@@ -6,10 +6,12 @@ import com.cremerias.puntoventa.model.Unidad;
 import com.cremerias.puntoventa.repository.LoteRepository;
 import com.cremerias.puntoventa.service.admin.AlmacenService;
 import com.cremerias.puntoventa.ui.componentes.CampoDinero;
+import com.cremerias.puntoventa.ui.componentes.CampoMasa;
 import com.cremerias.puntoventa.ui.componentes.Campos;
 import com.cremerias.puntoventa.ui.componentes.Dialogo;
 import com.cremerias.puntoventa.util.Cantidades;
 import com.cremerias.puntoventa.util.Dinero;
+import com.cremerias.puntoventa.util.Masa;
 import javafx.collections.FXCollections;
 import javafx.scene.Node;
 import javafx.scene.control.ComboBox;
@@ -20,10 +22,12 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Supplier;
 
 /** Inventario del almacén central por lotes: reabastecer, ver lotes y registrar merma. */
 public class AlmacenPagina extends Pagina {
@@ -102,25 +106,39 @@ public class AlmacenPagina extends Pagina {
         d.setPrefWidth(560);
         List<ProductoCatalogo> productos = a.admin().productos().listar().stream().filter(ProductoCatalogo::activo).toList();
         ComboBox<ProductoCatalogo> producto = SelectorProducto.crear(productos);
-        TextField cantidad = new TextField();
-        Campos.soloNumeros(cantidad, 0);
-        cantidad.getStyleClass().add("campo-dinero");
+        TextField cantidadPiezas = new TextField();
+        Campos.soloNumeros(cantidadPiezas, 0);
+        cantidadPiezas.getStyleClass().add("campo-dinero");
+        CampoMasa cantidadGranel = new CampoMasa();
+        cantidadGranel.selectorUnidad().setValue(Masa.KG);
+        VBox campoPiezas = Ui.campo("Cantidad en piezas", cantidadPiezas);
+        VBox campoGranel = Ui.campo("Cantidad (kg, toneladas...)", cantidadGranel);
+        campoPiezas.managedProperty().bind(campoPiezas.visibleProperty());
+        campoGranel.managedProperty().bind(campoGranel.visibleProperty());
         CampoDinero costo = new CampoDinero();
-        Label unidadCantidad = Ui.texto("", "texto-ayuda");
         Label unidadCosto = Ui.texto("", "texto-ayuda");
         TextField notas = new TextField();
         notas.setPromptText("Proveedor, factura... (opcional)");
         Label total = Ui.texto("$0.00", "total-grande");
+        Supplier<BigDecimal> cantidadBase = () -> {
+            ProductoCatalogo p = SelectorProducto.valor(producto);
+            Unidad u = p == null ? Unidad.PZA : p.unidad();
+            return u == Unidad.KG
+                    ? cantidadGranel.gramos().map(g -> g.movePointLeft(3).setScale(3, RoundingMode.HALF_UP)).orElse(BigDecimal.ZERO)
+                    : Cantidades.desdeCaptura(u, cantidadPiezas.getText()).orElse(BigDecimal.ZERO);
+        };
         Runnable actualizar = () -> {
             ProductoCatalogo p = SelectorProducto.valor(producto);
             Unidad u = p == null ? Unidad.PZA : p.unidad();
-            unidadCantidad.setText(u == Unidad.KG ? "Cantidad en gramos (1 kg = 1000 g)" : "Cantidad en piezas");
+            campoPiezas.setVisible(u != Unidad.KG);
+            campoGranel.setVisible(u == Unidad.KG);
             unidadCosto.setText(u == Unidad.KG ? "Costo por kilo" : "Costo por pieza");
-            BigDecimal c = Cantidades.desdeCaptura(u, cantidad.getText()).orElse(BigDecimal.ZERO);
-            total.setText(Dinero.formatear(Dinero.importe(costo.centavosOCero(), c)));
+            total.setText(Dinero.formatear(Dinero.importe(costo.centavosOCero(), cantidadBase.get())));
         };
         producto.valueProperty().addListener((o, x, y) -> actualizar.run());
-        cantidad.textProperty().addListener((o, x, y) -> actualizar.run());
+        cantidadPiezas.textProperty().addListener((o, x, y) -> actualizar.run());
+        cantidadGranel.campo().textProperty().addListener((o, x, y) -> actualizar.run());
+        cantidadGranel.selectorUnidad().valueProperty().addListener((o, x, y) -> actualizar.run());
         costo.textProperty().addListener((o, x, y) -> actualizar.run());
         if (fijo != null) {
             producto.setValue(fijo);
@@ -130,7 +148,7 @@ public class AlmacenPagina extends Pagina {
         VBox totalCaja = new VBox(2, Ui.texto("TOTAL DE LA ENTRADA", "total-grande-etiqueta"), total);
         totalCaja.getStyleClass().add("caja-total-plana");
         d.setContenido(Ui.campo("Producto", producto),
-                Ui.fila(new VBox(6, unidadCantidad, cantidad), new VBox(6, unidadCosto, costo)),
+                Ui.fila(new VBox(6, campoPiezas, campoGranel), new VBox(6, unidadCosto, costo)),
                 Ui.campo("Notas", notas), totalCaja);
         Runnable guardar = () -> {
             ProductoCatalogo p = SelectorProducto.valor(producto);
@@ -138,7 +156,7 @@ public class AlmacenPagina extends Pagina {
                 a.avisos().error("Elige el producto.");
                 return;
             }
-            BigDecimal c = Cantidades.desdeCaptura(p.unidad(), cantidad.getText()).orElse(BigDecimal.ZERO);
+            BigDecimal c = cantidadBase.get();
             if (a.ejecutar("Entrada registrada", () -> a.admin().almacen().reabastecer(p, c, costo.centavosOCero(),
                     notas.getText(), a.usuario()))) {
                 d.cerrar();
@@ -149,7 +167,7 @@ public class AlmacenPagina extends Pagina {
         d.agregarBoton("Registrar entrada", "mdi2c-check", guardar, "accent");
         d.setAlCancelar(d::cerrar);
         d.setAlConfirmar(guardar);
-        d.setFocoInicial(fijo == null ? producto : cantidad);
+        d.setFocoInicial(fijo == null ? producto : cantidadPiezas);
         a.dialogos().mostrar(d);
     }
 

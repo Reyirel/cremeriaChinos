@@ -9,6 +9,7 @@ import java.util.Locale;
 /** Unidades de peso para capturar gramaje y merma. Internamente todo se guarda en gramos. */
 public enum Masa {
 
+    TON("t", "1000000"),
     KG("kg", "1000"),
     G("g", "1"),
     MG("mg", "0.001"),
@@ -39,6 +40,9 @@ public enum Masa {
     /** La unidad más cómoda para mostrar una cantidad de gramos. */
     public static Masa sugerida(BigDecimal enGramos) {
         BigDecimal g = enGramos.abs();
+        if (g.compareTo(new BigDecimal("1000000")) >= 0) {
+            return TON;
+        }
         if (g.compareTo(new BigDecimal("1000")) >= 0) {
             return KG;
         }
