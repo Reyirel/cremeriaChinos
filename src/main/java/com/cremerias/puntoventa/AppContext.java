@@ -12,12 +12,14 @@ import com.cremerias.puntoventa.service.AuthService;
 import com.cremerias.puntoventa.service.CajaService;
 import com.cremerias.puntoventa.service.CatalogoService;
 import com.cremerias.puntoventa.service.DatosDemo;
+import com.cremerias.puntoventa.service.InventarioSucursalService;
 import com.cremerias.puntoventa.service.VentaEsperaService;
 import com.cremerias.puntoventa.service.VentaService;
 import com.cremerias.puntoventa.service.admin.Administracion;
 import com.cremerias.puntoventa.service.DatosIniciales;
 import com.cremerias.puntoventa.service.PreferenciasService;
 import com.cremerias.puntoventa.service.SesionActual;
+import com.cremerias.puntoventa.service.SinVentaService;
 import com.cremerias.puntoventa.sync.Sincronizador;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,6 +42,8 @@ public final class AppContext implements AutoCloseable {
     private final CajaService caja;
     private final VentaService ventas;
     private final VentaEsperaService ventasEspera;
+    private final InventarioSucursalService inventarioSucursal;
+    private final SinVentaService sinVenta;
     private final Administracion administracion;
 
     private AppContext(Database database, AuthService auth, PreferenciasService preferencias,
@@ -53,6 +57,8 @@ public final class AppContext implements AutoCloseable {
         this.caja = caja;
         this.ventas = new VentaService(database, caja.dispositivoId());
         this.ventasEspera = new VentaEsperaService(database);
+        this.inventarioSucursal = new InventarioSucursalService(database);
+        this.sinVenta = new SinVentaService(database, Clock.systemDefaultZone());
         this.administracion = administracion;
     }
 
@@ -135,6 +141,15 @@ public final class AppContext implements AutoCloseable {
 
     public VentaEsperaService ventasEspera() {
         return ventasEspera;
+    }
+
+    public InventarioSucursalService inventarioSucursal() {
+        return inventarioSucursal;
+    }
+
+    /** Productos que llevan su plazo sin venderse (avisos para ofertarlos). */
+    public SinVentaService sinVenta() {
+        return sinVenta;
     }
 
     public Administracion admin() {

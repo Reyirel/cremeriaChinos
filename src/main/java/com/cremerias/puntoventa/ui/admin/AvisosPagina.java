@@ -1,9 +1,10 @@
 package com.cremerias.puntoventa.ui.admin;
 
+import com.cremerias.puntoventa.model.AvisoSinVenta;
 import com.cremerias.puntoventa.model.Sucursal;
 import com.cremerias.puntoventa.repository.OrdenRepository;
 import com.cremerias.puntoventa.service.AccesoService;
-import com.cremerias.puntoventa.service.admin.AlertaService;
+import com.cremerias.puntoventa.service.SinVentaService;
 import com.cremerias.puntoventa.ui.componentes.Campos;
 import com.cremerias.puntoventa.ui.componentes.DialogoConfirmacion;
 import com.cremerias.puntoventa.util.Cantidades;
@@ -32,7 +33,7 @@ public class AvisosPagina extends Pagina {
     private HBox indicadores;
     private TableView<OrdenRepository.Orden> ordenes;
     private TableView<AccesoService.Bloqueo> bloqueos;
-    private TableView<AlertaService.SinVenta> sinVenta;
+    private TableView<SinVentaService.SinVenta> sinVenta;
     private ComboBox<Sucursal> sucursalAviso;
     private TextField dias;
 
@@ -89,20 +90,23 @@ public class AvisosPagina extends Pagina {
         HBox configuracion = new HBox(8, new Label("Avisar en"), sucursalAviso,
                 new Label("si un producto con existencia no se vende en"), dias, new Label("días"), guardarDias);
         configuracion.setAlignment(Pos.CENTER_LEFT);
+        Label ayudaAviso = Ui.texto("Los productos con aviso propio (se define al crear o editar el producto) usan su "
+                + "plazo y se avisan solo a quien se eligió: administrador, supervisor y/o caja.", "texto-ayuda");
         sinVenta = tablaCorta("Todos los productos con existencia se han vendido recientemente.");
         sinVenta.getColumns().setAll(List.of(
-                Ui.texto("Sucursal", 160, AlertaService.SinVenta::sucursal),
-                Ui.texto("Producto", 240, AlertaService.SinVenta::producto),
+                Ui.texto("Sucursal", 160, SinVentaService.SinVenta::sucursal),
+                Ui.texto("Producto", 240, SinVentaService.SinVenta::producto),
                 Ui.texto("Existencia", 140, s -> Cantidades.formatear(s.unidad(), s.existencia())),
                 Ui.texto("Última venta", 150, s -> s.ultimaVenta() == null ? "Nunca"
                         : FECHA.format(s.ultimaVenta().atZone(ZoneId.systemDefault()))),
-                Ui.nodo("Sin vender", 130, s -> Ui.chip(s.dias() + " días", "advertencia"))));
+                Ui.texto("Plazo", 150, s -> s.plazo() + (s.avisoDelProducto() ? " (producto)" : " (sucursal)")),
+                Ui.nodo("Sin vender", 130, s -> Ui.chip(AvisoSinVenta.formatear(s.sinVender()), "advertencia"))));
 
         pagina.getChildren().addAll(indicadores,
                 Ui.tarjeta("Órdenes de reabastecimiento por aprobar", ordenes, verOrdenes),
                 Ui.tarjeta("Accesos bloqueados por horario", Ui.texto("El empleado no puede entrar hasta que le des acceso "
                         + "(también puede autorizarlo ahí mismo un supervisor de su sucursal).", "texto-ayuda"), bloqueos),
-                Ui.tarjeta("Productos sin venta", configuracion, sinVenta));
+                Ui.tarjeta("Productos sin venta", configuracion, ayudaAviso, sinVenta));
         ScrollPane scroll = new ScrollPane(pagina);
         scroll.setFitToWidth(true);
         scroll.getStyleClass().add("cortes-scroll");
@@ -121,7 +125,7 @@ public class AvisosPagina extends Pagina {
     public void alMostrar() {
         List<OrdenRepository.Orden> o = a.admin().ordenes().pendientes();
         List<AccesoService.Bloqueo> b = a.ctx().auth().accesos().pendientes();
-        List<AlertaService.SinVenta> s = a.admin().alertas().productosSinVenta();
+        List<SinVentaService.SinVenta> s = a.admin().alertas().productosSinVenta();
         ordenes.setItems(FXCollections.observableArrayList(o));
         bloqueos.setItems(FXCollections.observableArrayList(b));
         sinVenta.setItems(FXCollections.observableArrayList(s));

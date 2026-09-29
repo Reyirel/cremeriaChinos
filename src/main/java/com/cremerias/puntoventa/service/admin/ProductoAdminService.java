@@ -2,6 +2,7 @@ package com.cremerias.puntoventa.service.admin;
 
 import com.cremerias.puntoventa.db.Database;
 import com.cremerias.puntoventa.model.AccionBitacora;
+import com.cremerias.puntoventa.model.AvisoSinVenta;
 import com.cremerias.puntoventa.model.Disponibilidad;
 import com.cremerias.puntoventa.model.Presentacion;
 import com.cremerias.puntoventa.model.ProductoCatalogo;
@@ -23,11 +24,12 @@ public class ProductoAdminService {
     /**
      * Datos capturados en el formulario. {@code id} nulo = producto nuevo.
      * Gramaje y merma en gramos, por unidad base (por pieza, o por kilo en productos por kilo).
+     * {@code avisoSinVenta} es opcional (nulo = sin aviso propio).
      */
     public record Datos(String id, String nombre, String categoria, String clave, String codigoInventario,
                         Unidad unidad, boolean sujetoMerma, Disponibilidad disponibilidad,
                         List<Presentacion> presentaciones, List<String> presentacionesEliminadas,
-                        BigDecimal gramajeGramos, BigDecimal mermaGramos) {
+                        BigDecimal gramajeGramos, BigDecimal mermaGramos, AvisoSinVenta avisoSinVenta) {
     }
 
     private static final BigDecimal MIL = new BigDecimal("1000");
@@ -86,6 +88,7 @@ public class ProductoAdminService {
                 productos.actualizar(c, id, d.nombre().strip(), categoriaId, clave, codigoInventario, d.sujetoMerma(),
                         d.disponibilidad(), gramaje, merma);
             }
+            productos.guardarAviso(c, id, d.avisoSinVenta());
             for (String eliminada : d.presentacionesEliminadas()) {
                 productos.eliminarPresentacion(c, eliminada);
             }
@@ -103,7 +106,9 @@ public class ProductoAdminService {
                             + " presentación(es) · " + d.disponibilidad().nombre() + " · gramaje "
                             + Masa.formatear(gramaje) + (d.unidad() == Unidad.KG ? " por kg" : "")
                             + (d.sujetoMerma() ? " · merma " + Masa.formatear(merma) + " (neto "
-                            + Masa.formatear(gramaje.subtract(merma)) + ")" : ""));
+                            + Masa.formatear(gramaje.subtract(merma)) + ")" : "")
+                            + (d.avisoSinVenta() == null ? "" : " · aviso si no se vende en "
+                            + d.avisoSinVenta().describir() + " (" + d.avisoSinVenta().destinatarios() + ")"));
         });
     }
 
@@ -137,6 +142,18 @@ public class ProductoAdminService {
             }
             if (d.mermaGramos().compareTo(gramaje) >= 0) {
                 throw new IllegalArgumentException("La merma debe ser menor que el gramaje (" + Masa.formatear(gramaje) + ").");
+            }
+        }
+        AvisoSinVenta aviso = d.avisoSinVenta();
+        if (aviso != null) {
+            if (aviso.plazo() <= 0 || aviso.unidad() == null) {
+                throw new IllegalArgumentException("Escribe en cuánto tiempo sin venderse se debe avisar.");
+            }
+            if (aviso.duracion().compareTo(AvisoSinVenta.MAXIMO) > 0) {
+                throw new IllegalArgumentException("El plazo del aviso puede ser de hasta un año.");
+            }
+            if (!aviso.administrador() && !aviso.supervisor() && !aviso.caja()) {
+                throw new IllegalArgumentException("Elige a quién avisar: administrador, supervisor o caja.");
             }
         }
         if (d.presentaciones().isEmpty()) {

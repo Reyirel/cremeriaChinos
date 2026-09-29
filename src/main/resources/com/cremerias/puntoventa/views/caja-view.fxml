@@ -99,6 +99,23 @@
 
             <GridPane fx:id="gridAcciones" styleClass="grid-acciones" hgap="10" vgap="10"/>
 
+            <!-- Productos que llevan su plazo sin venderse: para ofertarlos -->
+            <Button fx:id="avisoOfertar" onAction="#onOfertar" styleClass="aviso-ofertar" maxWidth="Infinity"
+                    focusTraversable="false">
+                <graphic>
+                    <HBox alignment="CENTER_LEFT" spacing="12">
+                        <StackPane styleClass="aviso-ofertar-icono">
+                            <FontIcon iconLiteral="mdi2t-tag-outline"/>
+                        </StackPane>
+                        <VBox HBox.hgrow="ALWAYS" spacing="1">
+                            <Label fx:id="avisoOfertarTitulo" styleClass="aviso-ofertar-titulo"/>
+                            <Label text="Llevan tiempo sin venderse: ofértalos" styleClass="aviso-ofertar-detalle"/>
+                        </VBox>
+                        <FontIcon iconLiteral="mdi2c-chevron-right" styleClass="aviso-ofertar-flecha"/>
+                    </HBox>
+                </graphic>
+            </Button>
+
             <Region VBox.vgrow="ALWAYS"/>
 
             <VBox styleClass="info-turno" spacing="4">

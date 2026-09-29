@@ -4,6 +4,7 @@ import atlantafx.base.controls.CustomTextField;
 import atlantafx.base.controls.Spacer;
 import atlantafx.base.util.Animations;
 import com.cremerias.puntoventa.AppContext;
+import com.cremerias.puntoventa.model.AvisoSinVenta;
 import com.cremerias.puntoventa.model.Carrito;
 import com.cremerias.puntoventa.model.LineaVenta;
 import com.cremerias.puntoventa.model.Pago;
@@ -20,6 +21,7 @@ import com.cremerias.puntoventa.model.VentaResumen;
 import com.cremerias.puntoventa.repository.VentaEsperaRepository;
 import com.cremerias.puntoventa.service.CajaService.TipoMovimiento;
 import com.cremerias.puntoventa.service.CatalogoService;
+import com.cremerias.puntoventa.service.SinVentaService;
 import com.cremerias.puntoventa.service.VentaService;
 import com.cremerias.puntoventa.ui.Navegador;
 import com.cremerias.puntoventa.ui.componentes.Avisos;
@@ -79,8 +81,10 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -139,6 +143,14 @@ public class CajaController {
     @FXML private GridPane gridAcciones;
     @FXML private Label infoTurno;
     @FXML private Label infoVentas;
+    @FXML private Button avisoOfertar;
+    @FXML private Label avisoOfertarTitulo;
+
+    /** Revisa cada 30 s los productos que llevan su plazo sin venderse (solo con la caja en pantalla). */
+    private final Timeline revisionSinVenta = new Timeline(new KeyFrame(Duration.seconds(30), e -> revisarSinVenta()));
+    private List<SinVentaService.SinVenta> sinVenta = List.of();
+    /** Productos de los que ya se avisó; nulo hasta la primera revisión. */
+    private Set<String> avisados;
 
     public CajaController(Navegador navegador) {
         this.navegador = navegador;
@@ -160,6 +172,9 @@ public class CajaController {
         tarjetaUltimo.managedProperty().bind(tarjetaUltimo.visibleProperty());
         multiplicador.setVisible(false);
         multiplicador.managedProperty().bind(multiplicador.visibleProperty());
+        avisoOfertar.setVisible(false);
+        avisoOfertar.managedProperty().bind(avisoOfertar.visibleProperty());
+        revisionSinVenta.setCycleCount(Timeline.INDEFINITE);
 
         carrito.lineas().addListener((ListChangeListener<LineaVenta>) c -> {
             if (!restaurando && turno != null) {
@@ -178,6 +193,12 @@ public class CajaController {
                 if (anterior == null) {
                     revalidarTurno();
                 }
+            }
+            if (nueva == null) {
+                revisionSinVenta.stop();
+            } else {
+                revisarSinVenta();
+                revisionSinVenta.play();
             }
         });
         Platform.runLater(this::verificarTurno);
@@ -931,6 +952,7 @@ public class CajaController {
         ctx.catalogo().recargar();
         ctx.sincronizador().revisarAhora();
         actualizarInfoTurno();
+        revisarSinVenta();
         DialogoVentaExitosa.mostrar(dialogos, ticket, () -> imprimir(TicketTexto.venta(ticket)), this::enfocarBusqueda);
     }
 
@@ -1072,6 +1094,7 @@ public class CajaController {
                             refrescar.run();
                             ctx.catalogo().recargar();
                             actualizarInfoTurno();
+                            revisarSinVenta();
                             ctx.sincronizador().revisarAhora();
                             avisos.exito("Venta " + venta.folio() + " cancelada. Devuelve "
                                     + Dinero.formatear(venta.totalCentavos()) + " al cliente.");
@@ -1243,6 +1266,53 @@ public class CajaController {
             abrirTurno();
         }
         return turno != null;
+    }
+
+    // =====================================================================
+    // Productos para ofertar (llevan su plazo sin venderse)
+    // =====================================================================
+
+    /** Actualiza la tarjeta de productos para ofertar y avisa de los que acaban de cumplir su plazo. */
+    private void revisarSinVenta() {
+        String sucursal = sesion.usuario().sucursalId();
+        if (sucursal == null) {
+            return;
+        }
+        try {
+            sinVenta = ctx.sinVenta().pendientes(sesion.usuario().rol(), sucursal);
+        } catch (RuntimeException e) {
+            log.warn("No se pudieron revisar los productos sin venta", e);
+            return;
+        }
+        avisoOfertarTitulo.setText(sinVenta.size() == 1 ? "1 producto para ofertar"
+                : sinVenta.size() + " productos para ofertar");
+        avisoOfertar.setVisible(!sinVenta.isEmpty());
+
+        Set<String> actuales = new HashSet<>();
+        List<SinVentaService.SinVenta> nuevos = new ArrayList<>();
+        for (SinVentaService.SinVenta s : sinVenta) {
+            actuales.add(s.productoId());
+            if (avisados == null || !avisados.contains(s.productoId())) {
+                nuevos.add(s);
+            }
+        }
+        avisados = actuales; // al venderse sale de la lista y, si vuelve a cumplir su plazo, se avisa otra vez
+        if (nuevos.size() == 1) {
+            avisos.conAccion("«" + nuevos.getFirst().producto() + "» lleva "
+                    + AvisoSinVenta.formatear(nuevos.getFirst().sinVender()) + " sin venderse: ofértalo.", "Ver",
+                    this::onOfertar);
+        } else if (nuevos.size() > 1) {
+            avisos.conAccion(nuevos.size() + " productos llevan tiempo sin venderse: ofértalos.", "Ver",
+                    this::onOfertar);
+        }
+    }
+
+    @FXML
+    private void onOfertar() {
+        if (sinVenta.isEmpty()) {
+            return;
+        }
+        DialogoOfertar.mostrar(dialogos, sinVenta, this::enfocarBusqueda);
     }
 
     private void actualizarInfoTurno() {

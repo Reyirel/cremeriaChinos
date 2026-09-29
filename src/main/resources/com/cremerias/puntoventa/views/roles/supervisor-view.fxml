@@ -42,6 +42,20 @@
                 </graphic>
             </ToggleButton>
 
+            <ToggleButton fx:id="opcionProductos" styleClass="menu-opcion" maxWidth="Infinity" onAction="#onProductos">
+                <graphic>
+                    <HBox spacing="12" alignment="CENTER_LEFT">
+                        <FontIcon iconLiteral="mdi2p-package-variant-closed"/>
+                        <VBox>
+                            <Label text="Productos" styleClass="menu-opcion-titulo"/>
+                            <Label text="Existencias y precios" styleClass="menu-opcion-detalle"/>
+                        </VBox>
+                        <Region HBox.hgrow="ALWAYS"/>
+                        <Label fx:id="contadorOfertar" styleClass="menu-contador"/>
+                    </HBox>
+                </graphic>
+            </ToggleButton>
+
             <Region VBox.vgrow="ALWAYS"/>
 
             <VBox styleClass="menu-sucursal" spacing="2">

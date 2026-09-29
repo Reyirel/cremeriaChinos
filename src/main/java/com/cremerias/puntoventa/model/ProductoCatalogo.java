@@ -3,7 +3,11 @@ package com.cremerias.puntoventa.model;
 import java.math.BigDecimal;
 import java.util.List;
 
-/** Producto tal como lo administra el almacén. */
+/**
+ * Producto tal como lo administra el almacén.
+ *
+ * @param avisoSinVenta aviso propio si no se vende en cierto plazo; nulo = usa el de la sucursal
+ */
 public record ProductoCatalogo(
         String id,
         String nombre,
@@ -17,7 +21,8 @@ public record ProductoCatalogo(
         boolean activo,
         List<Presentacion> presentaciones,
         BigDecimal gramajeGramos,
-        BigDecimal mermaGramos
+        BigDecimal mermaGramos,
+        AvisoSinVenta avisoSinVenta
 ) {
 
     /**

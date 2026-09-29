@@ -2,6 +2,7 @@ package com.cremerias.puntoventa.service;
 
 import com.cremerias.puntoventa.db.Database;
 import com.cremerias.puntoventa.db.Migraciones;
+import com.cremerias.puntoventa.model.AvisoSinVenta;
 import com.cremerias.puntoventa.model.HorarioDia;
 import com.cremerias.puntoventa.model.MetodoPago;
 import com.cremerias.puntoventa.model.ModoConexion;
@@ -19,6 +20,7 @@ import com.cremerias.puntoventa.security.PasswordHasher;
 import com.cremerias.puntoventa.service.admin.Administracion;
 import com.cremerias.puntoventa.service.admin.ComisionService;
 import com.cremerias.puntoventa.service.admin.LimitesService;
+import com.cremerias.puntoventa.service.admin.ProductoAdminService;
 import com.cremerias.puntoventa.service.admin.SurtidoService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,6 +30,7 @@ import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.DayOfWeek;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -286,24 +289,24 @@ class AdministracionTest {
         // Sin gramaje no se puede guardar un producto por pieza.
         assertThrows(IllegalArgumentException.class, () -> admin.productos().guardar(new com.cremerias.puntoventa.service
                 .admin.ProductoAdminService.Datos(null, "Lapicero", "Papelería", null, null, com.cremerias.puntoventa.model.Unidad.PZA,
-                false, com.cremerias.puntoventa.model.Disponibilidad.REGULAR, pieza, List.of(), null, null), administrador));
+                false, com.cremerias.puntoventa.model.Disponibilidad.REGULAR, pieza, List.of(), null, null, null), administrador));
         // La merma debe ser menor que el gramaje.
         assertThrows(IllegalArgumentException.class, () -> admin.productos().guardar(new com.cremerias.puntoventa.service
                 .admin.ProductoAdminService.Datos(null, "Jabón", "Limpieza", null, null, com.cremerias.puntoventa.model.Unidad.PZA,
                 true, com.cremerias.puntoventa.model.Disponibilidad.REGULAR, pieza, List.of(), new BigDecimal("150"),
-                new BigDecimal("150")), administrador));
+                new BigDecimal("150"), null), administrador));
 
         String folio = admin.productos().guardar(new com.cremerias.puntoventa.service.admin.ProductoAdminService.Datos(
                 null, "Queso de bola", "Quesos", null, null, com.cremerias.puntoventa.model.Unidad.PZA, true,
                 com.cremerias.puntoventa.model.Disponibilidad.TEMPORADA, pieza, List.of(), new BigDecimal("1000"),
-                new BigDecimal("50")), administrador);
+                new BigDecimal("50"), null), administrador);
         assertTrue(folio.startsWith("PRD-"));
         ProductoCatalogo bola = catalogoAdmin("Queso de bola");
         assertEquals(0, new BigDecimal("950").compareTo(bola.gramajeNeto()));
         // Admite microgramos (0.0005 g = 500 µg).
         admin.productos().guardar(new com.cremerias.puntoventa.service.admin.ProductoAdminService.Datos(
                 null, "Vitamina", "Farmacia", null, null, com.cremerias.puntoventa.model.Unidad.PZA, false,
-                com.cremerias.puntoventa.model.Disponibilidad.REGULAR, pieza, List.of(), new BigDecimal("0.0005"), null),
+                com.cremerias.puntoventa.model.Disponibilidad.REGULAR, pieza, List.of(), new BigDecimal("0.0005"), null, null),
                 administrador);
         assertEquals("500 µg", com.cremerias.puntoventa.util.Masa.formatear(catalogoAdmin("Vitamina").gramajeGramos()));
         assertEquals(0, new BigDecimal("1000").compareTo(catalogoAdmin("Queso Oaxaca").gramajeGramos()));
@@ -334,6 +337,82 @@ class AdministracionTest {
         admin.usuarios().eliminar(nuevo, administrador);
         admin.usuarios().crear("Otro", "nuevo", "clave123".toCharArray(), Rol.CAJERO, matriz.id(), administrador);
         assertThrows(IllegalStateException.class, () -> admin.usuarios().eliminar(administrador, administrador));
+    }
+
+    @Test
+    void elSupervisorConsultaLosProductosDeSuSucursalYLaExistenciaBajaConLaVenta() {
+        var inventario = new InventarioSucursalService(db);
+        var leche = inventario.listar(matriz.id()).stream()
+                .filter(f -> f.producto().nombre().equals("Leche entera 1 L")).findFirst().orElseThrow();
+        assertEquals(0, new BigDecimal("48").compareTo(leche.existencia()));
+        // Precio de cada presentación en la sucursal, la principal primero.
+        assertEquals(List.of("Pieza", "Caja 12 pzas"), leche.precios().stream().map(p -> p.presentacion().nombre()).toList());
+        assertEquals(List.of(2800L, 32000L), leche.precios().stream().map(InventarioSucursalService.Precio::precioCentavos).toList());
+
+        Sesion cajero = entrar("cajero", "cajero123");
+        Turno turno = caja.abrir(cajero, 0);
+        vender(cajero, turno, "leche entera 1 l caja", "1");
+        leche = inventario.listar(matriz.id()).stream()
+                .filter(f -> f.producto().nombre().equals("Leche entera 1 L")).findFirst().orElseThrow();
+        assertEquals(0, new BigDecimal("36").compareTo(leche.existencia()));
+    }
+
+    private String guardarConAviso(ProductoCatalogo p, AvisoSinVenta aviso) {
+        return admin.productos().guardar(new ProductoAdminService.Datos(p.id(), p.nombre(), p.categoria(), p.clave(),
+                p.codigoInventario(), p.unidad(), p.sujetoMerma(), p.disponibilidad(), p.presentaciones(), List.of(),
+                p.gramajeGramos(), p.mermaGramos(), aviso), administrador);
+    }
+
+    private static List<String> productos(List<SinVentaService.SinVenta> lista) {
+        return lista.stream().map(SinVentaService.SinVenta::producto).toList();
+    }
+
+    @Test
+    void elAvisoPorProductoValidaPlazoYDestinatarios() {
+        ProductoCatalogo leche = catalogoAdmin("Leche entera 1 L");
+        assertThrows(IllegalArgumentException.class, () -> guardarConAviso(leche,
+                new AvisoSinVenta(15, AvisoSinVenta.Unidad.MINUTOS, false, false, false)));
+        assertThrows(IllegalArgumentException.class, () -> guardarConAviso(leche,
+                new AvisoSinVenta(0, AvisoSinVenta.Unidad.HORAS, true, false, false)));
+        assertThrows(IllegalArgumentException.class, () -> guardarConAviso(leche,
+                new AvisoSinVenta(53, AvisoSinVenta.Unidad.SEMANAS, true, false, false)));
+
+        guardarConAviso(leche, new AvisoSinVenta(2, AvisoSinVenta.Unidad.HORAS, false, true, true));
+        AvisoSinVenta guardado = catalogoAdmin("Leche entera 1 L").avisoSinVenta();
+        assertEquals("2 horas", guardado.describir());
+        assertEquals("Supervisor y caja", guardado.destinatarios());
+        // Se puede quitar: vuelve a usar el plazo en días de la sucursal.
+        guardarConAviso(catalogoAdmin("Leche entera 1 L"), null);
+        assertEquals(null, catalogoAdmin("Leche entera 1 L").avisoSinVenta());
+    }
+
+    @Test
+    void elAvisoSinVentaLlegaSoloAQuienSeEligioYSeQuitaAlVender() {
+        guardarConAviso(catalogoAdmin("Leche entera 1 L"),
+                new AvisoSinVenta(15, AvisoSinVenta.Unidad.MINUTOS, false, true, true));
+        Instant ahora = Instant.now();
+        var a10 = new SinVentaService(db, Clock.fixed(ahora.plus(Duration.ofMinutes(10)), ZONA));
+        var a16 = new SinVentaService(db, Clock.fixed(ahora.plus(Duration.ofMinutes(16)), ZONA));
+
+        // A los 10 minutos sin venta todavía no se avisa; a los 16 sí, a la caja y al supervisor.
+        assertEquals(List.of(), productos(a10.pendientes(Rol.CAJERO, matriz.id())));
+        assertEquals(List.of("Leche entera 1 L"), productos(a16.pendientes(Rol.CAJERO, matriz.id())));
+        assertEquals(List.of("Leche entera 1 L"), productos(a16.pendientes(Rol.SUPERVISOR, matriz.id())));
+        assertEquals("15 minutos", a16.pendientes(Rol.CAJERO, matriz.id()).getFirst().plazo());
+        // El administrador no lo pidió para este producto (y el plazo de la sucursal es de días).
+        assertTrue(productos(a16.pendientes(Rol.ADMINISTRADOR, null)).isEmpty());
+        // Otra sucursal no lo ve.
+        admin.sucursales().guardar(null, "NORTE", "Cremería Norte", null, null, administrador);
+        String norteId = admin.sucursales().listar().stream().filter(s -> s.codigo().equals("NORTE")).findFirst()
+                .orElseThrow().id();
+        assertEquals(List.of(), productos(a16.pendientes(Rol.CAJERO, norteId)));
+
+        // Al venderse se quita el aviso: el plazo vuelve a contar desde esa venta.
+        Sesion cajero = entrar("cajero", "cajero123");
+        Turno turno = caja.abrir(cajero, 0);
+        vender(cajero, turno, "leche entera 1 l", "1");
+        var despuesDeVender = new SinVentaService(db, Clock.fixed(Instant.now().plus(Duration.ofMinutes(10)), ZONA));
+        assertEquals(List.of(), productos(despuesDeVender.pendientes(Rol.CAJERO, matriz.id())));
     }
 
     /** Reloj que se puede mover en las pruebas. */

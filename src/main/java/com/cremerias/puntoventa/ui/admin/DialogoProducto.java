@@ -1,6 +1,7 @@
 package com.cremerias.puntoventa.ui.admin;
 
 import atlantafx.base.controls.ToggleSwitch;
+import com.cremerias.puntoventa.model.AvisoSinVenta;
 import com.cremerias.puntoventa.model.Disponibilidad;
 import com.cremerias.puntoventa.model.Presentacion;
 import com.cremerias.puntoventa.model.ProductoCatalogo;
@@ -19,6 +20,7 @@ import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.RadioButton;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.layout.GridPane;
@@ -126,6 +128,41 @@ final class DialogoProducto {
         VBox bloqueGramaje = Ui.tarjeta("Gramaje", merma, Ui.fila(Ui.campo("Gramaje", gramaje), bloqueMerma),
                 ayudaGramaje, neto);
 
+        // Aviso opcional si el producto no se vende en cierto tiempo (para ofertarlo)
+        AvisoSinVenta avisoActual = nuevo ? null : p.avisoSinVenta();
+        ToggleSwitch avisar = new ToggleSwitch("Avisar si no se vende en cierto tiempo (para ofertarlo)");
+        avisar.setSelected(avisoActual != null);
+        TextField plazo = new TextField(avisoActual == null ? "" : String.valueOf(avisoActual.plazo()));
+        Campos.soloNumeros(plazo, 0);
+        plazo.setAlignment(Pos.CENTER_RIGHT);
+        plazo.setPromptText("Ej. 30");
+        plazo.setPrefColumnCount(5);
+        ComboBox<AvisoSinVenta.Unidad> unidadPlazo = new ComboBox<>(
+                FXCollections.observableArrayList(AvisoSinVenta.Unidad.values()));
+        unidadPlazo.setValue(avisoActual == null ? AvisoSinVenta.Unidad.MINUTOS : avisoActual.unidad());
+        unidadPlazo.setPrefWidth(130);
+        CheckBox avisarAdmin = new CheckBox("Administrador");
+        CheckBox avisarSupervisor = new CheckBox("Supervisor");
+        CheckBox avisarCaja = new CheckBox("Caja");
+        avisarAdmin.setSelected(avisoActual != null && avisoActual.administrador());
+        avisarSupervisor.setSelected(avisoActual == null || avisoActual.supervisor());
+        avisarCaja.setSelected(avisoActual == null || avisoActual.caja());
+        HBox campoPlazo = new HBox(8, plazo, unidadPlazo);
+        campoPlazo.setAlignment(Pos.CENTER_LEFT);
+        HBox destinatarios = new HBox(18, avisarAdmin, avisarSupervisor, avisarCaja);
+        destinatarios.setAlignment(Pos.CENTER_LEFT);
+        destinatarios.setMinHeight(36);
+        VBox bloquePlazo = new VBox(10, Ui.fila(Ui.campo("Sin venderse en", campoPlazo), Ui.campo("Avisar a", destinatarios)),
+                Ui.texto("Cada sucursal lo mide con sus propias ventas, desde la última vez que se vendió ahí. "
+                        + "El aviso se quita solo en cuanto se vende.", "texto-ayuda"));
+        bloquePlazo.visibleProperty().bind(avisar.selectedProperty());
+        bloquePlazo.managedProperty().bind(bloquePlazo.visibleProperty());
+        Label sinAvisoPropio = Ui.texto("Sin aviso propio: se usa el plazo en días de la sucursal y solo lo ve el "
+                + "administrador (Avisos).", "texto-ayuda");
+        sinAvisoPropio.visibleProperty().bind(avisar.selectedProperty().not());
+        sinAvisoPropio.managedProperty().bind(sinAvisoPropio.visibleProperty());
+        VBox bloqueAviso = Ui.tarjeta("Aviso si no se vende", avisar, bloquePlazo, sinAvisoPropio);
+
         // Presentaciones
         ToggleGroup principales = new ToggleGroup();
         List<Fila> filas = new ArrayList<>();
@@ -209,11 +246,21 @@ final class DialogoProducto {
                 + "(ej. Caja = 12) o gramos (ej. Pieza de queso = 400). A granel siempre es 1000 g = 1 kg.", "texto-ayuda");
         VBox presentaciones = Ui.tarjeta("Presentaciones", grid, masPresentacion, ayuda);
 
-        d.setContenido(
+        VBox formulario = new VBox(16,
                 Ui.fila(Ui.campo("Nombre", nombre), Ui.campo("Categoría", categoria)),
                 Ui.fila(Ui.campo("Se maneja", unidad), Ui.campo("Clave / PLU", clave),
                         Ui.campo("Código de inventario", codigoInventario), Ui.campo("Disponibilidad", disponibilidad)),
-                bloqueGramaje, presentaciones);
+                bloqueGramaje, bloqueAviso, presentaciones);
+        // El formulario es alto: en pantallas chicas se desplaza en lugar de salirse de la ventana.
+        ScrollPane desplazable = new ScrollPane(formulario);
+        desplazable.setFitToWidth(true);
+        desplazable.getStyleClass().addAll("edge-to-edge", "scroll-surtido");
+        desplazable.sceneProperty().addListener((o, x, escena) -> {
+            if (escena != null) {
+                desplazable.maxHeightProperty().bind(escena.heightProperty().subtract(230));
+            }
+        });
+        d.setContenido(desplazable);
 
         Runnable guardar = () -> {
             List<Presentacion> lista = new ArrayList<>();
@@ -224,10 +271,13 @@ final class DialogoProducto {
                 lista.add(new Presentacion(f.id, nuevo ? null : p.id(), f.nombre.getText(), granel, factor,
                         f.codigo.getText(), f.principal.isSelected(), f.activa.isSelected()));
             }
+            AvisoSinVenta aviso = avisar.isSelected() ? new AvisoSinVenta(entero(plazo.getText()),
+                    unidadPlazo.getValue(), avisarAdmin.isSelected(), avisarSupervisor.isSelected(),
+                    avisarCaja.isSelected()) : null;
             var datos = new ProductoAdminService.Datos(nuevo ? null : p.id(), nombre.getText(),
                     categoria.getEditor().getText(), clave.getText(), codigoInventario.getText(), unidad.getValue(),
                     merma.isSelected(), disponibilidad.getValue(), lista, eliminadas, gramaje.gramos().orElse(null),
-                    merma.isSelected() ? cantidadMerma.gramos().orElse(null) : null);
+                    merma.isSelected() ? cantidadMerma.gramos().orElse(null) : null, aviso);
             if (a.ejecutar(nuevo ? "Producto creado" : "Producto actualizado",
                     () -> a.admin().productos().guardar(datos, a.usuario()))) {
                 d.cerrar();
@@ -239,6 +289,18 @@ final class DialogoProducto {
         d.setAlCancelar(d::cerrar);
         d.setFocoInicial(nombre);
         a.dialogos().mostrar(d);
+    }
+
+    /** Número entero capturado; 0 si está vacío y el máximo si es demasiado grande. */
+    private static int entero(String texto) {
+        if (texto == null || texto.isBlank()) {
+            return 0;
+        }
+        try {
+            return Integer.parseInt(texto.strip());
+        } catch (NumberFormatException e) {
+            return Integer.MAX_VALUE;
+        }
     }
 
     private static Fila nuevaFila(ToggleGroup principales, Unidad unidad) {

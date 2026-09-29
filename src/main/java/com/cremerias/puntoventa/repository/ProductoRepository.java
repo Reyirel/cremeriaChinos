@@ -1,5 +1,6 @@
 package com.cremerias.puntoventa.repository;
 
+import com.cremerias.puntoventa.model.AvisoSinVenta;
 import com.cremerias.puntoventa.model.Disponibilidad;
 import com.cremerias.puntoventa.model.Presentacion;
 import com.cremerias.puntoventa.model.ProductoCatalogo;
@@ -13,6 +14,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -35,7 +37,8 @@ public class ProductoRepository {
         List<ProductoCatalogo> lista = new ArrayList<>();
         try (PreparedStatement ps = c.prepareStatement("""
                 SELECT p.id, p.nombre, p.categoria_id, c.nombre AS categoria, p.clave, p.codigo_inventario, p.unidad,
-                       p.sujeto_merma, p.disponibilidad, p.activo, p.gramaje_gramos, p.merma_gramos
+                       p.sujeto_merma, p.disponibilidad, p.activo, p.gramaje_gramos, p.merma_gramos,
+                       p.aviso_plazo, p.aviso_unidad, p.aviso_admin, p.aviso_supervisor, p.aviso_caja
                 FROM productos p LEFT JOIN categorias c ON c.id = p.categoria_id
                 WHERE p.eliminado_en IS NULL
                 ORDER BY p.nombre COLLATE NOCASE""");
@@ -50,7 +53,8 @@ public class ProductoRepository {
     public Optional<ProductoCatalogo> porId(Connection c, String id) throws SQLException {
         try (PreparedStatement ps = c.prepareStatement("""
                 SELECT p.id, p.nombre, p.categoria_id, c.nombre AS categoria, p.clave, p.codigo_inventario, p.unidad,
-                       p.sujeto_merma, p.disponibilidad, p.activo, p.gramaje_gramos, p.merma_gramos
+                       p.sujeto_merma, p.disponibilidad, p.activo, p.gramaje_gramos, p.merma_gramos,
+                       p.aviso_plazo, p.aviso_unidad, p.aviso_admin, p.aviso_supervisor, p.aviso_caja
                 FROM productos p LEFT JOIN categorias c ON c.id = p.categoria_id
                 WHERE p.id = ? AND p.eliminado_en IS NULL""")) {
             ps.setString(1, id);
@@ -307,7 +311,37 @@ public class ProductoRepository {
                 Unidad.valueOf(rs.getString("unidad")), rs.getBoolean("sujeto_merma"),
                 Disponibilidad.valueOf(rs.getString("disponibilidad")), rs.getBoolean("activo"),
                 List.copyOf(presentaciones), gramos(rs, "gramaje_gramos"),
-                gramos(rs, "merma_gramos") == null ? BigDecimal.ZERO : gramos(rs, "merma_gramos"));
+                gramos(rs, "merma_gramos") == null ? BigDecimal.ZERO : gramos(rs, "merma_gramos"), aviso(rs));
+    }
+
+    private static AvisoSinVenta aviso(ResultSet rs) throws SQLException {
+        int plazo = rs.getInt("aviso_plazo");
+        if (rs.wasNull() || rs.getString("aviso_unidad") == null) {
+            return null;
+        }
+        return new AvisoSinVenta(plazo, AvisoSinVenta.Unidad.valueOf(rs.getString("aviso_unidad")),
+                rs.getBoolean("aviso_admin"), rs.getBoolean("aviso_supervisor"), rs.getBoolean("aviso_caja"));
+    }
+
+    /** Aviso si el producto no se vende en cierto plazo; nulo lo quita. */
+    public void guardarAviso(Connection c, String productoId, AvisoSinVenta aviso) throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement("""
+                UPDATE productos SET aviso_plazo = ?, aviso_unidad = ?, aviso_admin = ?, aviso_supervisor = ?,
+                                     aviso_caja = ?
+                WHERE id = ?""")) {
+            if (aviso == null) {
+                ps.setNull(1, Types.INTEGER);
+                ps.setNull(2, Types.VARCHAR);
+            } else {
+                ps.setInt(1, aviso.plazo());
+                ps.setString(2, aviso.unidad().name());
+            }
+            ps.setBoolean(3, aviso != null && aviso.administrador());
+            ps.setBoolean(4, aviso != null && aviso.supervisor());
+            ps.setBoolean(5, aviso != null && aviso.caja());
+            ps.setString(6, productoId);
+            ps.executeUpdate();
+        }
     }
 
     /** Gramos con hasta 6 decimales (se admiten microgramos); nulo si no se ha capturado. */

@@ -1,16 +1,22 @@
 package com.cremerias.puntoventa.ui.supervisor;
 
+import com.cremerias.puntoventa.model.Rol;
 import com.cremerias.puntoventa.model.Sesion;
 import com.cremerias.puntoventa.ui.Navegador;
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
 import javafx.fxml.FXML;
 import javafx.scene.Parent;
 import javafx.scene.control.Label;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
+import javafx.scene.control.Tooltip;
 import javafx.scene.layout.StackPane;
+import javafx.util.Duration;
 
 /**
- * Panel del supervisor: puede vender como un cajero y hacer el corte de las cajas de su sucursal.
+ * Panel del supervisor: puede vender como un cajero, hacer el corte de las cajas de su sucursal
+ * y consultar (sin editar) los productos de su sucursal.
  * Las vistas se crean una sola vez para no perder la venta en curso al cambiar de sección.
  */
 public class SupervisorController {
@@ -20,12 +26,15 @@ public class SupervisorController {
     private final ToggleGroup menu = new ToggleGroup();
     private Parent vistaCaja;
     private Navegador.Vista<CortesController> vistaCortes;
+    private ProductosVista vistaProductos;
 
     @FXML private ToggleButton opcionCaja;
     @FXML private ToggleButton opcionCortes;
+    @FXML private ToggleButton opcionProductos;
     @FXML private StackPane contenido;
     @FXML private Label nombreSucursal;
     @FXML private Label contadorAbiertas;
+    @FXML private Label contadorOfertar;
 
     public SupervisorController(Navegador navegador) {
         this.navegador = navegador;
@@ -36,6 +45,7 @@ public class SupervisorController {
     private void initialize() {
         opcionCaja.setToggleGroup(menu);
         opcionCortes.setToggleGroup(menu);
+        opcionProductos.setToggleGroup(menu);
         menu.selectedToggleProperty().addListener((o, antes, ahora) -> {
             if (ahora == null && antes != null) {
                 antes.setSelected(true);
@@ -43,8 +53,20 @@ public class SupervisorController {
         });
         nombreSucursal.setText(navegador.contexto().nombreSucursal(sesion.usuario().sucursalId()));
         contadorAbiertas.managedProperty().bind(contadorAbiertas.visibleProperty());
+        contadorOfertar.managedProperty().bind(contadorOfertar.visibleProperty());
+        contadorOfertar.setTooltip(new Tooltip("Productos que llevan tiempo sin venderse: ofértalos"));
         actualizarContador();
         onCaja();
+
+        // Los productos para ofertar cambian con el tiempo, no solo al navegar.
+        Timeline revision = new Timeline(new KeyFrame(Duration.seconds(30), e -> actualizarContador()));
+        revision.setCycleCount(Timeline.INDEFINITE);
+        revision.play();
+        contenido.sceneProperty().addListener((o, a, b) -> {
+            if (b == null) {
+                revision.stop();
+            }
+        });
     }
 
     @FXML
@@ -69,10 +91,24 @@ public class SupervisorController {
         contenido.getChildren().setAll(vistaCortes.nodo());
     }
 
+    @FXML
+    private void onProductos() {
+        opcionProductos.setSelected(true);
+        if (vistaProductos == null) {
+            vistaProductos = new ProductosVista(navegador);
+        }
+        vistaProductos.actualizar();
+        contenido.getChildren().setAll(vistaProductos.nodo());
+        actualizarContador();
+    }
+
     private void actualizarContador() {
         String sucursal = sesion.usuario().sucursalId();
         int abiertas = sucursal == null ? 0 : navegador.contexto().caja().abiertosDeSucursal(sucursal).size();
         contadorAbiertas.setText(String.valueOf(abiertas));
+        int ofertar = sucursal == null ? 0 : navegador.contexto().sinVenta().pendientes(Rol.SUPERVISOR, sucursal).size();
+        contadorOfertar.setText(String.valueOf(ofertar));
+        contadorOfertar.setVisible(ofertar > 0);
         contadorAbiertas.setVisible(abiertas > 0);
     }
 }

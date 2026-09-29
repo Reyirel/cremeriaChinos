@@ -9,10 +9,13 @@ import com.cremerias.puntoventa.util.Masa;
 import javafx.collections.FXCollections;
 import javafx.scene.Node;
 import javafx.scene.control.ComboBox;
+import javafx.scene.control.Label;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
+import javafx.scene.control.Tooltip;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 
 import java.util.List;
@@ -40,7 +43,7 @@ public class ProductosPagina extends Pagina {
         buscador = Ui.buscador("Buscar por nombre, clave, código de barras o código de inventario");
         buscador.textProperty().addListener((o, x, y) -> filtrar());
         filtro = new ComboBox<>(FXCollections.observableArrayList("Todos", "Activos", "Deshabilitados",
-                "Edición especial", "De temporada", "Sujetos a merma", "Sin gramaje"));
+                "Edición especial", "De temporada", "Sujetos a merma", "Sin gramaje", "Con aviso sin venta"));
         filtro.setValue("Todos");
         filtro.valueProperty().addListener((o, x, y) -> filtrar());
 
@@ -73,12 +76,21 @@ public class ProductosPagina extends Pagina {
                     return f;
                 }),
                 Ui.nodo("Tipo", 170, p -> {
-                    HBox h = new HBox(4);
+                    // Las etiquetas pasan a otra línea si no caben (merma y aviso juntos).
+                    FlowPane h = new FlowPane(4, 4);
+                    h.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
                     if (p.disponibilidad() != Disponibilidad.REGULAR) {
                         h.getChildren().add(Ui.chip(p.disponibilidad().nombre(), "acento"));
                     }
                     if (p.sujetoMerma()) {
                         h.getChildren().add(Ui.chip("Merma", "advertencia"));
+                    }
+                    if (p.avisoSinVenta() != null) {
+                        Label aviso = Ui.chip("Aviso " + p.avisoSinVenta().describir(), "azul");
+                        aviso.setMinWidth(Region.USE_PREF_SIZE);
+                        aviso.setTooltip(new Tooltip("Si no se vende en " + p.avisoSinVenta().describir()
+                                + " se avisa a: " + p.avisoSinVenta().destinatarios().toLowerCase(Locale.ROOT)));
+                        h.getChildren().add(aviso);
                     }
                     return h;
                 }),
@@ -109,6 +121,7 @@ public class ProductosPagina extends Pagina {
                     case "De temporada" -> p.disponibilidad() == Disponibilidad.TEMPORADA;
                     case "Sujetos a merma" -> p.sujetoMerma();
                     case "Sin gramaje" -> p.gramajeGramos() == null;
+                    case "Con aviso sin venta" -> p.avisoSinVenta() != null;
                     default -> true;
                 })
                 .filter(p -> t.isEmpty() || p.nombre().toLowerCase(Locale.ROOT).contains(t)
