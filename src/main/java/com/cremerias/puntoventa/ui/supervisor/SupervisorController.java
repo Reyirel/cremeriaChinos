@@ -3,6 +3,7 @@ package com.cremerias.puntoventa.ui.supervisor;
 import com.cremerias.puntoventa.model.Rol;
 import com.cremerias.puntoventa.model.Sesion;
 import com.cremerias.puntoventa.ui.Navegador;
+import com.cremerias.puntoventa.ui.componentes.IndicadoresVista;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
 import javafx.fxml.FXML;
@@ -27,10 +28,12 @@ public class SupervisorController {
     private Parent vistaCaja;
     private Navegador.Vista<CortesController> vistaCortes;
     private ProductosVista vistaProductos;
+    private IndicadoresVista vistaIndicadores;
 
     @FXML private ToggleButton opcionCaja;
     @FXML private ToggleButton opcionCortes;
     @FXML private ToggleButton opcionProductos;
+    @FXML private ToggleButton opcionIndicadores;
     @FXML private StackPane contenido;
     @FXML private Label nombreSucursal;
     @FXML private Label contadorAbiertas;
@@ -46,6 +49,7 @@ public class SupervisorController {
         opcionCaja.setToggleGroup(menu);
         opcionCortes.setToggleGroup(menu);
         opcionProductos.setToggleGroup(menu);
+        opcionIndicadores.setToggleGroup(menu);
         menu.selectedToggleProperty().addListener((o, antes, ahora) -> {
             if (ahora == null && antes != null) {
                 antes.setSelected(true);
@@ -100,6 +104,18 @@ public class SupervisorController {
         vistaProductos.actualizar();
         contenido.getChildren().setAll(vistaProductos.nodo());
         actualizarContador();
+    }
+
+    @FXML
+    private void onIndicadores() {
+        opcionIndicadores.setSelected(true);
+        if (vistaIndicadores == null) {
+            // sin selector de sucursal: siempre la propia del supervisor, también validado en el servicio.
+            vistaIndicadores = new IndicadoresVista(navegador.contexto().indicadores(), sesion.usuario(), null,
+                    navegador.contexto()::nombreSucursal, navegador.dialogos(), navegador.avisos());
+        }
+        vistaIndicadores.actualizar();
+        contenido.getChildren().setAll(vistaIndicadores.nodo());
     }
 
     private void actualizarContador() {

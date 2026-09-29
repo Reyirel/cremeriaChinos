@@ -56,6 +56,18 @@
                 </graphic>
             </ToggleButton>
 
+            <ToggleButton fx:id="opcionIndicadores" styleClass="menu-opcion" maxWidth="Infinity" onAction="#onIndicadores">
+                <graphic>
+                    <HBox spacing="12" alignment="CENTER_LEFT">
+                        <FontIcon iconLiteral="mdi2c-chart-line"/>
+                        <VBox>
+                            <Label text="Indicadores" styleClass="menu-opcion-titulo"/>
+                            <Label text="De tu sucursal" styleClass="menu-opcion-detalle"/>
+                        </VBox>
+                    </HBox>
+                </graphic>
+            </ToggleButton>
+
             <Region VBox.vgrow="ALWAYS"/>
 
             <VBox styleClass="menu-sucursal" spacing="2">

@@ -62,6 +62,7 @@ public class AdminController {
         opcion("ordenes", "Órdenes de reabasto", "mdi2c-clipboard-list-outline", OrdenesPagina::new);
         seccion("SUCURSALES");
         opcion("sucursales", "Sucursales", "mdi2s-storefront-outline", SucursalesPagina::new);
+        opcion("indicadores", "Indicadores", "mdi2c-chart-line", IndicadoresPagina::new);
         opcion("limites", "Mínimos y máximos", "mdi2t-tune-vertical", LimitesPagina::new);
         opcion("credito", "Crédito de sucursales", "mdi2c-credit-card-clock-outline", CreditoPagina::new);
         opcion("cortes", "Cortes de caja", "mdi2c-calculator-variant-outline", CortesPagina::new);

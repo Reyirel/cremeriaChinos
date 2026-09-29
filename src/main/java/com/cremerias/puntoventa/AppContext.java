@@ -12,6 +12,7 @@ import com.cremerias.puntoventa.service.AuthService;
 import com.cremerias.puntoventa.service.CajaService;
 import com.cremerias.puntoventa.service.CatalogoService;
 import com.cremerias.puntoventa.service.DatosDemo;
+import com.cremerias.puntoventa.service.IndicadoresService;
 import com.cremerias.puntoventa.service.InventarioSucursalService;
 import com.cremerias.puntoventa.service.VentaEsperaService;
 import com.cremerias.puntoventa.service.VentaService;
@@ -44,6 +45,7 @@ public final class AppContext implements AutoCloseable {
     private final VentaEsperaService ventasEspera;
     private final InventarioSucursalService inventarioSucursal;
     private final SinVentaService sinVenta;
+    private final IndicadoresService indicadores;
     private final Administracion administracion;
 
     private AppContext(Database database, AuthService auth, PreferenciasService preferencias,
@@ -59,6 +61,7 @@ public final class AppContext implements AutoCloseable {
         this.ventasEspera = new VentaEsperaService(database);
         this.inventarioSucursal = new InventarioSucursalService(database);
         this.sinVenta = new SinVentaService(database, Clock.systemDefaultZone());
+        this.indicadores = new IndicadoresService(database, caja.dispositivoId());
         this.administracion = administracion;
     }
 
@@ -150,6 +153,11 @@ public final class AppContext implements AutoCloseable {
     /** Productos que llevan su plazo sin venderse (avisos para ofertarlos). */
     public SinVentaService sinVenta() {
         return sinVenta;
+    }
+
+    /** Venta, costo, utilidad y avance de meta por sucursal (módulo Indicadores). */
+    public IndicadoresService indicadores() {
+        return indicadores;
     }
 
     public Administracion admin() {

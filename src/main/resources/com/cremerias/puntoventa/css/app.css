@@ -1920,3 +1920,56 @@ HBox:con-pendientes .accion-texto {
     -fx-font-weight: 800;
     -fx-text-fill: -color-accent-fg;
 }
+
+/* =====================================================================
+   MÓDULO INDICADORES
+   ===================================================================== */
+
+.indicadores-filtros {
+    -fx-background-color: -color-bg-default;
+    -fx-background-radius: 16;
+    -fx-border-color: -color-border-muted;
+    -fx-border-radius: 16;
+    -fx-padding: 16 18 16 18;
+}
+
+.indicadores-sucursal-fija {
+    -fx-font-weight: 700;
+}
+
+.indicadores-modo .toggle-button {
+    -fx-background-radius: 999;
+    -fx-border-radius: 999;
+    -fx-padding: 6 14 6 14;
+    -fx-font-weight: 600;
+}
+
+.indicadores-meta-estado {
+    -fx-font-size: 13px;
+    -fx-font-weight: 700;
+}
+
+.indicadores-meta-estado.exito { -fx-text-fill: -color-success-fg; }
+.indicadores-meta-estado.advertencia { -fx-text-fill: -color-warning-fg; }
+.indicadores-meta-estado.peligro { -fx-text-fill: -color-danger-fg; }
+
+.barra-meta {
+    -fx-pref-height: 10px;
+    -fx-min-height: 10px;
+}
+
+.barra-meta > .track {
+    -fx-background-color: -color-neutral-muted;
+    -fx-background-radius: 999;
+}
+
+.barra-meta > .bar {
+    -fx-background-color: -color-accent-emphasis;
+    -fx-background-radius: 999;
+    -fx-background-insets: 0;
+    -fx-padding: 5px;
+}
+
+.barra-meta.exito > .bar { -fx-background-color: -color-success-emphasis; }
+.barra-meta.advertencia > .bar { -fx-background-color: -color-warning-emphasis; }
+.barra-meta.peligro > .bar { -fx-background-color: -color-danger-emphasis; }

@@ -33,6 +33,7 @@ public enum AccionBitacora {
     ORDEN_RECHAZADA("ORD", "Orden de reabastecimiento rechazada"),
     LIMITES_ACTUALIZADOS("LIM", "Mínimos y máximos actualizados"),
     ABONO_CREDITO("ABN", "Abono a crédito"),
+    META_MENSUAL_ACTUALIZADA("MET", "Meta mensual actualizada"),
 
     REGLA_COMISION_CREADA("COM", "Regla de comisión creada"),
     REGLA_COMISION_EDITADA("COM", "Regla de comisión editada"),
