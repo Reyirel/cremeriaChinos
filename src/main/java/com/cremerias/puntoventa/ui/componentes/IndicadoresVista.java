@@ -296,7 +296,7 @@ public class IndicadoresVista {
                 Ui.indicador("Venta total", Dinero.formatear(r.ventaNeta()), "mdi2c-cash-multiple"),
                 Ui.indicador("Costo de mercancía vendida", Dinero.formatear(r.costoVenta()), "mdi2p-package-variant-closed"),
                 Ui.indicador("Utilidad bruta", Dinero.formatear(r.utilidadBruta()), "mdi2t-trending-up"),
-                Ui.indicador("Margen de utilidad", margen, "mdi2t-percent"));
+                Ui.indicador("Margen de utilidad", margen, "mdi2p-percent"));
 
         cuerpoMeta.getChildren().clear();
         boolean periodoEsUnMes = desdeActual.getYear() == hastaActual.getYear()
