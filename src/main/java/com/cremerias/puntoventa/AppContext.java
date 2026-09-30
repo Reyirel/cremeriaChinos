@@ -77,11 +77,16 @@ public final class AppContext implements AutoCloseable {
         new Migraciones(database).aplicar();
 
         PasswordHasher hasher = new PasswordHasher();
-        new DatosIniciales(database, hasher).sembrarSiVacia();
+        // Devuelve la sucursal creada solo si la base es nueva (no tenía usuarios).
+        String sucursalNueva = new DatosIniciales(database, hasher).sembrarSiVacia();
 
-        String sucursalId = database.con(AppContext::sucursalPrincipal).orElse(null);
+        // El catálogo de ejemplo se carga solo en una base nueva: si se limpió y quedó sin
+        // productos a propósito, no debe volver a aparecer al crear la primera sucursal.
+        if (sucursalNueva != null) {
+            new DatosDemo(database).cargarSiVacio(sucursalNueva);
+        }
         // Esta terminal es una caja de sucursal (no el almacén).
-        new DatosDemo(database).cargarSiVacio(sucursalId);
+        String sucursalId = database.con(AppContext::sucursalPrincipal).orElse(null);
 
         String dispositivoId = database.enTransaccion(c -> {
             String sucursal = sucursalPrincipal(c).orElse(null);
