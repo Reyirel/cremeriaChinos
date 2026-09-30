@@ -192,7 +192,12 @@ public class ComisionesPagina extends Pagina {
         VBox bloqueProducto = new VBox(12, Ui.campo("Producto", producto),
                 Ui.fila(Ui.campo("Medir en", medida), Ui.campo("Cantidad", campoCantidad)), ayudaGramaje);
         VBox bloqueImporte = new VBox(12, Ui.campo("Importe vendido para ganar la comisión", importeMeta));
-        Label explicacion = Ui.texto("", "texto-ayuda");
+        // Explicación sencilla del tipo elegido, con un ejemplo
+        Label explicacionTitulo = Ui.texto("", "explicacion-regla-titulo");
+        Label explicacionTexto = Ui.texto("", "explicacion-regla-texto");
+        Label explicacionEjemplo = Ui.texto("", "explicacion-regla-ejemplo");
+        VBox explicacion = new VBox(6, explicacionTitulo, explicacionTexto, explicacionEjemplo);
+        explicacion.getStyleClass().add("explicacion-regla");
         Runnable actualizar = () -> {
             ProductoCatalogo p = SelectorProducto.valor(producto);
             Unidad u = p == null ? Unidad.PZA : p.unidad();
@@ -210,13 +215,44 @@ public class ComisionesPagina extends Pagina {
             bloqueProducto.setManaged(!total);
             bloqueImporte.setVisible(total);
             bloqueImporte.setManaged(total);
-            explicacion.setText(switch (tipo.getValue()) {
-                case META_CANTIDAD -> "Gana la comisión una vez por periodo al vender esa cantidad del producto.";
-                case META_TOTAL -> "Gana la comisión una vez por periodo al vender ese importe en total.";
-                case POR_CANTIDAD -> "Gana la comisión por cada vez que junta esa cantidad vendida del producto en el periodo.";
-            });
+            String enElPeriodo = switch (periodo.getValue()) {
+                case DIARIO -> "en el día";
+                case SEMANAL -> "en la semana";
+                case MENSUAL -> "en el mes";
+            };
+            switch (tipo.getValue()) {
+                case META_CANTIDAD -> {
+                    explicacionTitulo.setText("Un premio si llega a la meta");
+                    explicacionTexto.setText("Se paga una sola vez cuando el empleado vende la cantidad que pongas. "
+                            + "Si vende de más, el premio es el mismo.");
+                    explicacionEjemplo.setText("Ejemplo: «Si vendes 10 leches " + enElPeriodo + ", ganas $50».\n"
+                            + "•  Vende 7 leches → $0 (no llegó)\n"
+                            + "•  Vende 10 leches → $50\n"
+                            + "•  Vende 30 leches → $50 (el premio no crece)");
+                }
+                case POR_CANTIDAD -> {
+                    explicacionTitulo.setText("Se paga cada vez que junta la cantidad");
+                    explicacionTexto.setText("Se paga la comisión por cada vez que el empleado junta la cantidad que "
+                            + "pongas. Entre más vende, más gana.");
+                    explicacionEjemplo.setText("Ejemplo: «Por cada 10 leches que vendas " + enElPeriodo
+                            + ", ganas $50».\n"
+                            + "•  Vende 7 leches → $0 (aún no junta 10)\n"
+                            + "•  Vende 10 leches → $50 (juntó 10 una vez)\n"
+                            + "•  Vende 30 leches → $150 (juntó 10 tres veces)");
+                }
+                case META_TOTAL -> {
+                    explicacionTitulo.setText("Un premio si llega a cierto importe vendido");
+                    explicacionTexto.setText("Se paga una sola vez cuando el empleado vende en total, de cualquier "
+                            + "producto, el importe que pongas. Si vende de más, el premio es el mismo.");
+                    explicacionEjemplo.setText("Ejemplo: «Si vendes $5,000 " + enElPeriodo + ", ganas $100».\n"
+                            + "•  Vende $3,000 → $0 (no llegó)\n"
+                            + "•  Vende $5,000 → $100\n"
+                            + "•  Vende $9,000 → $100 (el premio no crece)");
+                }
+            }
         };
         tipo.valueProperty().addListener((o, x, y) -> actualizar.run());
+        periodo.valueProperty().addListener((o, x, y) -> actualizar.run());
         medida.valueProperty().addListener((o, x, y) -> actualizar.run());
         producto.valueProperty().addListener((o, x, y) -> actualizar.run());
         if (!nueva) {

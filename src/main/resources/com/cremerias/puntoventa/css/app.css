@@ -1821,6 +1821,30 @@ HBox:con-pendientes .accion-texto {
     -fx-padding: 12 16 12 16;
 }
 
+/* Explicación sencilla de cada tipo de regla de comisión */
+.explicacion-regla {
+    -fx-background-color: -color-bg-subtle;
+    -fx-background-radius: 14;
+    -fx-padding: 14 16 14 16;
+}
+
+.explicacion-regla-titulo {
+    -fx-font-size: 14px;
+    -fx-font-weight: 700;
+    -fx-text-fill: -color-fg-default;
+}
+
+.explicacion-regla-texto {
+    -fx-font-size: 13px;
+    -fx-text-fill: -color-fg-default;
+}
+
+.explicacion-regla-ejemplo {
+    -fx-font-size: 13px;
+    -fx-text-fill: -color-fg-muted;
+    -fx-line-spacing: 3;
+}
+
 /* Surtido */
 .surtido-captura {
     -fx-background-color: -color-bg-subtle;
