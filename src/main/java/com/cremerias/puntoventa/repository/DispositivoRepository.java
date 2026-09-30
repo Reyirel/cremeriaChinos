@@ -10,9 +10,12 @@ import java.sql.SQLException;
 
 public class DispositivoRepository {
 
-    /** Devuelve el id de esta terminal, creándolo la primera vez. */
+    /**
+     * Devuelve el id de esta terminal, creándolo la primera vez. La tabla también guarda las otras
+     * cajas (se sincroniza), así que esta terminal es la primera fila que se dio de alta aquí.
+     */
     public String obtenerOCrear(Connection c, String sucursalId) throws SQLException {
-        try (PreparedStatement ps = c.prepareStatement("SELECT id FROM dispositivo LIMIT 1");
+        try (PreparedStatement ps = c.prepareStatement("SELECT id FROM dispositivo ORDER BY rowid LIMIT 1");
              ResultSet rs = ps.executeQuery()) {
             if (rs.next()) {
                 return rs.getString(1);
