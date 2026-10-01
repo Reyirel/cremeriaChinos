@@ -28,6 +28,7 @@ import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import org.kordamp.ikonli.javafx.FontIcon;
@@ -199,10 +200,15 @@ public class CortesController {
 
         StackPane icono = new StackPane(new FontIcon("mdi2c-cash-register"));
         icono.getStyleClass().add("tarjeta-caja-icono");
-        Label nombre = new Label(t.dispositivoNombre()
-                + (esAdministrador && sucursalId == null ? " · " + nombresSucursal.getOrDefault(t.sucursalId(), "") : ""));
+        Label nombre = new Label(t.dispositivoNombre());
         nombre.getStyleClass().add("tarjeta-caja-nombre");
         VBox titulo = new VBox(2, nombre);
+        // Con todas las sucursales, la sucursal va debajo para que no se recorte la etiqueta «Abierta».
+        if (esAdministrador && sucursalId == null) {
+            Label sucursal = new Label(nombresSucursal.getOrDefault(t.sucursalId(), ""));
+            sucursal.getStyleClass().add("tarjeta-caja-sucursal");
+            titulo.getChildren().add(sucursal);
+        }
         if (estaCaja) {
             Label chip = new Label("Esta caja");
             chip.getStyleClass().add("chip-esta-caja");
@@ -210,6 +216,7 @@ public class CortesController {
         }
         Label abierta = new Label("Abierta");
         abierta.getStyleClass().add("chip-abierta");
+        abierta.setMinWidth(Region.USE_PREF_SIZE);
         HBox encabezado = new HBox(12, icono, titulo, new Spacer(), abierta);
         encabezado.setAlignment(Pos.CENTER_LEFT);
 

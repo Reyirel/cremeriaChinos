@@ -79,6 +79,13 @@ final class DialogoMovimientoCaja {
                 monto.requestFocus();
                 return;
             }
+            // Antes de pedir la autorización: no se puede retirar más de lo que hay en el cajón.
+            if (retiro.isSelected() && valor > efectivoDisponible) {
+                error.setText("Solo hay " + Dinero.formatear(efectivoDisponible) + " en efectivo en la caja.");
+                error.setVisible(true);
+                monto.requestFocus();
+                return;
+            }
             if (texto == null || texto.isBlank()) {
                 error.setText("Escribe el concepto.");
                 error.setVisible(true);

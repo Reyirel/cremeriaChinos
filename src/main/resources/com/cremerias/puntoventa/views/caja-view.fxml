@@ -61,7 +61,7 @@
 
     <!-- ============ Totales y acciones ============ -->
     <right>
-        <VBox styleClass="caja-lateral" spacing="14" prefWidth="400" minWidth="360">
+        <VBox styleClass="caja-lateral" spacing="14" prefWidth="430" minWidth="360">
             <VBox fx:id="tarjetaTotal" styleClass="tarjeta-total" spacing="4">
                 <HBox alignment="CENTER_LEFT">
                     <Label text="TOTAL A PAGAR" styleClass="total-etiqueta"/>

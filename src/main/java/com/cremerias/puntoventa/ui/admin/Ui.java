@@ -36,8 +36,16 @@ public final class Ui {
         s.getStyleClass().add("pagina-subtitulo");
         s.setWrapText(true);
         VBox textos = new VBox(2, t, s);
+        // El subtítulo se ajusta en varias líneas; los botones nunca se recortan ("✓ …").
+        textos.setMinWidth(0);
+        HBox.setHgrow(textos, Priority.ALWAYS);
         HBox encabezado = new HBox(10, textos, new Spacer());
         encabezado.getChildren().addAll(acciones);
+        for (Node accion : acciones) {
+            if (accion instanceof Region r) {
+                r.setMinWidth(Region.USE_PREF_SIZE);
+            }
+        }
         encabezado.setAlignment(Pos.CENTER_LEFT);
         VBox pagina = new VBox(16, encabezado);
         pagina.getStyleClass().add("pagina-admin");
@@ -105,6 +113,12 @@ public final class Ui {
         c.setCellValueFactory(f -> new ReadOnlyObjectWrapper<>(valor.apply(f.getValue())));
         c.setPrefWidth(ancho);
         c.setSortable(false);
+        return c;
+    }
+
+    /** Columna que no se encoge cuando la tabla no cabe (folios, fechas, botones). */
+    public static <T, S> TableColumn<T, S> fija(TableColumn<T, S> c) {
+        c.setMinWidth(c.getPrefWidth());
         return c;
     }
 

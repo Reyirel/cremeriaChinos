@@ -270,6 +270,13 @@ final class DialogoProducto {
         unidad.valueProperty().addListener((o, x, u) -> {
             for (Fila f : filas) {
                 configurarTipo(f, u);
+                // La presentación que se puso sola cambia con la unidad; si no, quedaría una
+                // "Pieza" de 1 g (al pasar a kilo) o un "Kilo" de 1000 piezas (al pasar a pieza).
+                if ((x == Unidad.KG ? "Kilo" : "Pieza").equals(f.nombre.getText().strip())) {
+                    f.nombre.setText(u == Unidad.KG ? "Kilo" : "Pieza");
+                    f.tipo.setValue(u == Unidad.KG ? "A granel" : "Por unidad");
+                    f.contenido.setText(u == Unidad.KG ? "1000" : "1");
+                }
             }
             gramaje.setGramos(u == Unidad.KG ? new BigDecimal("1000") : null);
             actualizarGramaje.run();

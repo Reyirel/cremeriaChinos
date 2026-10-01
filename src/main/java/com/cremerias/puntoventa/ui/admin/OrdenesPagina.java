@@ -47,34 +47,34 @@ public class OrdenesPagina extends Pagina {
 
         pendientes = Ui.tabla("No hay órdenes por aprobar.");
         pendientes.getColumns().setAll(List.of(
-                Ui.texto("Folio", 150, OrdenRepository.Orden::folio),
-                Ui.texto("Generada", 140, o -> FECHA.format(o.creadoEn().atZone(ZoneId.systemDefault()))),
-                Ui.texto("Sucursal", 160, OrdenRepository.Orden::sucursal),
-                Ui.texto("Producto", 220, OrdenRepository.Orden::producto),
-                Ui.texto("Existencia", 120, o -> cantidad(o, o.existencia())),
-                Ui.texto("Mínimo", 110, o -> cantidad(o, o.minimo())),
-                Ui.texto("Máximo", 110, o -> cantidad(o, o.maximo())),
-                Ui.nodo("Se pide", 130, o -> Ui.chip(cantidad(o, o.cantidadSugerida()), "acento")),
-                Ui.nodo("", 220, o -> {
+                Ui.fija(Ui.texto("Folio", 140, OrdenRepository.Orden::folio)),
+                Ui.fija(Ui.texto("Generada", 130, o -> FECHA.format(o.creadoEn().atZone(ZoneId.systemDefault())))),
+                Ui.texto("Sucursal", 150, OrdenRepository.Orden::sucursal),
+                Ui.texto("Producto", 190, OrdenRepository.Orden::producto),
+                Ui.texto("Existencia", 100, o -> cantidad(o, o.existencia())),
+                Ui.nodo("Mín. / máx.", 110, o -> Ui.dosLineas("Mín. " + cantidad(o, o.minimo()),
+                        "Máx. " + cantidad(o, o.maximo()))),
+                Ui.nodo("Se pide", 105, o -> Ui.chip(cantidad(o, o.cantidadSugerida()), "acento")),
+                Ui.fija(Ui.nodo("", 215, o -> {
                     var aprobar = Ui.boton("Aprobar", "mdi2c-check-bold", "accent", "small");
                     aprobar.setOnAction(e -> aprobar(o));
                     var rechazar = Ui.boton("Rechazar", "mdi2c-close-thick", "flat", "danger", "small");
                     rechazar.setOnAction(e -> rechazar(o));
                     return new HBox(6, aprobar, rechazar);
-                })));
+                }))));
 
         atendidas = Ui.tabla("Aún no se ha atendido ninguna orden.");
         atendidas.getColumns().setAll(List.of(
-                Ui.texto("Folio", 150, OrdenRepository.Orden::folio),
-                Ui.texto("Generada", 140, o -> FECHA.format(o.creadoEn().atZone(ZoneId.systemDefault()))),
-                Ui.texto("Sucursal", 150, OrdenRepository.Orden::sucursal),
-                Ui.texto("Producto", 200, OrdenRepository.Orden::producto),
-                Ui.texto("Pedía", 120, o -> cantidad(o, o.cantidadSugerida())),
-                Ui.nodo("Estado", 120, o -> "APROBADA".equals(o.estado()) ? Ui.chip("Aprobada", "exito")
-                        : Ui.chip("Rechazada", "peligro")),
-                Ui.texto("Atendió", 150, OrdenRepository.Orden::resueltoPor),
-                Ui.texto("Atendida", 140, o -> o.resueltoEn() == null ? ""
-                        : FECHA.format(o.resueltoEn().atZone(ZoneId.systemDefault()))),
+                Ui.fija(Ui.texto("Folio", 140, OrdenRepository.Orden::folio)),
+                Ui.fija(Ui.texto("Generada", 130, o -> FECHA.format(o.creadoEn().atZone(ZoneId.systemDefault())))),
+                Ui.texto("Sucursal", 140, OrdenRepository.Orden::sucursal),
+                Ui.texto("Producto", 180, OrdenRepository.Orden::producto),
+                Ui.texto("Pedía", 95, o -> cantidad(o, o.cantidadSugerida())),
+                Ui.fija(Ui.nodo("Estado", 120, o -> "APROBADA".equals(o.estado()) ? Ui.chip("Aprobada", "exito")
+                        : Ui.chip("Rechazada", "peligro"))),
+                Ui.texto("Atendió", 140, OrdenRepository.Orden::resueltoPor),
+                Ui.fija(Ui.texto("Atendida", 130, o -> o.resueltoEn() == null ? ""
+                        : FECHA.format(o.resueltoEn().atZone(ZoneId.systemDefault())))),
                 Ui.texto("Motivo", 200, o -> o.motivoRechazo() == null ? "" : o.motivoRechazo())));
 
         vista.selectedToggleProperty().addListener((o, x, y) -> {

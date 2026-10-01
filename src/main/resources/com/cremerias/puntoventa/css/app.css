@@ -1100,7 +1100,7 @@
 
 .total-etiqueta {
     -fx-text-fill: rgba(255, 255, 255, 0.82);
-    -fx-font-size: 13px;
+    -fx-font-size: 15px;
     -fx-font-weight: 800;
 }
 
@@ -1118,9 +1118,10 @@
     -fx-icon-color: white;
 }
 
+/* Con 64px cabe hasta $99,999.99 en el panel lateral de 430px (caja-view.fxml). */
 .total-monto {
     -fx-text-fill: white;
-    -fx-font-size: 58px;
+    -fx-font-size: 64px;
     -fx-font-weight: 800;
 }
 
@@ -1521,6 +1522,11 @@ HBox:con-pendientes .accion-texto {
 .tarjeta-caja-nombre {
     -fx-font-size: 16px;
     -fx-font-weight: 800;
+}
+
+.tarjeta-caja-sucursal {
+    -fx-font-size: 13px;
+    -fx-text-fill: -color-fg-muted;
 }
 
 .chip-esta-caja {

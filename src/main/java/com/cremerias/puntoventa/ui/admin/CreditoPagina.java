@@ -14,6 +14,7 @@ import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 
 import java.time.ZoneId;
@@ -76,6 +77,9 @@ public class CreditoPagina extends Pagina {
                 : saldos.getSelectionModel().getSelectedItem().sucursal().id();
         List<CreditoService.Saldo> lista = a.admin().credito().saldos(a.admin().sucursales().listar());
         saldos.setItems(FXCollections.observableArrayList(lista));
+        // Alto justo para ver todas las sucursales (hasta 5) sin que se recorte la última.
+        saldos.setPrefHeight(46 + Math.max(1, Math.min(5, lista.size())) * saldos.getFixedCellSize() + 4);
+        saldos.setMinHeight(Region.USE_PREF_SIZE);
         long total = lista.stream().mapToLong(CreditoService.Saldo::saldo).sum();
         long conAdeudo = lista.stream().filter(s -> s.saldo() > 0).count();
         indicadores.getChildren().setAll(
@@ -89,6 +93,8 @@ public class CreditoPagina extends Pagina {
     private void cargarMovimientos(CreditoService.Saldo s) {
         abonar.setDisable(s == null || s.saldo() <= 0);
         tituloMovimientos.setText(s == null ? "Movimientos" : "Movimientos de " + s.sucursal().nombre());
+        movimientos.setPlaceholder(new Label(s == null ? "Elige una sucursal para ver sus movimientos."
+                : s.sucursal().nombre() + " no tiene movimientos de crédito."));
         movimientos.setItems(FXCollections.observableArrayList(s == null ? List.of()
                 : a.admin().credito().movimientos(s.sucursal().id())));
     }
