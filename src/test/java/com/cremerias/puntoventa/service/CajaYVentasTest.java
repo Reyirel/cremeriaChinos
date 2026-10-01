@@ -13,8 +13,10 @@ import com.cremerias.puntoventa.model.Ticket;
 import com.cremerias.puntoventa.model.Turno;
 import com.cremerias.puntoventa.model.Usuario;
 import com.cremerias.puntoventa.repository.DispositivoRepository;
+import com.cremerias.puntoventa.repository.SucursalRepository;
 import com.cremerias.puntoventa.security.PasswordHasher;
 import com.cremerias.puntoventa.util.CodigoBarras;
+import com.cremerias.puntoventa.util.Ids;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -214,5 +216,25 @@ class CajaYVentasTest {
         assertEquals("Queso Oaxaca", catalogo.resolverCodigo("101").orElseThrow().producto().nombre());
         Producto leche = producto("leche entera");
         assertEquals(leche.id(), catalogo.resolverCodigo(leche.codigoBarras()).orElseThrow().producto().id());
+    }
+
+    @Test
+    void elCatalogoEsDeLaSucursalDeQuienEntraALaCaja() {
+        // La terminal arranca sin sucursal (p. ej. antes de dar de alta la primera): no muestra nada.
+        CatalogoService enCaja = new CatalogoService(db, null);
+        enCaja.recargar();
+        assertTrue(enCaja.buscar("leche", 5).isEmpty());
+
+        enCaja.cargarSucursal(sesion.usuario().sucursalId());
+        assertEquals("Leche entera 1 L", enCaja.buscar("leche entera", 5).getFirst().nombre());
+
+        // Otra sucursal a la que todavía no se le surte no tiene productos con precio.
+        String otra = Ids.nuevo();
+        db.enTransaccion(c -> {
+            new SucursalRepository().insertar(c, otra, "NORTE", "Cremería Norte");
+            return null;
+        });
+        enCaja.cargarSucursal(otra);
+        assertTrue(enCaja.buscar("leche", 5).isEmpty());
     }
 }

@@ -151,6 +151,8 @@ public class CajaController {
     private List<SinVentaService.SinVenta> sinVenta = List.of();
     /** Productos de los que ya se avisó; nulo hasta la primera revisión. */
     private Set<String> avisados;
+    /** Si la vista ya se mostró una vez (el catálogo se cargó al crearla). */
+    private boolean mostrada;
 
     public CajaController(Navegador navegador) {
         this.navegador = navegador;
@@ -162,6 +164,8 @@ public class CajaController {
 
     @FXML
     private void initialize() {
+        // Antes de revisar el turno: al recuperar la venta autoguardada se buscan sus productos.
+        ctx.catalogo().cargarSucursal(sesion.usuario().sucursalId());
         configurarTabla();
         configurarBusqueda();
         configurarTotales();
@@ -191,6 +195,11 @@ public class CajaController {
                 nueva.addEventFilter(KeyEvent.KEY_PRESSED, filtroTeclas);
                 nueva.addEventFilter(KeyEvent.KEY_TYPED, filtroEscritura);
                 if (anterior == null) {
+                    if (mostrada) {
+                        // El supervisor volvió a la caja desde otra vista: pudieron surtirle mientras tanto.
+                        ctx.catalogo().recargar();
+                    }
+                    mostrada = true;
                     revalidarTurno();
                 }
             }

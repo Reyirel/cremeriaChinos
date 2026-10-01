@@ -85,10 +85,8 @@ public final class AppContext implements AutoCloseable {
         if (sucursalNueva != null) {
             new DatosDemo(database).cargarSiVacio(sucursalNueva);
         }
-        // Esta terminal es una caja de sucursal (no el almacén).
-        String sucursalId = database.con(AppContext::sucursalPrincipal).orElse(null);
-
         String dispositivoId = database.enTransaccion(c -> {
+            // Esta terminal es una caja de sucursal (no el almacén).
             String sucursal = sucursalPrincipal(c).orElse(null);
             String id = new DispositivoRepository().obtenerOCrear(c, sucursal);
             int huerfanas = new SesionRepository().cerrarHuerfanas(c, id);
@@ -101,8 +99,8 @@ public final class AppContext implements AutoCloseable {
         AuthService auth = new AuthService(database, hasher, Clock.systemDefaultZone(), dispositivoId);
         Sincronizador sincronizador = new Sincronizador(database);
         sincronizador.iniciar();
-        CatalogoService catalogo = new CatalogoService(database, sucursalId);
-        catalogo.recargar();
+        // Sin sucursal todavía: la caja carga el catálogo de la sucursal de quien entra.
+        CatalogoService catalogo = new CatalogoService(database, null);
         Clock reloj = Clock.systemDefaultZone();
         Administracion administracion = new Administracion(database, hasher, reloj, dispositivoId);
         try {

@@ -24,8 +24,9 @@ import java.util.Optional;
 /**
  * Catálogo de la caja en memoria para que la búsqueda sea instantánea (sin importar
  * mayúsculas ni acentos). Cada artículo es una presentación con su precio por lote en esta
- * sucursal; solo se muestran las presentaciones que tienen precio. Se recarga después de
- * cada venta para reflejar existencias y cambios de lote.
+ * sucursal; solo se muestran las presentaciones que tienen precio. La sucursal es la de quien
+ * entra a la caja (su turno y sus ventas son de esa sucursal). Se recarga al entrar a la caja y
+ * después de cada venta para reflejar existencias, surtidos y cambios de lote.
  */
 public class CatalogoService {
 
@@ -37,7 +38,7 @@ public class CatalogoService {
     }
 
     private final Database database;
-    private final String sucursalId;
+    private volatile String sucursalId;
     private final LoteRepository lotes = new LoteRepository();
 
     private volatile List<Indexado> indice = List.of();
@@ -55,8 +56,15 @@ public class CatalogoService {
         return sucursalId;
     }
 
+    /** Cambia a la sucursal de quien entra a la caja y carga su catálogo. */
+    public void cargarSucursal(String sucursalId) {
+        this.sucursalId = sucursalId;
+        recargar();
+    }
+
     public void recargar() {
-        List<Producto> lista = sucursalId == null ? List.of() : database.con(this::cargar);
+        String sucursal = sucursalId;
+        List<Producto> lista = sucursal == null ? List.of() : database.con(c -> cargar(c, sucursal));
         List<Indexado> nuevoIndice = new ArrayList<>(lista.size());
         Map<String, Producto> codigos = new HashMap<>();
         Map<String, Producto> claves = new HashMap<>();
@@ -85,7 +93,7 @@ public class CatalogoService {
         porId = Map.copyOf(ids);
     }
 
-    private List<Producto> cargar(Connection c) throws SQLException {
+    private List<Producto> cargar(Connection c, String sucursalId) throws SQLException {
         Map<String, List<LoteRepository.Lote>> lotesPorProducto = new HashMap<>();
         for (LoteRepository.Lote lote : lotes.deSucursal(c, sucursalId)) {
             lotesPorProducto.computeIfAbsent(lote.productoId(), k -> new ArrayList<>()).add(lote);
