@@ -113,13 +113,27 @@ public final class AppContext implements AutoCloseable {
                         + " de Supabase (" + e.getMessage() + "). Revisa la conexión a internet y "
                         + AppPaths.configNube() + ".", e);
             }
+            Optional<ProyectoNube> proyecto = ProyectoNube.incluido();
+            if (proyecto.isPresent() && !CajaNueva.recibioDatosDeLaNube(database)) {
+                // Con esta cuenta la caja nunca ha recibido nada (se creó a mano y no puede ver la
+                // nube, o la caja tiene datos propios): así no sincronizaría nunca. Queda como una
+                // caja sin conectar: al entrar un administrador de la nube se conecta con su propia
+                // cuenta y sus datos se cambian por los de la nube.
+                log.warn("La caja nunca ha recibido datos de la nube con la cuenta {}: se vuelve a conectar cuando"
+                        + " entre un administrador", nube.config().correo());
+                porConectar = proyecto.get();
+                nube = null;
+            }
         }
 
         PasswordHasher hasher = new PasswordHasher();
-        // Devuelve la sucursal creada solo si la base es nueva (no tenía usuarios). Una caja que se
-        // puede conectar a la nube no crea los usuarios de ejemplo: el primero que entra (un
-        // administrador de la nube) la conecta y trae los de verdad.
-        String sucursalNueva = porConectar != null ? null : new DatosIniciales(database, hasher).sembrarSiVacia();
+        // Los usuarios y el catálogo de ejemplo solo se crean en una caja sin nube: en una caja de la
+        // nube se subirían (usuarios con contraseñas conocidas y productos que no existen). Una caja
+        // que se puede conectar espera a que entre un administrador de la nube, que trae los de verdad.
+        // Devuelve la sucursal creada solo si la base es nueva (no tenía usuarios).
+        String sucursalNueva = nube == null && porConectar == null
+                ? new DatosIniciales(database, hasher).sembrarSiVacia()
+                : null;
 
         // El catálogo de ejemplo se carga solo en una base nueva: si se limpió y quedó sin
         // productos a propósito, no debe volver a aparecer al crear la primera sucursal.
@@ -138,7 +152,7 @@ public final class AppContext implements AutoCloseable {
         });
 
         AuthService auth = new AuthService(database, hasher, Clock.systemDefaultZone(), dispositivoId);
-        Sincronizador sincronizador = new Sincronizador(database, dispositivoId, nube);
+        Sincronizador sincronizador = new Sincronizador(database, dispositivoId, nube, porConectar != null);
         sincronizador.iniciar();
         // Sin sucursal todavía: la caja carga el catálogo de la sucursal de quien entra.
         CatalogoService catalogo = new CatalogoService(database, null);

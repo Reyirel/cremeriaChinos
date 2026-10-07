@@ -59,7 +59,8 @@ public class Sincronizador implements AutoCloseable {
 
     private String ultimoProblema;
 
-    public Sincronizador(Database database, String dispositivoId, ClienteSupabase nube) {
+    /** @param porConectar sin nube todavía, pero se conecta sola al entrar un administrador */
+    public Sincronizador(Database database, String dispositivoId, ClienteSupabase nube, boolean porConectar) {
         this.database = database;
         this.nube = nube;
         this.registro = new RegistroCaja(database, dispositivoId);
@@ -71,7 +72,10 @@ public class Sincronizador implements AutoCloseable {
                 ? new InetSocketAddress("1.1.1.1", 443)
                 : InetSocketAddress.createUnresolved(nube.config().url().getHost(), 443);
         if (nube == null) {
-            detalle.set("Esta caja no tiene configurada la conexión con la nube: todo se guarda solo aquí.");
+            detalle.set(porConectar
+                    ? "Esta caja todavía no está conectada a la nube: se conecta cuando entra un administrador"
+                            + " de la nube, con internet. Sus datos se cambian por los de la nube."
+                    : "Esta caja no tiene configurada la conexión con la nube: todo se guarda solo aquí.");
         }
     }
 

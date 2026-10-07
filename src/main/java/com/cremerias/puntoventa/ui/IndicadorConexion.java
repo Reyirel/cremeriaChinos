@@ -34,7 +34,9 @@ public class IndicadorConexion extends HBox {
             int n = sincronizador.pendientesProperty().get();
             return n == 1 ? "1 cambio por sincronizar" : n + " cambios por sincronizar";
         }, sincronizador.pendientesProperty()));
-        pendientes.visibleProperty().bind(sincronizador.pendientesProperty().greaterThan(0));
+        // Una caja sin nube no sube nada: si se conecta, sus datos se cambian por los de la nube.
+        pendientes.visibleProperty().bind(sincronizador.pendientesProperty().greaterThan(0)
+                .and(sincronizador.estadoProperty().isNotEqualTo(EstadoNube.SOLO_LOCAL)));
         pendientes.managedProperty().bind(pendientes.visibleProperty());
         Tooltip.install(pendientes, new Tooltip(
                 "Guardados de forma segura en este equipo.\nSe suben a la nube en cuanto hay conexión."));

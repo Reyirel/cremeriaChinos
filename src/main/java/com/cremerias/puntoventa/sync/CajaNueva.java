@@ -54,6 +54,22 @@ public final class CajaNueva {
     }
 
     /**
+     * Si esta caja ya recibió algo de la nube (la bajada guarda hasta dónde llegó en cada tabla).
+     * Una caja con {@code supabase.properties} que nunca recibió nada no está conectada de verdad: su
+     * cuenta no puede ver la nube (p. ej. se creó a mano) o sus datos son propios.
+     */
+    public static boolean recibioDatosDeLaNube(Database database) {
+        return database.con(c -> {
+            try (var ps = c.prepareStatement("SELECT 1 FROM config_local WHERE clave LIKE ? LIMIT 1")) {
+                ps.setString(1, Bajada.PREFIJO_CURSOR + "%");
+                try (var rs = ps.executeQuery()) {
+                    return rs.next();
+                }
+            }
+        });
+    }
+
+    /**
      * Copia la base local en {@code carpeta} si alguien ya la usó (hay usuarios), para no perder
      * lo que tenía antes de cambiarla por lo de la nube.
      *

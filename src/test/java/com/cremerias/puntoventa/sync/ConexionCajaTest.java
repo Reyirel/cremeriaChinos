@@ -27,6 +27,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -73,6 +74,17 @@ class ConexionCajaTest {
     }
 
     @Test
+    void conUnaCuentaQueNoVeLaNubeLaCajaNoQuedaConectadaNiConDatos() throws Exception {
+        // Una cuenta creada a mano en el panel, sin caja registrada: el RLS no le deja ver nada.
+        Database database = baseNueva("ciega.db");
+
+        assertFalse(CajaNueva.prepararDesdeNube(database, new NubeFija()));
+
+        assertEquals("0", consultar(database, "SELECT COUNT(*) FROM usuarios"));
+        assertFalse(CajaNueva.recibioDatosDeLaNube(database));
+    }
+
+    @Test
     void conectarUnaCajaConDatosPropiosLosCambiaPorLosDeLaNubeYConservaSuId() throws Exception {
         Database database = baseNueva("caja.db");
         PasswordHasher hasher = new PasswordHasher(4);
@@ -101,7 +113,9 @@ class ConexionCajaTest {
         nube.fila("usuarios_credenciales").put("usuario_id", jefa)
                 .put("password_hash", hasher.hash("jefa123".toCharArray()));
 
+        assertFalse(CajaNueva.recibioDatosDeLaNube(database));
         assertTrue(CajaNueva.reemplazarConLaNube(database, nube));
+        assertTrue(CajaNueva.recibioDatosDeLaNube(database));
 
         // Esta terminal sigue siendo la misma caja (la que se registró en la nube).
         assertEquals(cajaId, consultar(database, "SELECT id FROM dispositivo ORDER BY rowid LIMIT 1"));

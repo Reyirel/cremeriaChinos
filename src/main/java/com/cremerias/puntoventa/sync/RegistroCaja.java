@@ -87,9 +87,9 @@ class RegistroCaja {
         });
         if (almacenNube != null && almacenLocal != null && !almacenNube.equals(almacenLocal)) {
             throw new ErrorNube(0, "Esta caja tiene datos propios que no son los de la nube (otro almacén central),"
-                    + " así que no se sincroniza. Para conectarla: cierra la app, cambia el nombre de la carpeta "
-                    + AppPaths.home() + ", crea esa carpeta de nuevo solo con supabase.properties y vuelve a abrir"
-                    + " la app: tomará todo de la nube.");
+                    + " así que no se sincroniza. Para conectarla: cierra la app, borra " + AppPaths.configNube()
+                    + " y vuelve a abrirla. Al entrar un administrador de la nube, la caja se conecta y toma todo de"
+                    + " la nube (lo que tenía queda en una copia en " + AppPaths.reserva() + ").");
         }
     }
 }
