@@ -4,8 +4,10 @@ import atlantafx.base.controls.CustomTextField;
 import atlantafx.base.controls.Message;
 import atlantafx.base.controls.PasswordTextField;
 import atlantafx.base.util.Animations;
+import com.cremerias.puntoventa.AppContext;
 import com.cremerias.puntoventa.model.ModoConexion;
 import com.cremerias.puntoventa.service.ResultadoLogin;
+import com.cremerias.puntoventa.sync.ErrorNube;
 import javafx.application.Platform;
 import javafx.concurrent.Task;
 import javafx.fxml.FXML;
@@ -23,6 +25,9 @@ import javafx.util.Duration;
 import org.kordamp.ikonli.javafx.FontIcon;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.util.Arrays;
 
 public class LoginController {
 
@@ -44,6 +49,7 @@ public class LoginController {
     @FXML private Button botonEntrar;
     @FXML private Button botonTema;
     @FXML private HBox barraEstado;
+    private IndicadorConexion indicador;
 
     public LoginController(Navegador navegador) {
         this.navegador = navegador;
@@ -57,7 +63,8 @@ public class LoginController {
         configurarMostrarPassword();
         configurarAvisoMayusculas();
         actualizarIconoTema();
-        barraEstado.getChildren().add(new IndicadorConexion(navegador.contexto().sincronizador()));
+        indicador = new IndicadorConexion(navegador.contexto().sincronizador());
+        barraEstado.getChildren().add(indicador);
 
         mensajeError.setVisible(false);
         mensajeError.managedProperty().bind(mensajeError.visibleProperty());
@@ -115,13 +122,30 @@ public class LoginController {
             return;
         }
 
-        ModoConexion modo = navegador.contexto().sincronizador().enLinea() ? ModoConexion.ONLINE : ModoConexion.OFFLINE;
-        Task<ResultadoLogin> tarea = new Task<>() {
+        AppContext contexto = navegador.contexto();
+        ModoConexion modo = contexto.sincronizador().enLinea() ? ModoConexion.ONLINE : ModoConexion.OFFLINE;
+        Task<Ingreso> tarea = new Task<>() {
             @Override
-            protected ResultadoLogin call() {
-                return navegador.contexto().auth().iniciarSesion(usuario, password, modo);
+            protected Ingreso call() {
+                // iniciarSesion borra la contraseña al terminar: la nube necesita su propia copia.
+                char[] paraLaNube = contexto.porConectarALaNube() ? password.clone() : new char[0];
+                try {
+                    ResultadoLogin local = contexto.auth().iniciarSesion(usuario, password, modo);
+                    if (local instanceof ResultadoLogin.Rechazado rechazado && contexto.porConectarALaNube()) {
+                        updateMessage("Conectando con la nube…");
+                        return entrarConLaNube(contexto, usuario, paraLaNube, rechazado);
+                    }
+                    return new Ingreso(contexto, local, null);
+                } finally {
+                    Arrays.fill(paraLaNube, '\0');
+                }
             }
         };
+        tarea.messageProperty().addListener((o, a, mensaje) -> {
+            if (!mensaje.isBlank()) {
+                botonEntrar.setText(mensaje);
+            }
+        });
         tarea.setOnSucceeded(e -> alTerminar(usuario, tarea.getValue()));
         tarea.setOnFailed(e -> {
             log.error("Error al iniciar sesión", tarea.getException());
@@ -135,8 +159,40 @@ public class LoginController {
         hilo.start();
     }
 
-    private void alTerminar(String usuario, ResultadoLogin resultado) {
-        switch (resultado) {
+    /**
+     * Esta computadora no está conectada a la nube y el usuario no entró con los datos locales: si
+     * es un administrador de la nube, se conecta la caja (trae usuarios, catálogo y existencias) y
+     * entra con los datos recién bajados.
+     */
+    private static Ingreso entrarConLaNube(AppContext contexto, String usuario, char[] password,
+                                           ResultadoLogin.Rechazado local) {
+        AppContext nuevo;
+        try {
+            nuevo = contexto.conectarALaNube(usuario, password);
+        } catch (ErrorNube e) {
+            // Si tampoco sirven en la nube, el aviso de la caja es el que aplica.
+            return new Ingreso(contexto, local, e.estado() == 401 ? null : e.getMessage());
+        } catch (IOException e) {
+            log.warn("No se pudo conectar la caja a la nube", e);
+            return new Ingreso(contexto, local, "Esta computadora todavía no está conectada a la nube y no se pudo"
+                    + " llegar a Supabase. Revisa el internet: la primera vez se necesita para traer los usuarios.");
+        } catch (RuntimeException e) {
+            log.error("La caja se conectó a la nube, pero no se pudieron preparar los datos", e);
+            return new Ingreso(contexto, local, "La caja se conectó a la nube, pero no se pudieron preparar los datos ("
+                    + e.getMessage() + "). Cierra la app y vuelve a abrirla.");
+        }
+        return new Ingreso(nuevo, nuevo.auth().iniciarSesion(usuario, password, ModoConexion.ONLINE), null);
+    }
+
+    private void alTerminar(String usuario, Ingreso ingreso) {
+        if (ingreso.contexto() != navegador.contexto()) {
+            // La caja se acaba de conectar a la nube: todo sigue con los servicios nuevos.
+            navegador.cambiarContexto(ingreso.contexto());
+            IndicadorConexion nuevo = new IndicadorConexion(ingreso.contexto().sincronizador());
+            barraEstado.getChildren().set(barraEstado.getChildren().indexOf(indicador), nuevo);
+            indicador = nuevo;
+        }
+        switch (ingreso.resultado()) {
             case ResultadoLogin.Exitoso exitoso -> {
                 navegador.contexto().preferencias().recordarUsuario(recordarUsuario.isSelected() ? usuario.strip() : null);
                 navegador.mostrarInicio(exitoso.sesion());
@@ -145,10 +201,14 @@ public class LoginController {
                 ocupado(false);
                 // Primero se limpia: al cambiar el campo se oculta el error.
                 campoPassword.setText("");
-                mostrarError(rechazado.mensaje());
+                mostrarError(ingreso.aviso() != null ? ingreso.aviso() : rechazado.mensaje());
                 campoPassword.requestFocus();
             }
         }
+    }
+
+    /** Resultado de entrar; el contexto es otro si la caja se acaba de conectar a la nube. */
+    private record Ingreso(AppContext contexto, ResultadoLogin resultado, String aviso) {
     }
 
     @FXML

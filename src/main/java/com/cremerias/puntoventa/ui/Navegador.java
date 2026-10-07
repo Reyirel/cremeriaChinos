@@ -25,7 +25,7 @@ public class Navegador {
     private static final String VISTAS = "/com/cremerias/puntoventa/views/";
 
     private final Stage stage;
-    private final AppContext contexto;
+    private AppContext contexto;
     private final StackPane raiz = new StackPane();
     private final Dialogos dialogos = new Dialogos(raiz);
     private final Avisos avisos = new Avisos();
@@ -44,6 +44,11 @@ public class Navegador {
 
     public AppContext contexto() {
         return contexto;
+    }
+
+    /** La caja se acaba de conectar a la nube: las pantallas siguen con los servicios nuevos. */
+    public void cambiarContexto(AppContext nuevo) {
+        contexto = nuevo;
     }
 
     public Dialogos dialogos() {

@@ -5,10 +5,13 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.Reader;
+import java.io.Writer;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.Optional;
 import java.util.Properties;
 
@@ -49,6 +52,29 @@ public record ConfigNube(URI url, String clavePublica, String correo, String con
             return Optional.empty();
         }
         return Optional.of(new ConfigNube(URI.create(url.replaceAll("/+$", "")), clave, correo, contrasena));
+    }
+
+    /**
+     * Guarda la conexión (lo hace la app al conectar la caja). Lleva la contraseña de la cuenta de
+     * la caja: donde se puede, solo la lee el usuario de la computadora.
+     */
+    public void guardar(Path archivo) throws IOException {
+        Properties p = new Properties();
+        p.setProperty("url", url.toString());
+        p.setProperty("clave_publica", clavePublica);
+        p.setProperty("correo", correo);
+        p.setProperty("contrasena", contrasena);
+        Files.createDirectories(archivo.toAbsolutePath().getParent());
+        Path temporal = archivo.resolveSibling(archivo.getFileName() + ".tmp");
+        try (Writer escritor = Files.newBufferedWriter(temporal, StandardCharsets.UTF_8)) {
+            p.store(escritor, "Conexion de esta caja con Supabase (la creo la app al conectarla)");
+        }
+        try {
+            Files.setPosixFilePermissions(temporal, PosixFilePermissions.fromString("rw-------"));
+        } catch (UnsupportedOperationException windows) {
+            // En Windows la carpeta del usuario ya es privada.
+        }
+        Files.move(temporal, archivo, StandardCopyOption.REPLACE_EXISTING);
     }
 
     private static String valor(Properties p, String clave) {

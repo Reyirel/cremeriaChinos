@@ -14,6 +14,7 @@ public class App extends Application {
     private static final Logger log = LoggerFactory.getLogger(App.class);
 
     private AppContext contexto;
+    private Navegador navegador;
     private Exception errorInicio;
 
     @Override
@@ -37,7 +38,7 @@ public class App extends Application {
             return;
         }
         Fuentes.cargar();
-        Navegador navegador = new Navegador(stage, contexto);
+        navegador = new Navegador(stage, contexto);
         stage.setMinWidth(760);
         stage.setMinHeight(620);
         navegador.mostrarLogin();
@@ -47,8 +48,10 @@ public class App extends Application {
 
     @Override
     public void stop() {
-        if (contexto != null) {
-            contexto.close();
+        // Al conectar la caja a la nube el navegador pasa a un contexto nuevo.
+        AppContext actual = navegador != null ? navegador.contexto() : contexto;
+        if (actual != null) {
+            actual.close();
         }
     }
 

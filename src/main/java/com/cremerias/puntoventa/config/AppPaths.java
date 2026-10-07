@@ -36,6 +36,11 @@ public final class AppPaths {
         return home().resolve("logs");
     }
 
+    /** Copias que se guardan antes de un cambio grande (no se borran solas como los respaldos). */
+    public static Path reserva() {
+        return home().resolve("reserva");
+    }
+
     /** Conexión de esta caja con Supabase; si no existe, la caja trabaja solo en local. */
     public static Path configNube() {
         return home().resolve("supabase.properties");

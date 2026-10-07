@@ -23,8 +23,10 @@ import com.cremerias.puntoventa.service.SesionActual;
 import com.cremerias.puntoventa.service.SinVentaService;
 import com.cremerias.puntoventa.sync.CajaNueva;
 import com.cremerias.puntoventa.sync.ClienteSupabase;
+import com.cremerias.puntoventa.sync.ConexionCaja;
 import com.cremerias.puntoventa.sync.ConfigNube;
 import com.cremerias.puntoventa.sync.ErrorNube;
+import com.cremerias.puntoventa.sync.ProyectoNube;
 import com.cremerias.puntoventa.sync.Sincronizador;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,10 +54,13 @@ public final class AppContext implements AutoCloseable {
     private final SinVentaService sinVenta;
     private final IndicadoresService indicadores;
     private final Administracion administracion;
+    /** Proyecto con el que esta computadora se puede conectar a la nube; nulo si ya está conectada. */
+    private final ProyectoNube porConectar;
 
     private AppContext(Database database, AuthService auth, PreferenciasService preferencias,
                        Sincronizador sincronizador, CatalogoService catalogo, CajaService caja,
-                       Administracion administracion) {
+                       Administracion administracion, ProyectoNube porConectar) {
+        this.porConectar = porConectar;
         this.database = database;
         this.auth = auth;
         this.preferencias = preferencias;
@@ -71,6 +76,11 @@ public final class AppContext implements AutoCloseable {
     }
 
     public static AppContext iniciar() {
+        return iniciar(false);
+    }
+
+    /** @param reemplazarConLaNube la caja se acaba de conectar: lo que tenga se cambia por lo de la nube */
+    private static AppContext iniciar(boolean reemplazarConLaNube) {
         AppPaths.crearDirectorios();
         Database database = new Database(AppPaths.baseDeDatos());
         log.info("Base de datos local: {}", database.archivo());
@@ -82,13 +92,22 @@ public final class AppContext implements AutoCloseable {
         new Migraciones(database).aplicar();
 
         ClienteSupabase nube = ConfigNube.cargar(AppPaths.configNube()).map(ClienteSupabase::new).orElse(null);
+        ProyectoNube porConectar = null;
         if (nube == null) {
-            log.info("Sin conexión con la nube configurada ({}): la caja trabaja solo en local", AppPaths.configNube());
+            porConectar = ProyectoNube.incluido().orElse(null);
+            log.info(porConectar == null
+                    ? "Sin conexión con la nube configurada ({}): la caja trabaja solo en local"
+                    : "Caja sin conectar a la nube ({}): se conecta cuando entre un administrador", AppPaths.configNube());
         } else {
             log.info("Caja conectada a la nube: {}", nube.config());
             try {
-                // Caja recién instalada: toma los datos de la nube en vez de crear los de ejemplo.
-                CajaNueva.prepararDesdeNube(database, nube);
+                // Caja recién instalada (o recién conectada): toma los datos de la nube en vez de
+                // crear los de ejemplo.
+                if (reemplazarConLaNube) {
+                    CajaNueva.reemplazarConLaNube(database, nube);
+                } else {
+                    CajaNueva.prepararDesdeNube(database, nube);
+                }
             } catch (IOException | ErrorNube e) {
                 throw new IllegalStateException("Esta caja está configurada para la nube, pero no pudo bajar los datos"
                         + " de Supabase (" + e.getMessage() + "). Revisa la conexión a internet y "
@@ -97,8 +116,10 @@ public final class AppContext implements AutoCloseable {
         }
 
         PasswordHasher hasher = new PasswordHasher();
-        // Devuelve la sucursal creada solo si la base es nueva (no tenía usuarios).
-        String sucursalNueva = new DatosIniciales(database, hasher).sembrarSiVacia();
+        // Devuelve la sucursal creada solo si la base es nueva (no tenía usuarios). Una caja que se
+        // puede conectar a la nube no crea los usuarios de ejemplo: el primero que entra (un
+        // administrador de la nube) la conecta y trae los de verdad.
+        String sucursalNueva = porConectar != null ? null : new DatosIniciales(database, hasher).sembrarSiVacia();
 
         // El catálogo de ejemplo se carga solo en una base nueva: si se limpió y quedó sin
         // productos a propósito, no debe volver a aparecer al crear la primera sucursal.
@@ -130,7 +151,41 @@ public final class AppContext implements AutoCloseable {
             log.warn("No se pudieron revisar las temporadas de productos", e);
         }
         return new AppContext(database, auth, new PreferenciasService(database), sincronizador, catalogo,
-                new CajaService(database, dispositivoId), administracion);
+                new CajaService(database, dispositivoId), administracion, porConectar);
+    }
+
+    /** Esta computadora todavía no está conectada a la nube, pero se puede conectar sola. */
+    public boolean porConectarALaNube() {
+        return porConectar != null;
+    }
+
+    /**
+     * Conecta esta computadora a la nube con un administrador: Supabase crea y registra la cuenta de
+     * la caja, se guarda {@code supabase.properties} y los datos locales se cambian por los de la
+     * nube (los que hubiera quedan antes en una copia en {@link AppPaths#reserva()}).
+     *
+     * <p>Si el usuario o la contraseña no sirven, no cambia nada. Si funciona, cierra este contexto
+     * y devuelve el nuevo.
+     */
+    public AppContext conectarALaNube(String usuario, char[] contrasena) throws IOException, ErrorNube {
+        if (porConectar == null) {
+            throw new IllegalStateException("Esta caja ya está conectada a la nube o no trae el proyecto de Supabase");
+        }
+        String cajaId = caja.dispositivoId();
+        String nombre = database.con(c -> {
+            try (var ps = c.prepareStatement("SELECT nombre FROM dispositivo WHERE id = ?")) {
+                ps.setString(1, cajaId);
+                try (var rs = ps.executeQuery()) {
+                    return rs.next() ? rs.getString(1) : "Caja";
+                }
+            }
+        });
+        ConfigNube config = ConexionCaja.conectar(porConectar, usuario, contrasena, cajaId, nombre);
+        CajaNueva.guardarCopiaSiTieneDatos(database, AppPaths.reserva());
+        close();
+        config.guardar(AppPaths.configNube());
+        log.info("Caja {} conectada a la nube con la cuenta {}", nombre, config.correo());
+        return iniciar(true);
     }
 
     private static Optional<String> sucursalPrincipal(java.sql.Connection c) throws java.sql.SQLException {

@@ -99,6 +99,8 @@ El registro libre está **desactivado**: las cuentas solo las crea el administra
 | `subir_cambios(p_cambios)` | La caja sube un lote de filas tal como están en su base local, en una transacción |
 | `bajar_cambios(p_cursores, p_limite)` | La caja baja lo que cambió en cada tabla desde su último cursor |
 
+Función Edge [`vincular-caja`](functions/vincular-caja/index.ts): conecta una computadora nueva con el usuario y la contraseña de un administrador (ver [Cajas de escritorio](#cajas-de-escritorio)).
+
 ## Tiempo real
 
 Publicadas en Realtime (respetan el RLS): `ventas`, `turnos_caja`, `ordenes_reabastecimiento`, `bloqueos_acceso`.
@@ -139,22 +141,19 @@ La app de escritorio sigue trabajando siempre sobre su base local (SQLite) y se 
 - **Baja** con `bajar_cambios` lo que cambió en la nube (otras cajas, web, móvil) y lo guarda sin volver a encolarlo. Un registro con cambios locales que aún no suben no se toca.
 - Sin internet la caja trabaja igual; el indicador de la barra de estado dice si está en línea, sincronizando, sin conexión o con error (el detalle aparece al pasar el mouse).
 
-**Conectar una caja:**
+**Conectar una caja (automático):** en cualquier computadora, descargar el proyecto, abrir la app y **entrar con un usuario administrador** (el mismo usuario y contraseña de siempre), con internet. No hay que crear cuentas ni copiar archivos.
 
-0. Si en esa computadora ya se usó la app sin la nube, empezar con la carpeta de datos vacía: cerrar la app y cambiar el nombre de `~/.cremerias-pos` (en Windows `C:\Users\<usuario>\.cremerias-pos`). Una caja con datos propios (otro almacén central) no se sincroniza, para no mezclar sus usuarios y catálogo de ejemplo con los de la nube.
-1. Crear su cuenta en el panel → *Authentication → Users → Add user* (un correo para la caja, por ejemplo `caja-7182@cremerias.local`, y *Auto Confirm User*).
-2. En la carpeta de datos de la caja (`~/.cremerias-pos/`) crear `supabase.properties`:
-   ```properties
-   url=https://lradrurqdllgbvhsgfbb.supabase.co
-   clave_publica=<publishable key>
-   correo=caja-7182@cremerias.local
-   contrasena=<contraseña de la cuenta de la caja>
-   ```
-3. Abrir la app. La primera vez la caja se registra sola con su id local (`registrar_caja`).
-   - Si la caja ya tenía datos, sube lo pendiente y baja lo demás.
-   - Si es una **caja nueva** (nadie ha entrado nunca), en vez de crear los usuarios y el catálogo de ejemplo toma todo de la nube; para eso necesita internet la primera vez.
+1. La app trae el proyecto de Supabase (`src/main/resources/com/cremerias/puntoventa/nube.properties`: URL y clave pública). Una computadora sin `supabase.properties` no crea los usuarios de ejemplo: espera a que entre alguien.
+2. Si el usuario no está en la caja, la app llama a la función [`vincular-caja`](functions/vincular-caja/index.ts) con el usuario, la contraseña y el id local de la caja. La función revisa la contraseña contra `usuarios_credenciales`, exige que sea un **ADMINISTRADOR** activo, crea la cuenta de la caja (`caja-<id>@cremerias.local`, contraseña aleatoria) y registra la caja en `dispositivo`.
+3. La app guarda esa cuenta en `~/.cremerias-pos/supabase.properties` (en Windows `C:\Users\<usuario>\.cremerias-pos`), baja todo de la nube y entra.
+   - Si esa computadora ya tenía datos propios (se usó sin la nube), primero se guarda una copia en `~/.cremerias-pos/reserva/cremerias_antes_de_conectar_<fecha>.db` y luego se cambian por los de la nube. La caja conserva su id.
+   - Después de eso cualquier usuario (cajero, supervisor) entra normal, también sin internet.
 
-Sin `supabase.properties` la caja trabaja solo en local, como antes. Cada caja necesita su propia cuenta.
+Cada intento queda en `bitacora_accesos`; tras 5 contraseñas incorrectas de un usuario en 15 minutos, la función lo rechaza hasta que pase ese tiempo. Si una caja pierde su `supabase.properties`, se vuelve a conectar igual: su misma cuenta recibe una contraseña nueva.
+
+La función se despliega sin verificar JWT (la caja todavía no tiene sesión): `supabase functions deploy vincular-caja --use-api --no-verify-jwt`.
+
+No conviene conectar una caja nueva a mano (crear la cuenta en el panel y escribir `supabase.properties`): una cuenta que todavía no es de ninguna caja no ve nada por el RLS, así que la caja nueva no puede bajar los datos ni saber en qué sucursal registrarse. Tampoco copiar el `supabase.properties` de otra caja: cada caja necesita su propia cuenta y la otra queda con error de sincronización.
 
 Para probar la sincronización contra la nube sobre una **copia** de la base: `./mvnw test -Dtest=SincronizacionNubeTest -Dnube.bd=<copia.db> -Dnube.config=<supabase.properties>`.
 

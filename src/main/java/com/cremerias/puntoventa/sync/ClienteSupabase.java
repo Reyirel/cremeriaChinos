@@ -114,9 +114,9 @@ public class ClienteSupabase implements Nube {
     }
 
     /** El texto del error que manda Supabase (PostgREST usa "message"; Auth, "msg"). */
-    private String mensaje(String cuerpo) {
+    static String mensaje(String cuerpo) {
         try {
-            JsonNode error = json.readTree(cuerpo);
+            JsonNode error = new ObjectMapper().readTree(cuerpo);
             for (String campo : new String[]{"message", "msg", "error_description", "error"}) {
                 if (error.hasNonNull(campo)) {
                     String detalle = error.path("details").asText("");
