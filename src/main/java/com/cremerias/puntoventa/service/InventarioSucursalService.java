@@ -3,6 +3,7 @@ package com.cremerias.puntoventa.service;
 import com.cremerias.puntoventa.db.Database;
 import com.cremerias.puntoventa.model.Presentacion;
 import com.cremerias.puntoventa.model.ProductoCatalogo;
+import com.cremerias.puntoventa.model.Unidad;
 import com.cremerias.puntoventa.repository.LoteRepository;
 import com.cremerias.puntoventa.repository.ProductoRepository;
 
@@ -36,6 +37,24 @@ public class InventarioSucursalService {
 
         public boolean enMinimo() {
             return !agotado() && maximo.signum() > 0 && existencia.compareTo(minimo) <= 0;
+        }
+
+        /** Con mínimo y máximo, ya llegó a su mínimo o se agotó. */
+        public boolean porReabastecer() {
+            return maximo.signum() > 0 && existencia.compareTo(minimo) <= 0;
+        }
+    }
+
+    /**
+     * Producto que llegó a su mínimo (o se agotó) en la sucursal.
+     *
+     * @param ordenPendiente folio de la orden de reabastecimiento que espera al administrador, o {@code null}
+     */
+    public record Bajo(String productoId, String nombre, Unidad unidad, BigDecimal existencia, BigDecimal minimo,
+                       String ordenPendiente) {
+
+        public boolean agotado() {
+            return existencia.signum() <= 0;
         }
     }
 
@@ -80,6 +99,36 @@ public class InventarioSucursalService {
                         List.copyOf(preciosProducto)));
             }
             return filas;
+        });
+    }
+
+    /**
+     * Productos con mínimo y máximo que ya llegaron a su mínimo, los agotados primero. Lo que queda
+     * se sigue vendiendo; es el aviso para que el supervisor vea el reabastecimiento.
+     */
+    public List<Bajo> enMinimo(String sucursalId) {
+        return database.con(c -> {
+            try (PreparedStatement ps = c.prepareStatement("""
+                    SELECT p.id, p.nombre, p.unidad, COALESCE(e.existencia, 0) AS existencia, l.minimo,
+                           (SELECT o.folio FROM ordenes_reabastecimiento o
+                            WHERE o.sucursal_id = l.sucursal_id AND o.producto_id = l.producto_id
+                              AND o.estado = 'PENDIENTE'
+                            ORDER BY o.creado_en DESC LIMIT 1) AS orden
+                    FROM limites_sucursal l
+                    JOIN productos p ON p.id = l.producto_id AND p.eliminado_en IS NULL AND p.activo = 1
+                    LEFT JOIN v_existencias e ON e.producto_id = l.producto_id AND e.sucursal_id = l.sucursal_id
+                    WHERE l.sucursal_id = ? AND l.maximo > 0 AND COALESCE(e.existencia, 0) <= l.minimo
+                    ORDER BY COALESCE(e.existencia, 0) > 0, p.nombre""")) {
+                ps.setString(1, sucursalId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    List<Bajo> bajos = new ArrayList<>();
+                    while (rs.next()) {
+                        bajos.add(new Bajo(rs.getString(1), rs.getString(2), Unidad.valueOf(rs.getString(3)),
+                                decimal(rs.getDouble(4)), decimal(rs.getDouble(5)), rs.getString(6)));
+                    }
+                    return bajos;
+                }
+            }
         });
     }
 

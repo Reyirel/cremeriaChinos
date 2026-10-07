@@ -56,46 +56,38 @@
             </StackPane>
 
             <FlowPane fx:id="barraAtajos" styleClass="barra-atajos" hgap="14" vgap="6"/>
-        </VBox>
-    </center>
 
-    <!-- ============ Totales y acciones ============ -->
-    <right>
-        <VBox styleClass="caja-lateral" spacing="14" prefWidth="430" minWidth="360">
-            <VBox fx:id="tarjetaTotal" styleClass="tarjeta-total" spacing="4">
-                <HBox alignment="CENTER_LEFT">
+            <!-- La cuenta: abajo y grande, en la misma franja que «Cobrar» -->
+            <HBox fx:id="tarjetaTotal" styleClass="tarjeta-total" alignment="CENTER_LEFT" spacing="20">
+                <VBox spacing="6" alignment="CENTER_LEFT" minWidth="0">
                     <Label text="TOTAL A PAGAR" styleClass="total-etiqueta"/>
-                    <Spacer/>
                     <Label fx:id="etiquetaArticulos" styleClass="total-articulos">
                         <graphic>
                             <FontIcon iconLiteral="mdi2c-cart-outline"/>
                         </graphic>
                     </Label>
-                </HBox>
-                <Label fx:id="etiquetaTotal" styleClass="total-monto" text="\$0.00"/>
-                <Label fx:id="etiquetaRenglones" styleClass="total-renglones"/>
-            </VBox>
+                    <Label fx:id="etiquetaRenglones" styleClass="total-renglones"/>
+                </VBox>
+                <Spacer/>
+                <Label fx:id="etiquetaTotal" styleClass="total-monto" text="\$0.00" minWidth="-Infinity"/>
+            </HBox>
+        </VBox>
+    </center>
 
-            <VBox fx:id="tarjetaUltimo" styleClass="tarjeta-ultimo" spacing="2">
-                <Label text="ÚLTIMO AGREGADO" styleClass="ultimo-etiqueta"/>
-                <HBox alignment="CENTER_LEFT" spacing="10">
-                    <VBox HBox.hgrow="ALWAYS" spacing="2">
-                        <Label fx:id="ultimoNombre" styleClass="ultimo-nombre"/>
-                        <Label fx:id="ultimoDetalle" styleClass="ultimo-detalle"/>
-                    </VBox>
-                    <Label fx:id="ultimoImporte" styleClass="ultimo-importe"/>
+    <!-- ============ Turno, acciones y cobro ============ -->
+    <right>
+        <VBox styleClass="caja-lateral" spacing="14" prefWidth="400" minWidth="360">
+            <!-- A la altura del buscador -->
+            <VBox styleClass="info-turno" spacing="4">
+                <HBox alignment="CENTER_LEFT" spacing="8">
+                    <FontIcon iconLiteral="mdi2c-clock-outline"/>
+                    <Label fx:id="infoTurno" styleClass="info-turno-texto" text="Sin turno"/>
+                </HBox>
+                <HBox alignment="CENTER_LEFT" spacing="8">
+                    <FontIcon iconLiteral="mdi2r-receipt-text-outline"/>
+                    <Label fx:id="infoVentas" styleClass="info-turno-texto"/>
                 </HBox>
             </VBox>
-
-            <Button fx:id="botonCobrar" onAction="#onCobrar" styleClass="boton-cobrar" maxWidth="Infinity">
-                <graphic>
-                    <HBox alignment="CENTER" spacing="12">
-                        <FontIcon iconLiteral="mdi2c-cash-register"/>
-                        <Label text="Cobrar" styleClass="boton-cobrar-texto"/>
-                        <Label text="F12" styleClass="kbd, kbd-claro"/>
-                    </HBox>
-                </graphic>
-            </Button>
 
             <GridPane fx:id="gridAcciones" styleClass="grid-acciones" hgap="10" vgap="10"/>
 
@@ -118,16 +110,28 @@
 
             <Region VBox.vgrow="ALWAYS"/>
 
-            <VBox styleClass="info-turno" spacing="4">
-                <HBox alignment="CENTER_LEFT" spacing="8">
-                    <FontIcon iconLiteral="mdi2c-clock-outline"/>
-                    <Label fx:id="infoTurno" styleClass="info-turno-texto" text="Sin turno"/>
-                </HBox>
-                <HBox alignment="CENTER_LEFT" spacing="8">
-                    <FontIcon iconLiteral="mdi2r-receipt-text-outline"/>
-                    <Label fx:id="infoVentas" styleClass="info-turno-texto"/>
+            <!-- Abajo, junto a la cuenta: aparecer no mueve los botones de acción -->
+            <VBox fx:id="tarjetaUltimo" styleClass="tarjeta-ultimo" spacing="2">
+                <Label text="ÚLTIMO AGREGADO" styleClass="ultimo-etiqueta"/>
+                <HBox alignment="CENTER_LEFT" spacing="10">
+                    <VBox HBox.hgrow="ALWAYS" spacing="2" minWidth="0">
+                        <Label fx:id="ultimoNombre" styleClass="ultimo-nombre"/>
+                        <Label fx:id="ultimoDetalle" styleClass="ultimo-detalle"/>
+                    </VBox>
+                    <!-- El importe nunca se recorta: si no cabe, se recorta el nombre -->
+                    <Label fx:id="ultimoImporte" styleClass="ultimo-importe" minWidth="-Infinity"/>
                 </HBox>
             </VBox>
+
+            <Button fx:id="botonCobrar" onAction="#onCobrar" styleClass="boton-cobrar" maxWidth="Infinity">
+                <graphic>
+                    <HBox alignment="CENTER" spacing="12">
+                        <FontIcon iconLiteral="mdi2c-cash-register"/>
+                        <Label text="Cobrar" styleClass="boton-cobrar-texto"/>
+                        <Label text="F12" styleClass="kbd, kbd-claro"/>
+                    </HBox>
+                </graphic>
+            </Button>
             <padding>
                 <Insets top="20" right="20" bottom="20" left="6"/>
             </padding>

@@ -9,6 +9,7 @@ import com.cremerias.puntoventa.model.Sesion;
 import com.cremerias.puntoventa.model.Tarifa;
 import com.cremerias.puntoventa.model.Ticket;
 import com.cremerias.puntoventa.model.Turno;
+import com.cremerias.puntoventa.model.Unidad;
 import com.cremerias.puntoventa.model.Usuario;
 import com.cremerias.puntoventa.model.VentaResumen;
 import com.cremerias.puntoventa.repository.BitacoraRepository;
@@ -29,15 +30,18 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * Registra y cancela ventas. Todo se guarda de forma atómica en la base local.
  * Cada renglón se surte de los lotes más antiguos primero y se cobra al precio de cada lote.
+ * No se vende más de lo que hay en la sucursal.
  */
 public class VentaService {
 
@@ -45,6 +49,37 @@ public class VentaService {
 
     /** Lo que se va a cobrar: presentación y cantidad de cada renglón. */
     public record Renglon(Producto producto, BigDecimal cantidad) {
+    }
+
+    /** Producto del que se pide más de lo que hay en la sucursal (cantidades en unidad base). */
+    public record Faltante(String productoId, String nombre, Unidad unidadBase, BigDecimal existencia,
+                           BigDecimal pedida) {
+
+        public String mensaje() {
+            return existencia.signum() <= 0
+                    ? nombre + " ya no tiene existencia"
+                    : "De " + nombre + " solo hay " + cantidad(existencia) + " y se piden " + cantidad(pedida);
+        }
+
+        private String cantidad(BigDecimal base) {
+            return unidadBase.formatear(base) + (unidadBase == Unidad.PZA ? " pzas" : "");
+        }
+    }
+
+    /** La venta pide más de lo que hay de uno o más productos. */
+    public static class ExistenciaInsuficienteException extends IllegalStateException {
+
+        private final List<Faltante> faltantes;
+
+        public ExistenciaInsuficienteException(List<Faltante> faltantes) {
+            super("No hay existencia suficiente:\n" + String.join("\n",
+                    faltantes.stream().map(f -> "• " + f.mensaje() + ".").toList()));
+            this.faltantes = List.copyOf(faltantes);
+        }
+
+        public List<Faltante> faltantes() {
+            return faltantes;
+        }
     }
 
     private final Database database;
@@ -84,6 +119,31 @@ public class VentaService {
         return cambio;
     }
 
+    /**
+     * Productos de los que la venta pide más de lo que hay; vacío si alcanza todo. Suma las
+     * presentaciones de un mismo producto (una caja de 12 y 3 piezas piden 15 piezas).
+     *
+     * @param existenciaDe existencia en la sucursal, en unidad base, del producto de una presentación
+     */
+    public static List<Faltante> faltantes(List<Renglon> renglones, Function<Producto, BigDecimal> existenciaDe) {
+        Map<String, BigDecimal> pedida = new LinkedHashMap<>();
+        Map<String, Producto> presentacion = new HashMap<>();
+        for (Renglon r : renglones) {
+            Producto p = r.producto();
+            pedida.merge(p.productoId(), p.unidad().normalizar(r.cantidad()).multiply(p.factor()), BigDecimal::add);
+            presentacion.putIfAbsent(p.productoId(), p);
+        }
+        List<Faltante> faltan = new ArrayList<>();
+        pedida.forEach((productoId, base) -> {
+            Producto p = presentacion.get(productoId);
+            BigDecimal hay = existenciaDe.apply(p).max(BigDecimal.ZERO);
+            if (base.compareTo(hay) > 0) {
+                faltan.add(new Faltante(productoId, p.nombre(), p.unidadBase(), hay, base));
+            }
+        });
+        return faltan;
+    }
+
     public Ticket registrar(List<Renglon> renglones, List<Pago> pagos, Sesion sesion, Turno turno) {
         if (renglones.isEmpty()) {
             throw new IllegalArgumentException("La venta no tiene productos.");
@@ -101,6 +161,13 @@ public class VentaService {
             // Se vuelven a leer los lotes: el precio y la existencia salen de la base, no de la pantalla.
             Map<String, Map<String, Long>> precios = lotes.preciosDeSucursal(c, sucursalId);
             Map<String, List<LoteRepository.Lote>> lotesPorProducto = new HashMap<>();
+            List<Faltante> faltan = faltantes(renglones, p -> lotesPorProducto
+                    .computeIfAbsent(p.productoId(), id -> consultarLotes(c, id, sucursalId)).stream()
+                    .map(LoteRepository.Lote::existencia)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add));
+            if (!faltan.isEmpty()) {
+                throw new ExistenciaInsuficienteException(faltan);
+            }
             Map<String, BigDecimal> consumido = new HashMap<>();
             List<Tarifa.Cotizacion> cotizaciones = new ArrayList<>();
             long suma = 0;

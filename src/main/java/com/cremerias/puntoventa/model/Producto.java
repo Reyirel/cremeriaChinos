@@ -17,7 +17,7 @@ import java.util.Map;
  * @param existencia      existencia del producto en la sucursal, en unidad base
  * @param inventarioMinimo mínimo configurado para la sucursal (0 si no hay)
  * @param tramos          lotes con existencia y su precio, del más antiguo al más nuevo
- * @param tramoExtra      lote y precio para vender aunque no haya existencia
+ * @param tramoExtra      lote y precio para cotizar lo que exceda la existencia (no se deja vender)
  */
 public record Producto(
         String id,

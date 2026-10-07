@@ -194,6 +194,30 @@ class AdministracionTest {
     }
 
     @Test
+    void elSupervisorVeLoQueLlegoASuMinimoYSeSigueVendiendo() {
+        ProductoCatalogo leche = catalogoAdmin("Leche entera 1 L");
+        admin.limites().guardar(matriz,
+                List.of(new LimitesService.Cambio(leche, new BigDecimal("45"), new BigDecimal("60"))), administrador);
+        var inventario = new InventarioSucursalService(db);
+        assertTrue(inventario.enMinimo(matriz.id()).isEmpty()); // hay 48
+
+        Sesion cajero = entrar("cajero", "cajero123");
+        Turno turno = caja.abrir(cajero, 0);
+        vender(cajero, turno, "leche entera 1 l", "3");
+        List<InventarioSucursalService.Bajo> bajos = inventario.enMinimo(matriz.id());
+        assertEquals(1, bajos.size());
+        assertEquals("Leche entera 1 L", bajos.getFirst().nombre());
+        assertEquals(0, new BigDecimal("45").compareTo(bajos.getFirst().existencia()));
+        assertTrue(bajos.getFirst().ordenPendiente().startsWith("ORD-")); // le llegó al administrador
+
+        // En su mínimo se sigue vendiendo lo que queda; ya agotado sigue en la lista.
+        vender(cajero, turno, "leche entera 1 l", "45");
+        bajos = inventario.enMinimo(matriz.id());
+        assertEquals(1, bajos.size());
+        assertTrue(bajos.getFirst().agotado());
+    }
+
+    @Test
     void alLlegarAlMinimoSeGeneraUnaOrdenYElAdminLaAprueba() {
         ProductoCatalogo leche = catalogoAdmin("Leche entera 1 L");
         LimitesService.Guardado guardado = admin.limites().guardar(matriz,

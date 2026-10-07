@@ -22,6 +22,7 @@ import javafx.scene.control.Tooltip;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -84,7 +85,10 @@ public class ProductosVista {
     }
 
     public void actualizar() {
-        todos = sucursalId == null ? List.of() : ctx.inventarioSucursal().listar(sucursalId);
+        // Primero los que hay que reabastecer: ahí llega el supervisor desde el aviso de mínimos.
+        todos = sucursalId == null ? List.of() : ctx.inventarioSucursal().listar(sucursalId).stream()
+                .sorted(Comparator.comparing((Fila f) -> !f.porReabastecer()))
+                .toList();
         paraOfertar = sucursalId == null ? Map.of() : ctx.sinVenta().pendientes(Rol.SUPERVISOR, sucursalId).stream()
                 .collect(Collectors.toMap(SinVenta::productoId, s -> s, (a, b) -> a));
         indicadores.getChildren().setAll(

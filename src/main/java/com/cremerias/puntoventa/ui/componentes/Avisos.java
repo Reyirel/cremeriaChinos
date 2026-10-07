@@ -29,7 +29,8 @@ public class Avisos {
         contenedor.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
         contenedor.setViewOrder(-100);
         StackPane.setAlignment(contenedor, Pos.BOTTOM_RIGHT);
-        StackPane.setMargin(contenedor, new Insets(0, 24, 110, 0));
+        // Por encima del botón «Cobrar» de la caja (124px de alto + 20px de margen).
+        StackPane.setMargin(contenedor, new Insets(0, 24, 160, 0));
     }
 
     public VBox contenedor() {

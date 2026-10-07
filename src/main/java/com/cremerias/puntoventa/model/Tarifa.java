@@ -29,7 +29,8 @@ public final class Tarifa {
 
     /**
      * @param tramos      lotes con existencia, del más antiguo al más reciente
-     * @param extra       lote y precio para lo que exceda la existencia (se vende en negativo)
+     * @param extra       lote y precio para lo que exceda la existencia; la venta no llega a usarlo
+     *                    porque VentaService no deja vender más de lo que hay
      * @param factor      unidades base por unidad de la presentación
      * @param consumido   base ya tomada de cada lote por renglones anteriores; se actualiza
      * @param cantidad    cantidad en unidades de la presentación

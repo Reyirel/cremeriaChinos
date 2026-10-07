@@ -118,6 +118,59 @@ class CajaYVentasTest {
     }
 
     @Test
+    void noSeVendeMasDeLoQueHay() {
+        Turno turno = caja.abrir(sesion, 0);
+        Producto leche = producto("leche entera");
+        assertEquals(0, new BigDecimal("48").compareTo(leche.existencia()));
+        List<Pago> pago = List.of(new Pago(MetodoPago.EFECTIVO, 10_000_000, null));
+
+        var error = assertThrows(VentaService.ExistenciaInsuficienteException.class, () -> ventas.registrar(
+                List.of(new VentaService.Renglon(leche, new BigDecimal("49"))), pago, sesion, turno));
+        assertEquals(0, new BigDecimal("48").compareTo(error.faltantes().getFirst().existencia()));
+        assertTrue(error.getMessage().contains("solo hay 48 pzas y se piden 49 pzas"), error.getMessage());
+
+        // No se guardó nada: ni la venta ni la salida de inventario.
+        assertEquals(0, caja.resumen(turno).numeroVentas());
+        catalogo.recargar();
+        assertEquals(0, new BigDecimal("48").compareTo(producto("leche entera").existencia()));
+    }
+
+    @Test
+    void lasPresentacionesDeUnMismoProductoSeSumanContraLaExistencia() {
+        Turno turno = caja.abrir(sesion, 0);
+        Producto pieza = producto("leche entera");
+        Producto cajaDe12 = producto("leche entera 1 l caja");
+        List<Pago> pago = List.of(new Pago(MetodoPago.EFECTIVO, 10_000_000, null));
+
+        // 4 cajas (48 piezas) + 1 pieza = 49 de 48.
+        assertThrows(VentaService.ExistenciaInsuficienteException.class, () -> ventas.registrar(List.of(
+                new VentaService.Renglon(cajaDe12, new BigDecimal("4")),
+                new VentaService.Renglon(pieza, BigDecimal.ONE)), pago, sesion, turno));
+
+        ventas.registrar(List.of(new VentaService.Renglon(cajaDe12, new BigDecimal("4"))), pago, sesion, turno);
+        catalogo.recargar();
+        Producto agotada = producto("leche entera");
+        assertTrue(agotada.sinExistencia());
+        var error = assertThrows(VentaService.ExistenciaInsuficienteException.class, () -> ventas.registrar(
+                List.of(new VentaService.Renglon(agotada, BigDecimal.ONE)), pago, sesion, turno));
+        assertTrue(error.getMessage().contains("ya no tiene existencia"), error.getMessage());
+    }
+
+    @Test
+    void aGranelNoSeVendeMasDelPesoQueHay() {
+        Turno turno = caja.abrir(sesion, 0);
+        Producto oaxaca = producto("queso oaxaca");
+        BigDecimal hay = oaxaca.existencia();
+        List<Pago> pago = List.of(new Pago(MetodoPago.EFECTIVO, 10_000_000, null));
+
+        assertThrows(VentaService.ExistenciaInsuficienteException.class, () -> ventas.registrar(
+                List.of(new VentaService.Renglon(oaxaca, hay.add(new BigDecimal("0.001")))), pago, sesion, turno));
+        ventas.registrar(List.of(new VentaService.Renglon(oaxaca, hay)), pago, sesion, turno);
+        catalogo.recargar();
+        assertEquals(0, BigDecimal.ZERO.compareTo(producto("queso oaxaca").existencia()));
+    }
+
+    @Test
     void cancelarVentaRegresaInventarioYNoCuentaEnElCorte() {
         Turno turno = caja.abrir(sesion, 10000);
         Producto p = producto("refresco");

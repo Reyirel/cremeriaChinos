@@ -48,7 +48,9 @@ import javafx.beans.property.SimpleDoubleProperty;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.collections.ListChangeListener;
 import javafx.css.PseudoClass;
+import javafx.event.Event;
 import javafx.event.EventHandler;
+import javafx.event.EventType;
 import javafx.fxml.FXML;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
@@ -95,7 +97,12 @@ import java.util.regex.Pattern;
 public class CajaController {
 
     private static final Logger log = LoggerFactory.getLogger(CajaController.class);
+    /** Se lanza desde la caja al registrar una venta (el panel del supervisor revisa los mínimos). */
+    public static final EventType<Event> VENTA_REGISTRADA = new EventType<>(Event.ANY, "VENTA_REGISTRADA");
     private static final PseudoClass RESALTADA = PseudoClass.getPseudoClass("resaltada");
+    private static final PseudoClass COMPACTA = PseudoClass.getPseudoClass("compacta");
+    /** Por debajo de este ancho la cuenta usa letra más chica para no recortar «Total a pagar». */
+    private static final double ANCHO_CUENTA_COMPACTA = 760;
     /** "3*" o "3*7501000..." multiplica la cantidad del siguiente producto. */
     private static final Pattern MULTIPLICADOR = Pattern.compile("^(\\d{1,4}(?:\\.\\d{1,3})?)\\s*\\*\\s*(.*)$");
     private static final DateTimeFormatter HORA = DateTimeFormatter.ofPattern("HH:mm");
@@ -131,7 +138,7 @@ public class CajaController {
     @FXML private Label resultadosTitulo;
     @FXML private ListView<Producto> listaResultados;
     @FXML private FlowPane barraAtajos;
-    @FXML private VBox tarjetaTotal;
+    @FXML private HBox tarjetaTotal;
     @FXML private Label etiquetaTotal;
     @FXML private Label etiquetaArticulos;
     @FXML private Label etiquetaRenglones;
@@ -487,6 +494,9 @@ public class CajaController {
 
             HBox fila = new HBox(12, icono, textos, new Spacer(), existencia, precios);
             fila.setAlignment(Pos.CENTER_LEFT);
+            if (p.sinExistencia()) {
+                fila.getStyleClass().add("resultado-agotado");
+            }
             setGraphic(fila);
         }
     }
@@ -505,6 +515,9 @@ public class CajaController {
             return n == 0 ? "Sin productos" : n == 1 ? "1 producto en la venta" : n + " productos en la venta";
         }, carrito.lineas()));
         botonCobrar.disableProperty().bind(Bindings.isEmpty(carrito.lineas()));
+        // Con el menú del supervisor en pantallas chicas la franja de la cuenta queda angosta.
+        tarjetaTotal.widthProperty().addListener((o, antes, ancho) ->
+                tarjetaTotal.pseudoClassStateChanged(COMPACTA, ancho.doubleValue() < ANCHO_CUENTA_COMPACTA));
     }
 
     private void animarTotal(long antes, long ahora) {
@@ -768,6 +781,10 @@ public class CajaController {
         if (!cajaAbierta()) {
             return;
         }
+        if (existenciaActual(producto).signum() <= 0) {
+            rechazarPorExistencia(producto.nombre() + " ya no tiene existencia");
+            return;
+        }
         BigDecimal cantidadFinal = cantidad != null ? cantidad : multiplicadorPendiente;
         if (cantidadFinal == null && producto.unidad().esGranel()) {
             ocultarResultados();
@@ -784,14 +801,47 @@ public class CajaController {
             limpiarCaptura();
             return;
         }
+        if (!alcanza(producto, null, normalizada)) {
+            return;
+        }
         long totalAntes = carrito.total();
         LineaVenta linea = carrito.agregar(producto, normalizada);
         limpiarCaptura();
         resaltar(linea);
         mostrarUltimo(producto, normalizada, carrito.total() - totalAntes);
-        if (producto.sinExistencia()) {
-            avisos.advertencia(producto.nombre() + " no tiene existencia registrada.");
+    }
+
+    /** Existencia del producto en la sucursal según el catálogo (se recarga después de cada venta). */
+    private BigDecimal existenciaActual(Producto producto) {
+        return ctx.catalogo().porId(producto.id()).map(Producto::existencia).orElse(producto.existencia());
+    }
+
+    /**
+     * Revisa que la venta, con este cambio, no pida más de lo que hay del producto; si no alcanza
+     * lo avisa y no se debe aplicar.
+     *
+     * @param reemplaza renglón al que se le cambia la cantidad, o {@code null} si se agrega
+     */
+    private boolean alcanza(Producto producto, LineaVenta reemplaza, BigDecimal cantidad) {
+        // El que cambia va primero: el aviso lleva el nombre de la presentación que se está agregando.
+        List<VentaService.Renglon> renglones = new ArrayList<>();
+        renglones.add(new VentaService.Renglon(producto, cantidad));
+        for (LineaVenta l : carrito.lineas()) {
+            if (l != reemplaza) {
+                renglones.add(new VentaService.Renglon(l.producto(), l.getCantidad()));
+            }
         }
+        Optional<VentaService.Faltante> falta = VentaService.faltantes(renglones, this::existenciaActual).stream()
+                .filter(f -> f.productoId().equals(producto.productoId()))
+                .findFirst();
+        falta.ifPresent(f -> rechazarPorExistencia(f.mensaje()));
+        return falta.isEmpty();
+    }
+
+    private void rechazarPorExistencia(String mensaje) {
+        avisos.error(mensaje + ". No se puede vender más de lo que hay.");
+        Animations.shakeX(campoBusqueda, 6).playFromStart();
+        limpiarCaptura();
     }
 
     private void limpiarCaptura() {
@@ -859,6 +909,9 @@ public class CajaController {
             quitar(linea);
             return;
         }
+        if (delta > 0 && !alcanza(linea.producto(), linea, nueva)) {
+            return;
+        }
         carrito.cambiarCantidad(linea, nueva);
         resaltar(linea);
         enfocarBusqueda();
@@ -878,6 +931,9 @@ public class CajaController {
             return;
         }
         DialogoCantidad.mostrar(dialogos, linea.producto(), linea.getCantidad(), c -> {
+            if (c.compareTo(linea.getCantidad()) > 0 && !alcanza(linea.producto(), linea, c)) {
+                return;
+            }
             carrito.cambiarCantidad(linea, c);
             resaltar(linea);
             enfocarBusqueda();
@@ -940,18 +996,32 @@ public class CajaController {
             return;
         }
         ocultarResultados();
+        List<VentaService.Faltante> faltan = VentaService.faltantes(renglonesCarrito(), this::existenciaActual);
+        if (!faltan.isEmpty()) {
+            DialogoConfirmacion.aviso(dialogos, "No hay existencia suficiente",
+                    String.join("\n", faltan.stream().map(f -> "• " + f.mensaje() + ".").toList())
+                            + "\n\nQuita esos productos o baja la cantidad para poder cobrar.", true);
+            return;
+        }
         DialogoCobro.mostrar(dialogos, carrito.total(), this::registrarVenta);
     }
 
-    private void registrarVenta(List<Pago> pagos) {
-        List<VentaService.Renglon> renglones = carrito.lineas().stream()
+    private List<VentaService.Renglon> renglonesCarrito() {
+        return carrito.lineas().stream()
                 .map(l -> new VentaService.Renglon(l.producto(), l.getCantidad()))
                 .toList();
+    }
+
+    private void registrarVenta(List<Pago> pagos) {
         Ticket ticket;
         try {
-            ticket = ctx.ventas().registrar(renglones, pagos, sesion, turno);
+            ticket = ctx.ventas().registrar(renglonesCarrito(), pagos, sesion, turno);
         } catch (RuntimeException e) {
             log.error("No se pudo registrar la venta", e);
+            if (e instanceof VentaService.ExistenciaInsuficienteException) {
+                // Otra caja vendió mientras tanto: las siguientes revisiones usan la existencia nueva.
+                ctx.catalogo().recargar();
+            }
             DialogoConfirmacion.aviso(dialogos, "No se pudo registrar la venta",
                     mensaje(e) + "\n\nLos productos siguen en pantalla; no se perdió nada.", true);
             return;
@@ -959,6 +1029,7 @@ public class CajaController {
         carrito.vaciar();
         ocultarUltimo();
         ctx.catalogo().recargar();
+        raiz.fireEvent(new Event(VENTA_REGISTRADA));
         ctx.sincronizador().revisarAhora();
         actualizarInfoTurno();
         revisarSinVenta();
@@ -1052,6 +1123,12 @@ public class CajaController {
         }
         if (faltantes > 0) {
             avisos.advertencia(faltantes + " producto(s) ya no están disponibles y no se agregaron.");
+        }
+        int sinExistencia = VentaService.faltantes(renglonesCarrito(), this::existenciaActual).size();
+        if (sinExistencia > 0) {
+            avisos.advertencia(sinExistencia == 1
+                    ? "1 producto ya no tiene existencia suficiente: ajústalo antes de cobrar."
+                    : sinExistencia + " productos ya no tienen existencia suficiente: ajústalos antes de cobrar.");
         }
     }
 
