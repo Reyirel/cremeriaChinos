@@ -26,6 +26,7 @@ import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
+import javafx.util.StringConverter;
 import org.kordamp.ikonli.javafx.FontIcon;
 
 import java.math.BigDecimal;
@@ -109,6 +110,24 @@ final class DialogoSurtido {
         List<ProductoCatalogo> productos = a.admin().productos().listar().stream().filter(ProductoCatalogo::activo).toList();
         ComboBox<ProductoCatalogo> selector = SelectorProducto.crear(productos);
         selector.setPrefWidth(420);
+
+        // Si el producto tiene varias presentaciones (pieza suelta, caja de 12...) se elige en
+        // cuál se está capturando la cantidad, para no tener que convertir a piezas a mano.
+        ComboBox<Presentacion> presentacionNueva = new ComboBox<>();
+        presentacionNueva.setConverter(new StringConverter<>() {
+            @Override
+            public String toString(Presentacion p) {
+                return p == null ? "" : p.nombre() + " (" + Cantidades.formatear(Unidad.PZA, p.factor()) + ")";
+            }
+
+            @Override
+            public Presentacion fromString(String texto) {
+                return presentacionNueva.getValue();
+            }
+        });
+        presentacionNueva.setVisible(false);
+        presentacionNueva.setManaged(false);
+
         TextField cantidadNueva = new TextField();
         Campos.soloNumeros(cantidadNueva, 0);
         cantidadNueva.setPrefColumnCount(7);
@@ -212,8 +231,14 @@ final class DialogoSurtido {
         };
 
         java.util.function.BiConsumer<ProductoCatalogo, BigDecimal> agregarLinea = (p, cantidad) -> {
-            if (lineas.stream().anyMatch(l -> l.producto.id().equals(p.id()))) {
-                a.avisos().advertencia(p.nombre() + " ya está en el surtido; cambia su cantidad.");
+            Linea existente = lineas.stream().filter(l -> l.producto.id().equals(p.id())).findFirst().orElse(null);
+            if (existente != null) {
+                // Mismo producto en otra presentación (ej. ya había cajas y ahora se agregan
+                // piezas sueltas): se suma a la línea en vez de bloquear o crear una repetida.
+                BigDecimal total = existente.base().add(cantidad);
+                existente.cantidad.setText(Cantidades.aCaptura(p.unidad(), total));
+                redibujar[0].run();
+                a.avisos().info(p.nombre() + ": ahora son " + Cantidades.formatear(p.unidad(), total) + " en el surtido.");
                 return;
             }
             Linea l = new Linea(p);
@@ -240,12 +265,16 @@ final class DialogoSurtido {
                 a.avisos().error("Elige un producto.");
                 return;
             }
-            BigDecimal c = Cantidades.desdeCaptura(p.unidad(), cantidadNueva.getText()).orElse(BigDecimal.ZERO);
-            if (c.signum() <= 0) {
-                a.avisos().error("Escribe la cantidad (" + Cantidades.unidadCaptura(p.unidad()) + ").");
+            BigDecimal capturado = Cantidades.desdeCaptura(p.unidad(), cantidadNueva.getText()).orElse(BigDecimal.ZERO);
+            if (capturado.signum() <= 0) {
+                a.avisos().error("Escribe la cantidad (" + (presentacionNueva.isVisible()
+                        ? "en " + presentacionNueva.getValue().nombre() : Cantidades.unidadCaptura(p.unidad())) + ").");
                 cantidadNueva.requestFocus();
                 return;
             }
+            BigDecimal factor = presentacionNueva.isVisible() && presentacionNueva.getValue() != null
+                    ? presentacionNueva.getValue().factor() : BigDecimal.ONE;
+            BigDecimal c = capturado.multiply(factor).setScale(0, RoundingMode.HALF_UP);
             agregarLinea.accept(p, c);
             selector.getEditor().clear();
             selector.setValue(null);
@@ -255,7 +284,17 @@ final class DialogoSurtido {
         agregar.setOnAction(e -> accionAgregar.run());
         cantidadNueva.setOnAction(e -> accionAgregar.run());
         selector.valueProperty().addListener((o, x, p) -> {
-            unidadNueva.setText(p == null ? ""
+            List<Presentacion> activas = p == null ? List.of()
+                    : p.presentaciones().stream().filter(Presentacion::activo).toList();
+            boolean varias = p != null && p.unidad() != Unidad.KG && activas.size() > 1;
+            presentacionNueva.setVisible(varias);
+            presentacionNueva.setManaged(varias);
+            if (varias) {
+                presentacionNueva.setItems(FXCollections.observableArrayList(activas));
+                Presentacion principal = p.principal();
+                presentacionNueva.setValue(activas.contains(principal) ? principal : activas.getFirst());
+            }
+            unidadNueva.setText(p == null || varias ? ""
                     : Cantidades.unidadCaptura(p.unidad()) + (p.unidad() == Unidad.KG ? " (1 kg = 1000 g)" : ""));
             if (p != null) {
                 javafx.application.Platform.runLater(cantidadNueva::requestFocus);
@@ -279,7 +318,7 @@ final class DialogoSurtido {
 
         HBox cabecera = new HBox(14, Ui.campo("Sucursal que recibe", sucursal),
                 Ui.campo("Forma de pago", new HBox(efectivo, credito)));
-        HBox captura = new HBox(10, selector, cantidadNueva, unidadNueva, agregar);
+        HBox captura = new HBox(10, selector, presentacionNueva, cantidadNueva, unidadNueva, agregar);
         captura.setAlignment(Pos.CENTER_LEFT);
         captura.getStyleClass().add("surtido-captura");
         VBox izquierda = new VBox(12, cabecera, captura, vacio, scroll, notas);
