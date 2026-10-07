@@ -36,6 +36,11 @@ public final class AppPaths {
         return home().resolve("logs");
     }
 
+    /** Conexión de esta caja con Supabase; si no existe, la caja trabaja solo en local. */
+    public static Path configNube() {
+        return home().resolve("supabase.properties");
+    }
+
     public static void crearDirectorios() {
         try {
             Files.createDirectories(home());

@@ -21,10 +21,15 @@ import com.cremerias.puntoventa.service.DatosIniciales;
 import com.cremerias.puntoventa.service.PreferenciasService;
 import com.cremerias.puntoventa.service.SesionActual;
 import com.cremerias.puntoventa.service.SinVentaService;
+import com.cremerias.puntoventa.sync.CajaNueva;
+import com.cremerias.puntoventa.sync.ClienteSupabase;
+import com.cremerias.puntoventa.sync.ConfigNube;
+import com.cremerias.puntoventa.sync.ErrorNube;
 import com.cremerias.puntoventa.sync.Sincronizador;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.time.Clock;
 import java.util.Optional;
@@ -76,6 +81,21 @@ public final class AppContext implements AutoCloseable {
         }
         new Migraciones(database).aplicar();
 
+        ClienteSupabase nube = ConfigNube.cargar(AppPaths.configNube()).map(ClienteSupabase::new).orElse(null);
+        if (nube == null) {
+            log.info("Sin conexión con la nube configurada ({}): la caja trabaja solo en local", AppPaths.configNube());
+        } else {
+            log.info("Caja conectada a la nube: {}", nube.config());
+            try {
+                // Caja recién instalada: toma los datos de la nube en vez de crear los de ejemplo.
+                CajaNueva.prepararDesdeNube(database, nube);
+            } catch (IOException | ErrorNube e) {
+                throw new IllegalStateException("Esta caja está configurada para la nube, pero no pudo bajar los datos"
+                        + " de Supabase (" + e.getMessage() + "). Revisa la conexión a internet y "
+                        + AppPaths.configNube() + ".", e);
+            }
+        }
+
         PasswordHasher hasher = new PasswordHasher();
         // Devuelve la sucursal creada solo si la base es nueva (no tenía usuarios).
         String sucursalNueva = new DatosIniciales(database, hasher).sembrarSiVacia();
@@ -97,7 +117,7 @@ public final class AppContext implements AutoCloseable {
         });
 
         AuthService auth = new AuthService(database, hasher, Clock.systemDefaultZone(), dispositivoId);
-        Sincronizador sincronizador = new Sincronizador(database);
+        Sincronizador sincronizador = new Sincronizador(database, dispositivoId, nube);
         sincronizador.iniciar();
         // Sin sucursal todavía: la caja carga el catálogo de la sucursal de quien entra.
         CatalogoService catalogo = new CatalogoService(database, null);

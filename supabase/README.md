@@ -25,6 +25,8 @@ Las migraciones están en [`migrations/`](migrations/) y se aplican en orden:
 | `…050200_seguridad` | Permisos por tabla y políticas RLS |
 | `…050300_vistas_y_funciones` | Vistas de existencias y crédito, funciones `mi_perfil`, `registrar_caja`, `vincular_usuario`, Realtime |
 | `…050400_indices_y_perfil` | Índices para consultas frecuentes |
+| `…060000_sincronizacion_cajas` | Las cajas sincronizan todo; función `subir_cambios` |
+| `…060100_bajar_cambios` | Función `bajar_cambios` (lo que cambió desde la última vez, por tabla) |
 
 Es el **mismo modelo y los mismos nombres** que la base local de las cajas (SQLite, `src/main/resources/db/migration`), para que la sincronización sea directa. Convenciones:
 
@@ -60,7 +62,9 @@ Cada petición lleva la sesión de una **persona** (`usuarios.auth_user_id`) o d
 | Cuenta no ligada a un usuario o caja activa | Nada | Nada |
 | Administrador, y cajas del almacén central | Todo | Todo (sin borrar) |
 | Supervisor / cajero | Catálogo, sucursales y lo de **su** sucursal | Operación de su sucursal: turnos, ventas, movimientos, mermas, órdenes, bloqueos, bitácora |
-| Caja de sucursal | Lo de su sucursal + los administradores y sus hashes (para el acceso sin conexión) | Lo mismo que un supervisor, y además usuarios y contraseñas de su sucursal |
+| Caja de escritorio (cualquiera) | Todo | Todo (sin borrar) |
+
+Las cajas sincronizan todo porque en cualquier caja puede entrar el administrador (surtidos, catálogo, usuarios…) o gente de otra sucursal, y la base local de cada caja ya guarda todas las sucursales. Las personas en web/móvil sí quedan limitadas a su sucursal.
 
 Además:
 
@@ -83,10 +87,7 @@ El registro libre está **desactivado**: las cuentas solo las crea el administra
    - El **primer administrador** se liga desde el *SQL Editor* del panel, que no lleva sesión de usuario.
    - Después, un administrador ya ligado puede ligar a los demás desde la app.
 
-**Caja (escritorio):**
-
-1. Panel → *Add user* con un correo para la caja (por ejemplo `caja-7182@…`).
-2. La caja inicia sesión con esa cuenta y llama `registrar_caja(id_local, nombre, sucursal_id)` con el id que ya tiene en su base local. Si el administrador ya la había dado de alta, solo se liga la cuenta y conserva su sucursal.
+**Caja (escritorio):** ver [Cajas de escritorio](#cajas-de-escritorio).
 
 ## Funciones (RPC)
 
@@ -95,6 +96,8 @@ El registro libre está **desactivado**: las cuentas solo las crea el administra
 | `mi_perfil()` | Después de iniciar sesión: `tipo` (`USUARIO`/`CAJA`), `id`, `nombre`, `rol`, `sucursal_id`, `sucursal`, `es_almacen` |
 | `registrar_caja(p_id, p_nombre, p_sucursal_id)` | Alta de una caja con su propia cuenta |
 | `vincular_usuario(p_usuario_id, p_correo)` | Ligar una persona con su cuenta de Auth (solo administrador) |
+| `subir_cambios(p_cambios)` | La caja sube un lote de filas tal como están en su base local, en una transacción |
+| `bajar_cambios(p_cursores, p_limite)` | La caja baja lo que cambió en cada tabla desde su último cursor |
 
 ## Tiempo real
 
@@ -128,6 +131,32 @@ supabase.channel('ventas')
   .subscribe()
 ```
 
+## Cajas de escritorio
+
+La app de escritorio sigue trabajando siempre sobre su base local (SQLite) y se sincroniza sola cada 10 segundos cuando hay internet ([`sync/`](../src/main/java/com/cremerias/puntoventa/sync)):
+
+- **Sube** lo encolado en `sync_outbox` con `subir_cambios`: el estado actual de cada fila con sus hijas (detalle y pagos de una venta, precios de un lote, detalle de un surtido). Si la nube rechaza un cambio, los demás sí suben y ese queda en la cola con su error.
+- **Baja** con `bajar_cambios` lo que cambió en la nube (otras cajas, web, móvil) y lo guarda sin volver a encolarlo. Un registro con cambios locales que aún no suben no se toca.
+- Sin internet la caja trabaja igual; el indicador de la barra de estado dice si está en línea, sincronizando, sin conexión o con error (el detalle aparece al pasar el mouse).
+
+**Conectar una caja:**
+
+1. Crear su cuenta en el panel → *Authentication → Users → Add user* (un correo para la caja, por ejemplo `caja-7182@cremerias.local`, y *Auto Confirm User*).
+2. En la carpeta de datos de la caja (`~/.cremerias-pos/`) crear `supabase.properties`:
+   ```properties
+   url=https://lradrurqdllgbvhsgfbb.supabase.co
+   clave_publica=<publishable key>
+   correo=caja-7182@cremerias.local
+   contrasena=<contraseña de la cuenta de la caja>
+   ```
+3. Abrir la app. La primera vez la caja se registra sola con su id local (`registrar_caja`).
+   - Si la caja ya tenía datos, sube lo pendiente y baja lo demás.
+   - Si es una **caja nueva** (nadie ha entrado nunca), en vez de crear los usuarios y el catálogo de ejemplo toma todo de la nube; para eso necesita internet la primera vez.
+
+Sin `supabase.properties` la caja trabaja solo en local, como antes. Cada caja necesita su propia cuenta.
+
+Para probar la sincronización contra la nube sobre una **copia** de la base: `./mvnw test -Dtest=SincronizacionNubeTest -Dnube.bd=<copia.db> -Dnube.config=<supabase.properties>`.
+
 ## Cambios al esquema
 
 1. `supabase migration new <nombre>` y escribir el SQL. **Nunca** editar una migración ya aplicada.
@@ -141,6 +170,5 @@ Toda tabla nueva en `public` nace con RLS activado y **sin permisos**: hay que d
 
 ## Pendiente
 
-- Sincronizador de las cajas de escritorio (subir `sync_outbox`, bajar por `sincronizado_en`).
 - Función para registrar una venta completa en una sola transacción (venta, detalle, pagos e inventario por PEPS) para web/móvil.
 - Cargar los datos de prueba de la base local, si se quieren para probar.

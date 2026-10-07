@@ -16,14 +16,22 @@ public class Database {
 
     private final Path archivo;
     private final SQLiteConfig config;
+    private final SQLiteConfig configInmediata;
 
     public Database(Path archivo) {
         this.archivo = archivo;
-        this.config = new SQLiteConfig();
+        this.config = configuracion();
+        this.configInmediata = configuracion();
+        configInmediata.setTransactionMode(SQLiteConfig.TransactionMode.IMMEDIATE);
+    }
+
+    private static SQLiteConfig configuracion() {
+        SQLiteConfig config = new SQLiteConfig();
         config.enforceForeignKeys(true);
         config.setJournalMode(SQLiteConfig.JournalMode.WAL);
         config.setSynchronous(SQLiteConfig.SynchronousMode.FULL);
         config.setBusyTimeout(5_000);
+        return config;
     }
 
     public Path archivo() {
@@ -45,7 +53,19 @@ public class Database {
 
     /** Ejecuta varias sentencias de forma atómica: o se guardan todas o ninguna. */
     public <T> T enTransaccion(SqlFunction<T> operacion) {
-        try (Connection conexion = abrir()) {
+        return transaccion(config, operacion);
+    }
+
+    /**
+     * Como {@link #enTransaccion}, pero toma el bloqueo de escritura desde el inicio: nadie más
+     * escribe mientras dura (lo usa la sincronización para saber qué filas generó ella misma).
+     */
+    public <T> T enTransaccionInmediata(SqlFunction<T> operacion) {
+        return transaccion(configInmediata, operacion);
+    }
+
+    private <T> T transaccion(SQLiteConfig configuracion, SqlFunction<T> operacion) {
+        try (Connection conexion = configuracion.createConnection("jdbc:sqlite:" + archivo.toAbsolutePath())) {
             conexion.setAutoCommit(false);
             try {
                 T resultado = operacion.aplicar(conexion);

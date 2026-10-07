@@ -30,7 +30,7 @@ public class App extends Application {
     public void start(Stage stage) {
         if (errorInicio != null) {
             Alert alerta = new Alert(Alert.AlertType.ERROR,
-                    "No se pudo abrir la base de datos local.\n\n" + errorInicio.getMessage());
+                    "No se pudo preparar la base de datos de la caja.\n\n" + errorInicio.getMessage());
             alerta.setHeaderText("Error al iniciar el punto de venta");
             alerta.showAndWait();
             Platform.exit();

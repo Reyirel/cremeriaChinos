@@ -19,6 +19,7 @@
         <bcrypt.version>0.10.2</bcrypt.version>
         <slf4j.version>2.0.17</slf4j.version>
         <logback.version>1.5.25</logback.version>
+        <jackson.version>2.18.2</jackson.version>
         <junit.version>5.11.0</junit.version>
     </properties>
 
@@ -81,6 +82,13 @@
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
             <version>${logback.version}</version>
+        </dependency>
+
+        <!-- Sincronización con Supabase (JSON) -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
         </dependency>
 
         <!-- Pruebas -->
