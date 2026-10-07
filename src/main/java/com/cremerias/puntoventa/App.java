@@ -5,6 +5,7 @@ import com.cremerias.puntoventa.ui.Navegador;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.scene.control.Alert;
+import javafx.scene.image.Image;
 import javafx.stage.Stage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,6 +39,7 @@ public class App extends Application {
             return;
         }
         Fuentes.cargar();
+        cargarIcono(stage);
         navegador = new Navegador(stage, contexto);
         stage.setMinWidth(760);
         stage.setMinHeight(620);
@@ -57,5 +59,15 @@ public class App extends Application {
 
     public static void main(String[] args) {
         launch();
+    }
+
+    /** Ícono de la ventana y la barra de tareas (en lugar del genérico de Java). */
+    private static void cargarIcono(Stage stage) {
+        for (int tam : new int[] {16, 24, 32, 48, 64, 128, 256}) {
+            var in = App.class.getResourceAsStream("/com/cremerias/puntoventa/icons/icon-" + tam + ".png");
+            if (in != null) {
+                stage.getIcons().add(new Image(in));
+            }
+        }
     }
 }
