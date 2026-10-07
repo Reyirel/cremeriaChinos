@@ -34,7 +34,7 @@ Es el **mismo modelo y los mismos nombres** que la base local de las cajas (SQLi
 - **Dinero en centavos** (`*_centavos`, `bigint`): `$12.50` = `1250`.
 - **Cantidades** `numeric(14,3)` en la unidad base del producto: piezas, o kilos con 3 decimales (`0.250` = 250 g). Una presentación (caja, pieza de queso…) tiene un `factor` en unidades base.
 - **Fechas** `timestamptz` (UTC).
-- **No se borra nada**: `activo`, `eliminado_en` o `estado`. La API no permite `DELETE`.
+- **No se borra nada**: `activo`, `eliminado_en` o `estado`. La API no permite `DELETE`. Lo que se "borra" en la app queda con `eliminado_en`: en web/móvil hay que filtrar `eliminado_en=is.null` para no mostrarlo (así el borrado llega a todas las cajas y no se pierde el historial).
 - **`sincronizado_en`** (todas las tablas): hora del servidor en que llegó la última versión de la fila. Para bajar solo lo que cambió: `sincronizado_en > última vez`.
 - **`actualizado_en`**: si el cliente lo manda (cambio hecho sin conexión) se respeta; si no, lo pone el servidor.
 - Valores fijos como `text` con `check` (por ejemplo `rol in ('ADMINISTRADOR','SUPERVISOR','CAJERO')`).
@@ -141,6 +141,7 @@ La app de escritorio sigue trabajando siempre sobre su base local (SQLite) y se 
 
 **Conectar una caja:**
 
+0. Si en esa computadora ya se usó la app sin la nube, empezar con la carpeta de datos vacía: cerrar la app y cambiar el nombre de `~/.cremerias-pos` (en Windows `C:\Users\<usuario>\.cremerias-pos`). Una caja con datos propios (otro almacén central) no se sincroniza, para no mezclar sus usuarios y catálogo de ejemplo con los de la nube.
 1. Crear su cuenta en el panel → *Authentication → Users → Add user* (un correo para la caja, por ejemplo `caja-7182@cremerias.local`, y *Auto Confirm User*).
 2. En la carpeta de datos de la caja (`~/.cremerias-pos/`) crear `supabase.properties`:
    ```properties

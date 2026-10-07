@@ -1,5 +1,6 @@
 package com.cremerias.puntoventa.sync;
 
+import com.cremerias.puntoventa.config.AppPaths;
 import com.cremerias.puntoventa.db.Database;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -41,6 +42,7 @@ class RegistroCaja {
                     + ("CAJA".equals(tipo) ? "otra caja (" + perfil.path("nombre").asText() + ")" : "una persona")
                     + ": cada caja necesita su propia cuenta.");
         }
+        revisarQueSeaLaMismaEmpresa(nube);
         ObjectNode caja = database.con(c -> {
             try (var ps = c.prepareStatement("""
                     SELECT d.nombre,
@@ -61,5 +63,33 @@ class RegistroCaja {
         nube.rpc("registrar_caja", caja);
         log.info("{} registrada en la nube con la cuenta {}", caja.path("p_nombre").asText(), cuenta);
         registrada = true;
+    }
+
+    /**
+     * Una instalación que ya tenía datos propios (otro almacén central, usuarios y catálogo de
+     * ejemplo) no se mezcla con la nube: chocaría con su almacén y subiría datos que no son de ahí.
+     */
+    private void revisarQueSeaLaMismaEmpresa(Nube nube) throws IOException, ErrorNube {
+        ObjectNode parametros = json.createObjectNode();
+        parametros.set("p_cursores", json.createObjectNode().set("sucursales", json.createObjectNode()));
+        parametros.put("p_limite", Bajada.PAGINA);
+        String almacenNube = null;
+        for (JsonNode sucursal : nube.rpc("bajar_cambios", parametros).path("sucursales")) {
+            if (sucursal.path("es_almacen").asBoolean()) {
+                almacenNube = sucursal.path("id").asText();
+            }
+        }
+        String almacenLocal = database.con(c -> {
+            try (var ps = c.prepareStatement("SELECT id FROM sucursales WHERE es_almacen = 1 LIMIT 1");
+                 var rs = ps.executeQuery()) {
+                return rs.next() ? rs.getString(1) : null;
+            }
+        });
+        if (almacenNube != null && almacenLocal != null && !almacenNube.equals(almacenLocal)) {
+            throw new ErrorNube(0, "Esta caja tiene datos propios que no son los de la nube (otro almacén central),"
+                    + " así que no se sincroniza. Para conectarla: cierra la app, cambia el nombre de la carpeta "
+                    + AppPaths.home() + ", crea esa carpeta de nuevo solo con supabase.properties y vuelve a abrir"
+                    + " la app: tomará todo de la nube.");
+        }
     }
 }

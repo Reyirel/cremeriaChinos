@@ -258,6 +258,35 @@ class SincronizacionTest {
     }
 
     // ------------------------------------------------------------------
+    // Registro de la caja
+    // ------------------------------------------------------------------
+
+    @Test
+    void unaCajaConOtroAlmacenNoSeMezclaConLaNube() {
+        conDatosDeEjemplo();
+        nube.fila("sucursales", "id", UUID.randomUUID().toString(), "2026-01-01T00:00:00+00:00",
+                "codigo", "ALMACEN", "es_almacen", true);
+        String caja = consultar("SELECT id FROM dispositivo ORDER BY rowid LIMIT 1");
+
+        ErrorNube error = assertThrows(ErrorNube.class, () -> new RegistroCaja(database, caja).asegurar(nube, "caja@x"));
+
+        assertTrue(error.getMessage().contains("datos propios"));
+        assertTrue(nube.cajasRegistradas.isEmpty());
+    }
+
+    @Test
+    void unaCajaDeLaMismaEmpresaSeRegistraConSuIdLocal() throws Exception {
+        conDatosDeEjemplo();
+        nube.fila("sucursales", "id", consultar("SELECT id FROM sucursales WHERE es_almacen = 1"),
+                "2026-01-01T00:00:00+00:00", "codigo", "ALMACEN", "es_almacen", true);
+        String caja = consultar("SELECT id FROM dispositivo ORDER BY rowid LIMIT 1");
+
+        new RegistroCaja(database, caja).asegurar(nube, "caja@x");
+
+        assertEquals(caja, nube.cajasRegistradas.getFirst().path("p_id").asText());
+    }
+
+    // ------------------------------------------------------------------
 
     private int contar(String sql) {
         return database.con(c -> {
@@ -280,6 +309,7 @@ class SincronizacionTest {
 
         final List<ObjectNode> subidas = new ArrayList<>();
         final Map<String, List<ObjectNode>> tablas = new HashMap<>();
+        final List<ObjectNode> cajasRegistradas = new ArrayList<>();
         Predicate<JsonNode> rechazar = f -> false;
         boolean sinConexion;
         Runnable alRecibir;
@@ -321,6 +351,11 @@ class SincronizacionTest {
                     yield IntNode.valueOf(parametros.get("p_cambios").size());
                 }
                 case "bajar_cambios" -> bajar(parametros);
+                case "mi_perfil" -> JSON.createArrayNode();
+                case "registrar_caja" -> {
+                    cajasRegistradas.add(parametros);
+                    yield parametros;
+                }
                 default -> throw new ErrorNube(404, "No existe " + funcion);
             };
         }
