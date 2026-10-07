@@ -106,6 +106,6 @@ public class SurtidosPagina extends Pagina {
     private void ticket(SurtidoService.Resumen s) {
         SurtidoService.Detalle detalle = a.admin().surtidos().detalle(s.id());
         DialogoTicket.mostrar(a.dialogos(), a.avisos(), "Surtido " + s.folio(),
-                s.sucursal() + " · " + Dinero.formatear(s.costoCentavos()), TicketTexto.surtido(detalle), null);
+                s.sucursal() + " · " + Dinero.formatear(s.costoCentavos()), TicketTexto.lineasSurtido(detalle), null);
     }
 }

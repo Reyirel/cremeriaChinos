@@ -120,7 +120,8 @@ public class CreditoPagina extends Pagina {
                 a.avisos().exito("Abono registrado · Folio " + abono.folio());
                 alMostrar();
                 DialogoTicket.mostrar(a.dialogos(), a.avisos(), "Abono " + abono.folio(),
-                        s.sucursal().nombre() + " · " + Dinero.formatear(abono.montoCentavos()), TicketTexto.abono(abono), null);
+                        s.sucursal().nombre() + " · " + Dinero.formatear(abono.montoCentavos()),
+                        TicketTexto.lineasAbono(abono), null);
             } catch (RuntimeException e) {
                 a.avisos().error(AdminContexto.mensaje(e));
             }

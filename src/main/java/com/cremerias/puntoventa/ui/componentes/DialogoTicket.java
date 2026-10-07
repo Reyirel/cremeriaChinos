@@ -5,14 +5,18 @@ import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.StackPane;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 /** Vista previa de un ticket con opción de imprimirlo. */
 public final class DialogoTicket {
 
     private DialogoTicket() {
     }
 
-    public static void mostrar(Dialogos dialogos, Avisos avisos, String titulo, String subtitulo, String texto,
-                               Runnable alCerrar) {
+    public static void mostrar(Dialogos dialogos, Avisos avisos, String titulo, String subtitulo,
+                               List<TicketTexto.Linea> lineas, Runnable alCerrar) {
+        String texto = lineas.stream().map(TicketTexto.Linea::texto).collect(Collectors.joining("\n"));
         Dialogo d = new Dialogo(titulo, subtitulo, "mdi2r-receipt-text-outline", Dialogo.Tono.INFO);
         d.setPrefWidth(460);
         Label papel = new Label(texto);
@@ -32,7 +36,7 @@ public final class DialogoTicket {
             }
         };
         d.agregarBoton("Imprimir", "mdi2p-printer-outline", () -> {
-            String error = Impresion.imprimir(texto);
+            String error = Impresion.imprimir(lineas);
             if (error == null) {
                 avisos.exito("Ticket enviado a la impresora.");
             } else {

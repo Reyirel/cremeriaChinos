@@ -295,7 +295,7 @@ public class CortesController {
             return;
         }
         long diferencia = contado - fin.efectivoEsperado();
-        String texto = TicketTexto.corte(fin, contado, nombreDe(turno), Instant.now(), notas,
+        List<TicketTexto.Linea> texto = TicketTexto.lineasCorte(fin, contado, nombreDe(turno), Instant.now(), notas,
                 sesion.usuario().nombreCompleto());
         ctx.sincronizador().revisarAhora();
         fecha.setValue(LocalDate.now());
@@ -407,8 +407,8 @@ public class CortesController {
             return;
         }
         ResumenTurno r = ctx.caja().resumen(corte.turno());
-        String texto = TicketTexto.corte(r, corte.efectivoContado(), nombreDe(corte.turno()), corte.cerradoEn(),
-                corte.notas(), corte.cerradoPor());
+        List<TicketTexto.Linea> texto = TicketTexto.lineasCorte(r, corte.efectivoContado(), nombreDe(corte.turno()),
+                corte.cerradoEn(), corte.notas(), corte.cerradoPor());
         DialogoTicket.mostrar(dialogos, avisos, "Corte de " + corte.turno().dispositivoNombre(),
                 corte.turno().usuarioNombre(), texto, null);
     }

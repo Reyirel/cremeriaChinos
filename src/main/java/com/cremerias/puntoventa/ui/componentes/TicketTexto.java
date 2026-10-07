@@ -10,6 +10,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /** Genera el texto de los tickets (40 columnas, apto para impresora térmica de 80 mm). */
 public final class TicketTexto {
@@ -18,182 +19,206 @@ public final class TicketTexto {
     private static final DateTimeFormatter FECHA = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
     private static final String NEGOCIO = "CREMERÍA";
 
+    /** Qué tanto debe resaltar una línea al imprimirse (en pantalla todas se ven igual). */
+    public enum Enfasis { NORMAL, DESTACADO }
+
+    /** Una línea del ticket ya formateada, con su énfasis para la impresión. */
+    public record Linea(String texto, Enfasis enfasis) {
+    }
+
     private TicketTexto() {
     }
 
     public static String venta(Ticket t) {
-        StringBuilder sb = new StringBuilder();
-        centrar(sb, NEGOCIO);
-        centrar(sb, t.sucursal());
-        separador(sb);
-        sb.append("Folio:  ").append(t.folio()).append('\n');
-        sb.append("Fecha:  ").append(fecha(t.fecha())).append('\n');
-        sb.append("Cajero: ").append(t.cajero()).append('\n');
+        return construirVenta(t).texto();
+    }
+
+    public static List<Linea> lineasVenta(Ticket t) {
+        return construirVenta(t).lineas();
+    }
+
+    private static Renglones construirVenta(Ticket t) {
+        Renglones out = new Renglones();
+        out.centrar(NEGOCIO, Enfasis.DESTACADO);
+        out.centrar(t.sucursal(), Enfasis.DESTACADO);
+        out.separador();
+        out.agregar("Folio:  " + t.folio());
+        out.agregar("Fecha:  " + fecha(t.fecha()));
+        out.agregar("Cajero: " + t.cajero());
         if (t.cancelada()) {
-            separador(sb);
-            centrar(sb, "*** VENTA CANCELADA ***");
+            out.separador();
+            out.centrar("*** VENTA CANCELADA ***", Enfasis.DESTACADO);
         }
-        separador(sb);
+        out.separador();
         for (Ticket.Renglon r : t.renglones()) {
             for (String linea : ajustar(r.descripcion(), ANCHO)) {
-                sb.append(linea).append('\n');
+                out.agregar(linea);
             }
             String detalle = "  " + r.unidad().formatear(r.cantidad()) + " x "
                     + Dinero.formatear(r.precioCentavos()) + (r.unidad() == Unidad.KG ? "/kg" : "");
-            ambos(sb, detalle, Dinero.formatear(r.importeCentavos()));
+            out.ambos(detalle, Dinero.formatear(r.importeCentavos()));
         }
-        separador(sb);
-        ambos(sb, "TOTAL", Dinero.formatear(t.totalCentavos()));
+        out.separador();
+        out.ambos("TOTAL", Dinero.formatear(t.totalCentavos()), Enfasis.DESTACADO);
         for (Ticket.PagoTicket p : t.pagos()) {
-            ambos(sb, p.metodo().nombre(), Dinero.formatear(p.recibidoCentavos()));
+            out.ambos(p.metodo().nombre(), Dinero.formatear(p.recibidoCentavos()));
             if (p.referencia() != null && !p.referencia().isBlank()) {
-                sb.append("  Ref: ").append(p.referencia()).append('\n');
+                out.agregar("  Ref: " + p.referencia());
             }
         }
         if (t.cambioCentavos() > 0) {
-            ambos(sb, "Cambio", Dinero.formatear(t.cambioCentavos()));
+            out.ambos("Cambio", Dinero.formatear(t.cambioCentavos()));
         }
-        separador(sb);
-        sb.append("Artículos: ").append(t.articulos().stripTrailingZeros().toPlainString()).append('\n');
-        sb.append('\n');
-        centrar(sb, "¡Gracias por su compra!");
-        return sb.toString();
+        out.separador();
+        out.agregar("Artículos: " + t.articulos().stripTrailingZeros().toPlainString());
+        out.agregar("");
+        out.centrar("¡Gracias por su compra!", Enfasis.DESTACADO);
+        return out;
     }
 
     public static String corte(ResumenTurno r, long contado, String sucursal, Instant cierre, String notas,
                                String realizadoPor) {
-        StringBuilder sb = new StringBuilder();
-        centrar(sb, NEGOCIO);
-        centrar(sb, sucursal);
-        centrar(sb, "CORTE DE CAJA");
-        separador(sb);
-        sb.append("Caja:     ").append(r.turno().dispositivoNombre()).append('\n');
-        sb.append("Cajero:   ").append(r.turno().usuarioNombre()).append('\n');
+        return construirCorte(r, contado, sucursal, cierre, notas, realizadoPor).texto();
+    }
+
+    public static List<Linea> lineasCorte(ResumenTurno r, long contado, String sucursal, Instant cierre, String notas,
+                                          String realizadoPor) {
+        return construirCorte(r, contado, sucursal, cierre, notas, realizadoPor).lineas();
+    }
+
+    private static Renglones construirCorte(ResumenTurno r, long contado, String sucursal, Instant cierre,
+                                            String notas, String realizadoPor) {
+        Renglones out = new Renglones();
+        out.centrar(NEGOCIO, Enfasis.DESTACADO);
+        out.centrar(sucursal, Enfasis.DESTACADO);
+        out.centrar("CORTE DE CAJA", Enfasis.DESTACADO);
+        out.separador();
+        out.agregar("Caja:     " + r.turno().dispositivoNombre());
+        out.agregar("Cajero:   " + r.turno().usuarioNombre());
         if (realizadoPor != null && !realizadoPor.isBlank() && !realizadoPor.equals(r.turno().usuarioNombre())) {
-            sb.append("Corte:    ").append(realizadoPor).append('\n');
+            out.agregar("Corte:    " + realizadoPor);
         }
-        sb.append("Apertura: ").append(fecha(r.turno().abiertoEn())).append('\n');
-        sb.append("Cierre:   ").append(fecha(cierre)).append('\n');
-        separador(sb);
-        ambos(sb, "Ventas en efectivo", Dinero.formatear(r.ventasEfectivo()));
-        ambos(sb, "+ Entradas", Dinero.formatear(r.entradas()));
-        ambos(sb, "- Retiros", Dinero.formatear(r.retiros()));
-        ambos(sb, "= Efectivo esperado", Dinero.formatear(r.efectivoEsperado()));
-        ambos(sb, "Efectivo contado", Dinero.formatear(contado));
+        out.agregar("Apertura: " + fecha(r.turno().abiertoEn()));
+        out.agregar("Cierre:   " + fecha(cierre));
+        out.separador();
+        out.ambos("Ventas en efectivo", Dinero.formatear(r.ventasEfectivo()));
+        out.ambos("+ Entradas", Dinero.formatear(r.entradas()));
+        out.ambos("- Retiros", Dinero.formatear(r.retiros()));
+        out.ambos("= Efectivo esperado", Dinero.formatear(r.efectivoEsperado()), Enfasis.DESTACADO);
+        out.ambos("Efectivo contado", Dinero.formatear(contado));
         long diferencia = contado - r.efectivoEsperado();
-        ambos(sb, diferencia < 0 ? "FALTANTE" : diferencia > 0 ? "SOBRANTE" : "Diferencia",
-                Dinero.formatear(diferencia));
-        separador(sb);
-        ambos(sb, "Ventas con tarjeta", Dinero.formatear(r.ventasTarjeta()));
-        ambos(sb, "Ventas por transferencia", Dinero.formatear(r.ventasTransferencia()));
-        ambos(sb, "TOTAL VENDIDO", Dinero.formatear(r.totalVentas()));
-        ambos(sb, "Número de ventas", String.valueOf(r.numeroVentas()));
-        ambos(sb, "Canceladas (" + r.numeroCanceladas() + ")", Dinero.formatear(r.totalCancelado()));
+        out.ambos(diferencia < 0 ? "FALTANTE" : diferencia > 0 ? "SOBRANTE" : "Diferencia",
+                Dinero.formatear(diferencia), Enfasis.DESTACADO);
+        out.separador();
+        out.ambos("Ventas con tarjeta", Dinero.formatear(r.ventasTarjeta()));
+        out.ambos("Ventas por transferencia", Dinero.formatear(r.ventasTransferencia()));
+        out.ambos("TOTAL VENDIDO", Dinero.formatear(r.totalVentas()), Enfasis.DESTACADO);
+        out.ambos("Número de ventas", String.valueOf(r.numeroVentas()));
+        out.ambos("Canceladas (" + r.numeroCanceladas() + ")", Dinero.formatear(r.totalCancelado()));
         if (notas != null && !notas.isBlank()) {
-            separador(sb);
-            sb.append("Notas:\n");
+            out.separador();
+            out.agregar("Notas:");
             for (String linea : ajustar(notas, ANCHO)) {
-                sb.append(linea).append('\n');
+                out.agregar(linea);
             }
         }
-        sb.append("\n\n");
-        centrar(sb, "______________________");
-        centrar(sb, "Firma del cajero");
-        return sb.toString();
+        out.agregar("");
+        out.agregar("");
+        out.centrar("______________________");
+        out.centrar("Firma del cajero");
+        return out;
     }
 
     public static String surtido(com.cremerias.puntoventa.service.admin.SurtidoService.Detalle d) {
+        return construirSurtido(d).texto();
+    }
+
+    public static List<Linea> lineasSurtido(com.cremerias.puntoventa.service.admin.SurtidoService.Detalle d) {
+        return construirSurtido(d).lineas();
+    }
+
+    private static Renglones construirSurtido(com.cremerias.puntoventa.service.admin.SurtidoService.Detalle d) {
         var r = d.resumen();
-        StringBuilder sb = new StringBuilder();
-        centrar(sb, NEGOCIO);
-        centrar(sb, "ALMACÉN CENTRAL");
-        centrar(sb, "SURTIDO A SUCURSAL");
-        separador(sb);
-        sb.append("Folio:    ").append(r.folio()).append('\n');
-        sb.append("Fecha:    ").append(fecha(r.fecha())).append('\n');
-        sb.append("Destino:  ").append(r.sucursal()).append('\n');
-        sb.append("Pago:     ").append(r.formaPago().nombre()).append('\n');
-        sb.append("Surtió:   ").append(r.usuario()).append('\n');
+        Renglones out = new Renglones();
+        out.centrar(NEGOCIO, Enfasis.DESTACADO);
+        out.centrar("ALMACÉN CENTRAL", Enfasis.DESTACADO);
+        out.centrar("SURTIDO A SUCURSAL", Enfasis.DESTACADO);
+        out.separador();
+        out.agregar("Folio:    " + r.folio());
+        out.agregar("Fecha:    " + fecha(r.fecha()));
+        out.agregar("Destino:  " + r.sucursal());
+        out.agregar("Pago:     " + r.formaPago().nombre());
+        out.agregar("Surtió:   " + r.usuario());
         if (r.ordenFolio() != null) {
-            sb.append("Orden:    ").append(r.ordenFolio()).append('\n');
+            out.agregar("Orden:    " + r.ordenFolio());
         }
-        separador(sb);
+        out.separador();
         for (var l : d.lineas()) {
             for (String linea : ajustar(l.producto(), ANCHO)) {
-                sb.append(linea).append('\n');
+                out.agregar(linea);
             }
-            ambos(sb, "  " + com.cremerias.puntoventa.util.Cantidades.formatear(l.unidad(), l.cantidad()),
+            out.ambos("  " + com.cremerias.puntoventa.util.Cantidades.formatear(l.unidad(), l.cantidad()),
                     Dinero.formatear(l.costoCentavos()));
             for (var precio : l.precios().entrySet()) {
-                sb.append("    Precio ").append(precio.getKey()).append(": ").append(Dinero.formatear(precio.getValue()))
-                        .append('\n');
+                out.agregar("    Precio " + precio.getKey() + ": " + Dinero.formatear(precio.getValue()));
             }
         }
-        separador(sb);
-        ambos(sb, "TOTAL ENVIADO (COSTO)", Dinero.formatear(r.costoCentavos()));
-        ambos(sb, "Valor a precio de venta", Dinero.formatear(r.ventaCentavos()));
+        out.separador();
+        out.ambos("TOTAL ENVIADO (COSTO)", Dinero.formatear(r.costoCentavos()), Enfasis.DESTACADO);
+        out.ambos("Valor a precio de venta", Dinero.formatear(r.ventaCentavos()));
         if (r.formaPago() == com.cremerias.puntoventa.service.admin.SurtidoService.FormaPago.CREDITO) {
-            ambos(sb, "Saldo de crédito", Dinero.formatear(d.saldoCredito()));
+            out.ambos("Saldo de crédito", Dinero.formatear(d.saldoCredito()));
         }
         if (d.notas() != null) {
-            separador(sb);
+            out.separador();
             for (String linea : ajustar("Notas: " + d.notas(), ANCHO)) {
-                sb.append(linea).append('\n');
+                out.agregar(linea);
             }
         }
-        sb.append("\n\n");
-        centrar(sb, "____________      ____________");
-        centrar(sb, "  Entregó            Recibió  ");
-        return sb.toString();
+        out.agregar("");
+        out.agregar("");
+        out.centrar("____________      ____________");
+        out.centrar("  Entregó            Recibió  ");
+        return out;
     }
 
     public static String abono(com.cremerias.puntoventa.service.admin.CreditoService.Abono a) {
-        StringBuilder sb = new StringBuilder();
-        centrar(sb, NEGOCIO);
-        centrar(sb, "ALMACÉN CENTRAL");
-        centrar(sb, "ABONO A CRÉDITO");
-        separador(sb);
-        sb.append("Folio:    ").append(a.folio()).append('\n');
-        sb.append("Fecha:    ").append(fecha(a.fecha())).append('\n');
-        sb.append("Sucursal: ").append(a.sucursal().nombre()).append('\n');
-        sb.append("Recibió:  ").append(a.usuario()).append('\n');
-        separador(sb);
-        ambos(sb, "Saldo anterior", Dinero.formatear(a.saldoAnterior()));
-        ambos(sb, "ABONO", Dinero.formatear(a.montoCentavos()));
-        ambos(sb, "Saldo nuevo", Dinero.formatear(a.saldoNuevo()));
+        return construirAbono(a).texto();
+    }
+
+    public static List<Linea> lineasAbono(com.cremerias.puntoventa.service.admin.CreditoService.Abono a) {
+        return construirAbono(a).lineas();
+    }
+
+    private static Renglones construirAbono(com.cremerias.puntoventa.service.admin.CreditoService.Abono a) {
+        Renglones out = new Renglones();
+        out.centrar(NEGOCIO, Enfasis.DESTACADO);
+        out.centrar("ALMACÉN CENTRAL", Enfasis.DESTACADO);
+        out.centrar("ABONO A CRÉDITO", Enfasis.DESTACADO);
+        out.separador();
+        out.agregar("Folio:    " + a.folio());
+        out.agregar("Fecha:    " + fecha(a.fecha()));
+        out.agregar("Sucursal: " + a.sucursal().nombre());
+        out.agregar("Recibió:  " + a.usuario());
+        out.separador();
+        out.ambos("Saldo anterior", Dinero.formatear(a.saldoAnterior()));
+        out.ambos("ABONO", Dinero.formatear(a.montoCentavos()), Enfasis.DESTACADO);
+        out.ambos("Saldo nuevo", Dinero.formatear(a.saldoNuevo()), Enfasis.DESTACADO);
         if (a.nota() != null && !a.nota().isBlank()) {
-            separador(sb);
+            out.separador();
             for (String linea : ajustar("Nota: " + a.nota(), ANCHO)) {
-                sb.append(linea).append('\n');
+                out.agregar(linea);
             }
         }
-        sb.append("\n\n");
-        centrar(sb, "______________________");
-        centrar(sb, "Firma");
-        return sb.toString();
+        out.agregar("");
+        out.agregar("");
+        out.centrar("______________________");
+        out.centrar("Firma");
+        return out;
     }
 
     private static String fecha(Instant instante) {
         return FECHA.format(instante.atZone(ZoneId.systemDefault()));
-    }
-
-    private static void separador(StringBuilder sb) {
-        sb.append("-".repeat(ANCHO)).append('\n');
-    }
-
-    private static void centrar(StringBuilder sb, String texto) {
-        int espacios = Math.max(0, (ANCHO - texto.length()) / 2);
-        sb.append(" ".repeat(espacios)).append(texto).append('\n');
-    }
-
-    private static void ambos(StringBuilder sb, String izquierda, String derecha) {
-        int espacios = ANCHO - izquierda.length() - derecha.length();
-        if (espacios < 1) {
-            sb.append(izquierda).append('\n').append(" ".repeat(Math.max(0, ANCHO - derecha.length())))
-                    .append(derecha).append('\n');
-        } else {
-            sb.append(izquierda).append(" ".repeat(espacios)).append(derecha).append('\n');
-        }
     }
 
     static List<String> ajustar(String texto, int ancho) {
@@ -213,5 +238,54 @@ public final class TicketTexto {
             lineas.add(actual.toString());
         }
         return lineas;
+    }
+
+    /** Acumula las líneas de un ticket: sirve tanto para mostrarlo en pantalla (texto plano,
+     *  uniendo las líneas) como para imprimirlo resaltando lo importante en vez de parejo. */
+    private static final class Renglones {
+        private final List<Linea> lineas = new ArrayList<>();
+
+        void agregar(String texto) {
+            agregar(texto, Enfasis.NORMAL);
+        }
+
+        void agregar(String texto, Enfasis enfasis) {
+            lineas.add(new Linea(texto, enfasis));
+        }
+
+        void separador() {
+            agregar("-".repeat(ANCHO));
+        }
+
+        void centrar(String texto) {
+            centrar(texto, Enfasis.NORMAL);
+        }
+
+        void centrar(String texto, Enfasis enfasis) {
+            int espacios = Math.max(0, (ANCHO - texto.length()) / 2);
+            agregar(" ".repeat(espacios) + texto, enfasis);
+        }
+
+        void ambos(String izquierda, String derecha) {
+            ambos(izquierda, derecha, Enfasis.NORMAL);
+        }
+
+        void ambos(String izquierda, String derecha, Enfasis enfasis) {
+            int espacios = ANCHO - izquierda.length() - derecha.length();
+            if (espacios < 1) {
+                agregar(izquierda, enfasis);
+                agregar(" ".repeat(Math.max(0, ANCHO - derecha.length())) + derecha, enfasis);
+            } else {
+                agregar(izquierda + " ".repeat(espacios) + derecha, enfasis);
+            }
+        }
+
+        List<Linea> lineas() {
+            return lineas;
+        }
+
+        String texto() {
+            return lineas.stream().map(Linea::texto).collect(Collectors.joining("\n")) + "\n";
+        }
     }
 }

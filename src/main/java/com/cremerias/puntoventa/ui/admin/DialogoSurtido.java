@@ -311,7 +311,7 @@ final class DialogoSurtido {
                 alTerminar.run();
                 DialogoTicket.mostrar(a.dialogos(), a.avisos(), "Surtido " + detalle.resumen().folio(),
                         detalle.resumen().sucursal() + " · " + Dinero.formatear(detalle.resumen().costoCentavos()),
-                        TicketTexto.surtido(detalle), null);
+                        TicketTexto.lineasSurtido(detalle), null);
             } catch (RuntimeException e) {
                 a.avisos().error(AdminContexto.mensaje(e));
             }

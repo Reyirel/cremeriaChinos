@@ -1033,11 +1033,11 @@ public class CajaController {
         ctx.sincronizador().revisarAhora();
         actualizarInfoTurno();
         revisarSinVenta();
-        DialogoVentaExitosa.mostrar(dialogos, ticket, () -> imprimir(TicketTexto.venta(ticket)), this::enfocarBusqueda);
+        DialogoVentaExitosa.mostrar(dialogos, ticket, () -> imprimir(TicketTexto.lineasVenta(ticket)), this::enfocarBusqueda);
     }
 
-    private void imprimir(String texto) {
-        String error = Impresion.imprimir(texto);
+    private void imprimir(List<TicketTexto.Linea> lineas) {
+        String error = Impresion.imprimir(lineas);
         if (error == null) {
             avisos.exito("Ticket enviado a la impresora.");
         } else {
@@ -1163,7 +1163,7 @@ public class CajaController {
         Ticket ticket = ctx.ventas().ticket(venta.id());
         DialogoTicket.mostrar(dialogos, avisos, "Ticket " + ticket.folio(),
                 ticket.cancelada() ? "Venta cancelada" : "Total " + Dinero.formatear(ticket.totalCentavos()),
-                TicketTexto.venta(ticket), null);
+                TicketTexto.lineasVenta(ticket), null);
     }
 
     private void cancelarVentaRegistrada(VentaResumen venta, Runnable refrescar) {
@@ -1234,7 +1234,7 @@ public class CajaController {
                 return;
             }
             String sucursal = ctx.nombreSucursal(sesion.usuario().sucursalId());
-            String texto = TicketTexto.corte(final_, contado, sucursal, Instant.now(), notas,
+            List<TicketTexto.Linea> texto = TicketTexto.lineasCorte(final_, contado, sucursal, Instant.now(), notas,
                     sesion.usuario().nombreCompleto());
             long diferencia = contado - final_.efectivoEsperado();
             turno = null;
