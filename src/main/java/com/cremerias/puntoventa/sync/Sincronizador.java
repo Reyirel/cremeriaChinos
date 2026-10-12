@@ -106,6 +106,10 @@ public class Sincronizador implements AutoCloseable {
             if (interrumpidos > 0) {
                 log.info("{} cambios se estaban subiendo cuando se cerró la app: vuelven a la cola", interrumpidos);
             }
+            int rechazados = database.con(outbox::reintentarRechazados);
+            if (rechazados > 0) {
+                log.info("{} cambios que la nube había rechazado se vuelven a intentar", rechazados);
+            }
         }
         ejecutor.scheduleWithFixedDelay(this::revisar, 0, INTERVALO_SEGUNDOS, TimeUnit.SECONDS);
     }

@@ -17,7 +17,12 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Sube a Supabase los cambios locales de {@code sync_outbox}.
@@ -31,6 +36,12 @@ class Subida {
 
     private static final Logger log = LoggerFactory.getLogger(Subida.class);
     static final int LOTE = 200;
+    /**
+     * Postgres al faltar el registro padre: {@code insert or update on table "surtidos" violates
+     * foreign key constraint "…" (Key … is not present in table "sucursales".)}.
+     */
+    private static final Pattern PADRE_FALTANTE = Pattern.compile(
+            "on table \"(\\w+)\" violates foreign key constraint .*not present in table \"(\\w+)\"");
 
     private final Database database;
     private final SyncOutboxRepository outbox = new SyncOutboxRepository();
@@ -145,8 +156,12 @@ class Subida {
                 Cambio rechazado = lote.getFirst();
                 log.warn("La nube rechazó el cambio {} de {}: {}", rechazado.outboxId(),
                         rechazado.filas().getFirst().path("tabla").asText(), e.getMessage());
+                Padres faltantes = padresFaltantes(nube, rechazado, e.getMessage());
                 database.enTransaccion(c -> {
                     outbox.marcarError(c, rechazado.outboxId(), e.getMessage());
+                    for (String id : faltantes.ids()) {
+                        outbox.encolar(c, faltantes.tabla(), id, Tiempo.ahora());
+                    }
                     return null;
                 });
                 return 0;
@@ -159,6 +174,78 @@ class Subida {
             return null;
         });
         return lote.size();
+    }
+
+    /** Registros de {@code tabla} que la nube no tiene y la caja sí: se vuelven a subir. */
+    record Padres(String tabla, List<String> ids) {
+        static final Padres NINGUNO = new Padres(null, List.of());
+    }
+
+    /**
+     * Si la nube rechazó el cambio porque le falta el registro al que apunta (p. ej. una sucursal
+     * que se borró a mano en Supabase, pero que esta caja tiene y ya había subido), devuelve esos
+     * registros para volver a encolarlos: en la siguiente vuelta viajan junto con el cambio. Solo se
+     * reenvían los que de verdad faltan en la nube, para no pisar una versión más nueva.
+     */
+    private Padres padresFaltantes(Nube nube, Cambio rechazado, String error) throws IOException {
+        Matcher m = PADRE_FALTANTE.matcher(String.valueOf(error));
+        if (!m.find() || !TablasNube.seSincroniza(m.group(2))) {
+            return Padres.NINGUNO;
+        }
+        String hija = m.group(1);
+        String padre = m.group(2);
+        String llave = TablasNube.llave(padre);
+        List<String> referidos = database.con(c -> {
+            List<String> columnas = new ArrayList<>();
+            try (PreparedStatement ps = c.prepareStatement(
+                    "SELECT \"from\" FROM pragma_foreign_key_list(?) WHERE \"table\" = ? COLLATE NOCASE")) {
+                ps.setString(1, hija);
+                ps.setString(2, padre);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        columnas.add(rs.getString(1));
+                    }
+                }
+            }
+            Set<String> valores = new LinkedHashSet<>();
+            for (ObjectNode cambio : rechazado.filas()) {
+                if (cambio.path("tabla").asText().equals(hija)) {
+                    for (String columna : columnas) {
+                        String valor = cambio.path("fila").path(columna).asText(null);
+                        if (valor != null && !valor.isBlank() && existe(c, padre, llave, valor)) {
+                            valores.add(valor);
+                        }
+                    }
+                }
+            }
+            return new ArrayList<>(valores);
+        });
+        if (referidos.isEmpty()) {
+            return Padres.NINGUNO;
+        }
+        Set<String> enLaNube = new HashSet<>();
+        try {
+            nube.consultar(padre + "?select=" + llave + "&" + llave + "=in.(" + String.join(",", referidos) + ")")
+                    .forEach(fila -> enLaNube.add(fila.path(llave).asText()));
+        } catch (ErrorNube e) {
+            log.warn("No se pudo revisar si la nube tiene {} {}: {}", padre, referidos, e.getMessage());
+            return Padres.NINGUNO;
+        }
+        List<String> faltan = referidos.stream().filter(id -> !enLaNube.contains(id)).toList();
+        if (!faltan.isEmpty()) {
+            log.warn("A la nube le falta {} {} (lo usa {}): se vuelve a subir desde la caja", padre, faltan, hija);
+        }
+        return new Padres(padre, faltan);
+    }
+
+    private static boolean existe(Connection c, String tabla, String llave, String valor) throws SQLException {
+        // tabla y llave vienen de TablasNube, no de datos.
+        try (PreparedStatement ps = c.prepareStatement("SELECT 1 FROM " + tabla + " WHERE " + llave + " = ?")) {
+            ps.setString(1, valor);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
+        }
     }
 
     private static List<Long> ids(List<Cambio> lote) {

@@ -83,6 +83,34 @@ public class SyncOutboxRepository {
         }
     }
 
+    /** Encola un registro para subirlo (como lo hacen los triggers: sin duplicar uno que ya espera). */
+    public void encolar(Connection c, String tabla, String registroId, String cuando) throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement("""
+                INSERT INTO sync_outbox (tabla, registro_id, operacion, creado_en)
+                SELECT ?, ?, 'UPSERT', ?
+                WHERE NOT EXISTS (SELECT 1 FROM sync_outbox
+                                  WHERE tabla = ? AND registro_id = ? AND enviado_en IS NULL)""")) {
+            ps.setString(1, tabla);
+            ps.setString(2, registroId);
+            ps.setString(3, cuando);
+            ps.setString(4, tabla);
+            ps.setString(5, registroId);
+            ps.executeUpdate();
+        }
+    }
+
+    /**
+     * Al arrancar: los cambios que la nube rechazó tantas veces que ya no se reintentaban vuelven a
+     * intentarse (la causa pudo corregirse en la nube o en una versión nueva de la app).
+     */
+    public int reintentarRechazados(Connection c) throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement(
+                "UPDATE sync_outbox SET intentos = 0 WHERE enviado_en IS NULL AND intentos >= ?")) {
+            ps.setInt(1, MAX_INTENTOS);
+            return ps.executeUpdate();
+        }
+    }
+
     /** Al arrancar: lo que se quedó "enviándose" (la app se cerró a medio envío) vuelve a la cola. */
     public int reiniciarEnvios(Connection c) throws SQLException {
         try (PreparedStatement ps = c.prepareStatement("UPDATE sync_outbox SET enviado_en = NULL WHERE enviado_en = ?")) {

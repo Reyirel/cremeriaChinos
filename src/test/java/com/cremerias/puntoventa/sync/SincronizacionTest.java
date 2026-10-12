@@ -4,6 +4,7 @@ import com.cremerias.puntoventa.db.Database;
 import com.cremerias.puntoventa.db.Migraciones;
 import com.cremerias.puntoventa.model.ModoConexion;
 import com.cremerias.puntoventa.repository.DispositivoRepository;
+import com.cremerias.puntoventa.repository.SyncOutboxRepository;
 import com.cremerias.puntoventa.security.PasswordHasher;
 import com.cremerias.puntoventa.service.AuthService;
 import com.cremerias.puntoventa.service.DatosDemo;
@@ -26,10 +27,15 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -126,6 +132,76 @@ class SincronizacionTest {
         // El cambio se volvió a encolar y subió con el nombre nuevo.
         assertTrue(nube.filasSubidas().stream().anyMatch(f -> f.path("fila").path("id").asText().equals(producto)
                 && f.path("fila").path("nombre").asText().equals("Cambiado")));
+        assertEquals(0, contar("SELECT COUNT(*) FROM sync_outbox WHERE enviado_en IS NULL"));
+    }
+
+    @Test
+    void siALaNubeLeFaltaElRegistroPadreLaCajaLoVuelveASubir() throws Exception {
+        String sucursal = metaDeUnaSucursalQueLaNubeNoTiene();
+        // Alguien borró la sucursal a mano en Supabase; la caja la tiene y cree que ya la subió.
+        nube.perdidos.add(sucursal);
+
+        // La meta queda rechazada; la sucursal (solo ella) se encola otra vez y sube en la misma vuelta.
+        assertEquals(1, new Subida(database).subir(nube));
+        assertEquals(1, contar("SELECT COUNT(*) FROM sync_outbox WHERE enviado_en IS NULL"));
+        assertEquals(1, contar("SELECT COUNT(*) FROM sync_outbox WHERE enviado_en IS NULL AND intentos = 1"
+                + " AND tabla = 'metas_sucursal'"));
+        assertTrue(nube.filasSubidas().stream().anyMatch(f -> f.path("tabla").asText().equals("sucursales")
+                && f.path("fila").path("id").asText().equals(sucursal)));
+
+        // En la siguiente vuelta la meta ya entra.
+        assertEquals(1, new Subida(database).subir(nube));
+        assertEquals(0, contar("SELECT COUNT(*) FROM sync_outbox WHERE enviado_en IS NULL"));
+    }
+
+    @Test
+    void siLaNubeSiTieneElRegistroPadreNoLoVuelveASubir() throws Exception {
+        metaDeUnaSucursalQueLaNubeNoTiene();
+        // La nube rechaza por la sucursal, pero al consultarla sí la tiene: subirla de nuevo
+        // podría pisar una versión más nueva.
+
+        assertEquals(0, new Subida(database).subir(nube));
+        assertEquals(0, contar("SELECT COUNT(*) FROM sync_outbox WHERE enviado_en IS NULL AND tabla = 'sucursales'"));
+    }
+
+    /** Sube todo y crea una meta que la nube rechaza mientras no le llegue su sucursal en el mismo lote. */
+    private String metaDeUnaSucursalQueLaNubeNoTiene() throws Exception {
+        conDatosDeEjemplo();
+        new Subida(database).subir(nube);
+        String sucursal = consultar("SELECT id FROM sucursales WHERE es_almacen = 0 LIMIT 1");
+        int yaSubidas = nube.filasSubidas().size();
+        nube.errorDelLote = cambios -> {
+            List<JsonNode> filas = StreamSupport.stream(cambios.spliterator(), false).toList();
+            boolean usaLaSucursal = filas.stream().anyMatch(f -> f.path("tabla").asText().equals("metas_sucursal")
+                    && f.path("fila").path("sucursal_id").asText().equals(sucursal));
+            // La sucursal le llega en este lote o en uno anterior.
+            boolean laTiene = Stream.concat(filas.stream(), nube.filasSubidas().stream().skip(yaSubidas))
+                    .anyMatch(f -> f.path("tabla").asText().equals("sucursales")
+                            && f.path("fila").path("id").asText().equals(sucursal));
+            return usaLaSucursal && !laTiene
+                    ? "insert or update on table \"metas_sucursal\" violates foreign key constraint"
+                    + " \"metas_sucursal_sucursal_id_fkey\" (Key is not present in table \"sucursales\".)"
+                    : null;
+        };
+        database.con(c -> c.createStatement().executeUpdate("""
+                INSERT INTO metas_sucursal (id, sucursal_id, anio, mes, meta_centavos, creado_en, actualizado_en)
+                VALUES ('meta-1', '%s', 2026, 10, 100000, '2026-10-12T00:00:00.000Z', '2026-10-12T00:00:00.000Z')"""
+                .formatted(sucursal)));
+        return sucursal;
+    }
+
+    @Test
+    void alAbrirLaAppSeReintentanLosCambiosQueLaNubeHabiaRechazado() throws Exception {
+        conDatosDeEjemplo();
+        database.con(c -> c.createStatement().executeUpdate("UPDATE sync_outbox SET intentos = "
+                + SyncOutboxRepository.MAX_INTENTOS + " WHERE id = (SELECT MIN(id) FROM sync_outbox)"));
+        int encolados = contar("SELECT COUNT(*) FROM sync_outbox WHERE enviado_en IS NULL");
+
+        // Ya no se reintenta solo…
+        assertEquals(encolados - 1, new Subida(database).subir(nube));
+        // …hasta que se abre la app otra vez.
+        assertEquals(1, (int) database.con(new SyncOutboxRepository()::reintentarRechazados));
+        assertEquals(1, new Subida(database).subir(nube));
         assertEquals(0, contar("SELECT COUNT(*) FROM sync_outbox WHERE enviado_en IS NULL"));
     }
 
@@ -311,6 +387,10 @@ class SincronizacionTest {
         final Map<String, List<ObjectNode>> tablas = new HashMap<>();
         final List<ObjectNode> cajasRegistradas = new ArrayList<>();
         Predicate<JsonNode> rechazar = f -> false;
+        /** Error con el que la nube rechaza un lote completo (nulo = lo acepta). */
+        Function<JsonNode, String> errorDelLote = cambios -> null;
+        /** Registros que se borraron a mano en la nube. */
+        final Set<String> perdidos = new HashSet<>();
         boolean sinConexion;
         Runnable alRecibir;
         int llamadasBajada;
@@ -346,6 +426,10 @@ class SincronizacionTest {
                         if (rechazar.test(cambio)) {
                             throw new ErrorNube(409, "rechazado");
                         }
+                    }
+                    String error = errorDelLote.apply(parametros.get("p_cambios"));
+                    if (error != null) {
+                        throw new ErrorNube(409, error);
                     }
                     subidas.add(parametros);
                     yield IntNode.valueOf(parametros.get("p_cambios").size());
@@ -389,9 +473,18 @@ class SincronizacionTest {
                     && fila.path(llave).asText().compareTo(cursor.path("llave").asText("")) > 0;
         }
 
+        /** Solo {@code tabla?select=llave&llave=in.(a,b)}: todo existe salvo lo perdido. */
         @Override
         public ArrayNode consultar(String consulta) {
-            throw new UnsupportedOperationException();
+            String llave = consulta.substring(consulta.indexOf("select=") + 7, consulta.indexOf('&'));
+            String ids = consulta.substring(consulta.indexOf("in.(") + 4, consulta.lastIndexOf(')'));
+            ArrayNode filas = JSON.createArrayNode();
+            for (String id : ids.split(",")) {
+                if (!perdidos.contains(id)) {
+                    filas.addObject().put(llave, id);
+                }
+            }
+            return filas;
         }
     }
 }

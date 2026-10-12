@@ -51,14 +51,20 @@ public class Database {
         }
     }
 
-    /** Ejecuta varias sentencias de forma atómica: o se guardan todas o ninguna. */
+    /**
+     * Ejecuta varias sentencias de forma atómica: o se guardan todas o ninguna.
+     *
+     * <p>Toma el bloqueo de escritura desde el inicio. Con una transacción normal, si lee y luego
+     * escribe mientras otra conexión (p. ej. la sincronización) ya guardó algo, SQLite la rechaza
+     * al momento ({@code SQLITE_BUSY_SNAPSHOT}) en vez de esperar; así espera su turno.
+     */
     public <T> T enTransaccion(SqlFunction<T> operacion) {
-        return transaccion(config, operacion);
+        return transaccion(configInmediata, operacion);
     }
 
     /**
-     * Como {@link #enTransaccion}, pero toma el bloqueo de escritura desde el inicio: nadie más
-     * escribe mientras dura (lo usa la sincronización para saber qué filas generó ella misma).
+     * Toma el bloqueo de escritura desde el inicio: nadie más escribe mientras dura (lo usa la
+     * sincronización para saber qué filas generó ella misma). Hoy es igual a {@link #enTransaccion}.
      */
     public <T> T enTransaccionInmediata(SqlFunction<T> operacion) {
         return transaccion(configInmediata, operacion);
