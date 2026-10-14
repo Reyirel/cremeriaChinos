@@ -29,9 +29,9 @@ public class ProductoAdminService {
      * Gramaje y merma en gramos, por unidad base (por pieza, o por kilo en productos por kilo).
      * {@code avisoSinVenta} es opcional (nulo = sin aviso propio).
      */
-    public record Datos(String id, String nombre, String categoria, String clave, String codigoInventario,
-                        Unidad unidad, boolean sujetoMerma, Disponibilidad disponibilidad, Temporada temporada,
-                        List<Presentacion> presentaciones, List<String> presentacionesEliminadas,
+    public record Datos(String id, String nombre, String categoria, String marca, String clave,
+                        String codigoInventario, Unidad unidad, boolean sujetoMerma, Disponibilidad disponibilidad,
+                        Temporada temporada, List<Presentacion> presentaciones, List<String> presentacionesEliminadas,
                         BigDecimal gramajeGramos, BigDecimal mermaGramos, AvisoSinVenta avisoSinVenta) {
     }
 
@@ -80,16 +80,17 @@ public class ProductoAdminService {
             }
             String categoriaId = d.categoria() == null || d.categoria().isBlank() ? null
                     : productos.categoria(c, d.categoria());
+            String marca = d.marca() == null || d.marca().isBlank() ? null : d.marca().strip();
             boolean nuevo = d.id() == null;
             String id = nuevo ? Ids.nuevo() : d.id();
             BigDecimal gramaje = d.gramajeGramos();
             BigDecimal merma = d.sujetoMerma() && d.mermaGramos() != null ? d.mermaGramos() : BigDecimal.ZERO;
             if (nuevo) {
-                productos.insertar(c, id, d.nombre().strip(), categoriaId, clave, codigoInventario, d.unidad(),
+                productos.insertar(c, id, d.nombre().strip(), categoriaId, marca, clave, codigoInventario, d.unidad(),
                         d.sujetoMerma(), d.disponibilidad(), gramaje, merma);
             } else {
-                productos.actualizar(c, id, d.nombre().strip(), categoriaId, clave, codigoInventario, d.sujetoMerma(),
-                        d.disponibilidad(), gramaje, merma);
+                productos.actualizar(c, id, d.nombre().strip(), categoriaId, marca, clave, codigoInventario,
+                        d.sujetoMerma(), d.disponibilidad(), gramaje, merma);
             }
             productos.guardarAviso(c, id, d.avisoSinVenta());
             Temporada temporada = d.disponibilidad() == Disponibilidad.TEMPORADA ? d.temporada() : null;

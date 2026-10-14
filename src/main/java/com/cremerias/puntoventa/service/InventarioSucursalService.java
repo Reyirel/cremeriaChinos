@@ -3,9 +3,13 @@ package com.cremerias.puntoventa.service;
 import com.cremerias.puntoventa.db.Database;
 import com.cremerias.puntoventa.model.Presentacion;
 import com.cremerias.puntoventa.model.ProductoCatalogo;
+import com.cremerias.puntoventa.model.Rol;
+import com.cremerias.puntoventa.model.Sucursal;
 import com.cremerias.puntoventa.model.Unidad;
+import com.cremerias.puntoventa.model.Usuario;
 import com.cremerias.puntoventa.repository.LoteRepository;
 import com.cremerias.puntoventa.repository.ProductoRepository;
+import com.cremerias.puntoventa.util.Tiempo;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -13,10 +17,16 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Productos de una sucursal con su existencia, precios y mínimo/máximo, solo para consulta
@@ -130,6 +140,153 @@ public class InventarioSucursalService {
                 }
             }
         });
+    }
+
+    /** Estado de reabasto de un producto en la sucursal, para el panel de solo lectura del administrador. */
+    public enum EstadoInventario { AGOTADO, EN_MINIMO, POR_REABASTECER, OK }
+
+    /** Cuánto se vendió de un producto en el periodo filtrado (cantidad e importe). */
+    private record VentaProducto(BigDecimal cantidad, long importeCentavos) {
+    }
+
+    /**
+     * Fila de {@link #listar} con lo que además necesita el administrador: costo promedio y valor
+     * del inventario al costo, lo vendido en el periodo, y última venta/días sin venta.
+     */
+    public record FilaDetallada(Sucursal sucursal, Fila fila, EstadoInventario estado, long costoPromedioCentavos,
+                                long valorInventarioCentavos, BigDecimal cantidadVendida, long importeVendidoCentavos,
+                                Instant ultimaVenta, Long diasSinVenta) {
+    }
+
+    /** Un movimiento de inventario de un producto en una sucursal, para el detalle del administrador. */
+    public record Movimiento(String tipo, BigDecimal cantidad, Instant fecha, String notas) {
+    }
+
+    /**
+     * Como {@link #listar}, pero con costo/valor de inventario, lo vendido en el periodo y la
+     * última venta de cada producto. Solo para el administrador, igual que Gastos y Nómina.
+     */
+    public List<FilaDetallada> listarDetallado(Usuario quien, Sucursal sucursal, LocalDate desde, LocalDate hasta) {
+        validarAdmin(quien);
+        List<Fila> base = listar(sucursal.id());
+        ZoneId zona = ZoneId.systemDefault();
+        Instant inicio = desde.atStartOfDay(zona).toInstant();
+        Instant fin = hasta.plusDays(1).atStartOfDay(zona).toInstant();
+        Instant ahora = Instant.now();
+        return database.con(c -> {
+            Map<String, Long> valorPorProducto = new HashMap<>();
+            for (LoteRepository.Lote l : lotes.deSucursal(c, sucursal.id())) {
+                valorPorProducto.merge(l.productoId(),
+                        Math.round(l.existencia().doubleValue() * l.costoUnitarioCentavos()), Long::sum);
+            }
+            Map<String, VentaProducto> vendido = vendidoPorProducto(c, sucursal.id(), inicio, fin);
+            Map<String, Instant> ultimaVenta = ultimaVentaPorProducto(c, sucursal.id());
+            Set<String> conOrdenPendiente = conOrdenPendiente(c, sucursal.id());
+
+            List<FilaDetallada> filas = new ArrayList<>();
+            for (Fila f : base) {
+                String id = f.producto().id();
+                long valorInventario = valorPorProducto.getOrDefault(id, 0L);
+                long costoPromedio = f.existencia().signum() == 0 ? 0
+                        : Math.round(valorInventario / f.existencia().doubleValue());
+                VentaProducto v = vendido.getOrDefault(id, new VentaProducto(BigDecimal.ZERO, 0));
+                Instant ultima = ultimaVenta.get(id);
+                Long dias = ultima == null ? null : ChronoUnit.DAYS.between(ultima, ahora);
+                EstadoInventario estado = f.agotado() ? EstadoInventario.AGOTADO
+                        : f.porReabastecer() ? (conOrdenPendiente.contains(id) ? EstadoInventario.POR_REABASTECER
+                                : EstadoInventario.EN_MINIMO)
+                        : EstadoInventario.OK;
+                filas.add(new FilaDetallada(sucursal, f, estado, costoPromedio, valorInventario, v.cantidad(),
+                        v.importeCentavos(), ultima, dias));
+            }
+            return filas;
+        });
+    }
+
+    /** Lotes de un producto en una sucursal (más antiguo primero), para el detalle del administrador. */
+    public List<LoteRepository.Lote> lotesDe(Usuario quien, String productoId, String sucursalId) {
+        validarAdmin(quien);
+        return database.con(c -> lotes.deProducto(c, productoId, sucursalId));
+    }
+
+    /** Últimos movimientos de inventario de un producto en una sucursal, para el detalle del administrador. */
+    public List<Movimiento> movimientos(Usuario quien, String productoId, String sucursalId, int limite) {
+        validarAdmin(quien);
+        return database.con(c -> {
+            try (PreparedStatement ps = c.prepareStatement("""
+                    SELECT tipo, cantidad, fecha, notas FROM movimientos_inventario
+                    WHERE producto_id = ? AND sucursal_id = ?
+                    ORDER BY fecha DESC LIMIT ?""")) {
+                ps.setString(1, productoId);
+                ps.setString(2, sucursalId);
+                ps.setInt(3, limite);
+                try (ResultSet rs = ps.executeQuery()) {
+                    List<Movimiento> lista = new ArrayList<>();
+                    while (rs.next()) {
+                        lista.add(new Movimiento(rs.getString(1), decimal(rs.getDouble(2)),
+                                Tiempo.leer(rs.getString(3)), rs.getString(4)));
+                    }
+                    return lista;
+                }
+            }
+        });
+    }
+
+    private static Map<String, VentaProducto> vendidoPorProducto(Connection c, String sucursalId, Instant desde,
+                                                                  Instant hastaExclusivo) throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement("""
+                SELECT d.producto_id, SUM(COALESCE(d.cantidad_base, d.cantidad)), SUM(d.importe_centavos)
+                FROM venta_detalle d JOIN ventas v ON v.id = d.venta_id
+                WHERE v.sucursal_id = ? AND v.estado = 'COMPLETADA' AND v.fecha >= ? AND v.fecha < ?
+                GROUP BY d.producto_id""")) {
+            ps.setString(1, sucursalId);
+            ps.setString(2, Tiempo.formatear(desde));
+            ps.setString(3, Tiempo.formatear(hastaExclusivo));
+            try (ResultSet rs = ps.executeQuery()) {
+                Map<String, VentaProducto> mapa = new HashMap<>();
+                while (rs.next()) {
+                    mapa.put(rs.getString(1), new VentaProducto(decimal(rs.getDouble(2)), rs.getLong(3)));
+                }
+                return mapa;
+            }
+        }
+    }
+
+    private static Map<String, Instant> ultimaVentaPorProducto(Connection c, String sucursalId) throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement("""
+                SELECT d.producto_id, MAX(v.fecha) FROM venta_detalle d JOIN ventas v ON v.id = d.venta_id
+                WHERE v.sucursal_id = ? AND v.estado = 'COMPLETADA'
+                GROUP BY d.producto_id""")) {
+            ps.setString(1, sucursalId);
+            try (ResultSet rs = ps.executeQuery()) {
+                Map<String, Instant> mapa = new HashMap<>();
+                while (rs.next()) {
+                    mapa.put(rs.getString(1), Tiempo.leer(rs.getString(2)));
+                }
+                return mapa;
+            }
+        }
+    }
+
+    private static Set<String> conOrdenPendiente(Connection c, String sucursalId) throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement("""
+                SELECT DISTINCT producto_id FROM ordenes_reabastecimiento
+                WHERE sucursal_id = ? AND estado = 'PENDIENTE'""")) {
+            ps.setString(1, sucursalId);
+            try (ResultSet rs = ps.executeQuery()) {
+                Set<String> set = new HashSet<>();
+                while (rs.next()) {
+                    set.add(rs.getString(1));
+                }
+                return set;
+            }
+        }
+    }
+
+    private static void validarAdmin(Usuario quien) {
+        if (quien.rol() != Rol.ADMINISTRADOR) {
+            throw new IllegalStateException("Solo el administrador puede ver el detalle de productos por sucursal.");
+        }
     }
 
     private static Map<String, BigDecimal[]> limites(Connection c, String sucursalId) throws SQLException {

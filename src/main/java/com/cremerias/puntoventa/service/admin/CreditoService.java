@@ -44,6 +44,11 @@ public class CreditoService {
         this.dispositivoId = dispositivoId;
     }
 
+    /** Saldo (cargos − abonos) de una sola sucursal, para el módulo Indicadores. */
+    public long saldo(String sucursalId) {
+        return database.con(c -> saldo(c, sucursalId));
+    }
+
     public List<Saldo> saldos(List<Sucursal> sucursales) {
         return database.con(c -> {
             List<Saldo> lista = new ArrayList<>();

@@ -3,11 +3,14 @@ package com.cremerias.puntoventa.ui.componentes;
 import com.cremerias.puntoventa.model.Rol;
 import com.cremerias.puntoventa.model.Sucursal;
 import com.cremerias.puntoventa.model.Usuario;
+import com.cremerias.puntoventa.repository.IndicadoresRepository;
 import com.cremerias.puntoventa.service.IndicadoresService;
 import com.cremerias.puntoventa.ui.admin.AdminContexto;
 import com.cremerias.puntoventa.ui.admin.Ui;
 import com.cremerias.puntoventa.util.Dinero;
+import com.cremerias.puntoventa.util.Masa;
 import javafx.collections.FXCollections;
+import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
@@ -15,12 +18,17 @@ import javafx.scene.control.ComboBox;
 import javafx.scene.control.DatePicker;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressBar;
+import javafx.scene.control.Tab;
+import javafx.scene.control.TabPane;
+import javafx.scene.control.TableView;
+import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 
+import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -28,14 +36,15 @@ import java.time.temporal.TemporalAdjusters;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.IntStream;
 
 /**
- * Venta, costo, utilidad y avance de meta mensual de una sucursal, calculados directo de las
- * operaciones del POS. La usan tanto el panel de Administrador (con selector de sucursal) como
- * el de Supervisor (fija a la sucursal del usuario, sin selector).
+ * Venta, costo, utilidad, kilos, KPIs y avance de meta mensual de una sucursal, calculados
+ * directo de las operaciones del POS. La usan tanto el panel de Administrador (con selector de
+ * sucursal) como el de Supervisor (fija a la sucursal del usuario, sin selector).
  */
 public class IndicadoresVista {
 
@@ -72,6 +81,17 @@ public class IndicadoresVista {
     private HBox tarjetasKpi;
     private VBox cuerpoMeta;
     private HBox tarjetasDiarias;
+    private HBox tarjetasVentasDetalle;
+    private HBox tarjetasClientes;
+    private HBox cuerpoHoras;
+    private HBox tarjetasKilos;
+    private Label notaKilos;
+    private TableView<IndicadoresRepository.MarcaKilos> tablaMarcas;
+    private TableView<IndicadoresService.Kpi> tablaKpis;
+    private HBox tarjetaAvanceTotal;
+    private HBox tarjetasUtilidad;
+    private HBox tarjetasInventario;
+    private TableView<IndicadoresService.ConsolidadoFila> tablaConsolidado;
 
     public IndicadoresVista(IndicadoresService servicio, Usuario usuario,
                             Supplier<List<Sucursal>> sucursalesSeleccionables, Function<String, String> nombreSucursal,
@@ -113,14 +133,96 @@ public class IndicadoresVista {
                 : "Sucursal: " + nombreSucursal.apply(usuario.sucursalId()));
 
         HBox filtros = construirFiltros();
+        TabPane pestanas = construirPestanas();
 
+        pagina.getChildren().addAll(filtros, pestanas);
+        return pagina;
+    }
+
+    private TabPane construirPestanas() {
         tarjetasKpi = new HBox(14);
         cuerpoMeta = new VBox(14);
         VBox tarjetaMeta = Ui.tarjeta("Meta mensual", cuerpoMeta);
         tarjetasDiarias = new HBox(14);
+        tarjetasVentasDetalle = new HBox(14);
+        tarjetasClientes = new HBox(14);
+        cuerpoHoras = new HBox(14);
+        VBox tabVentas = new VBox(14, tarjetasKpi, tarjetaMeta, tarjetasDiarias, tarjetasVentasDetalle,
+                tarjetasClientes, cuerpoHoras);
 
-        pagina.getChildren().addAll(filtros, tarjetasKpi, tarjetaMeta, tarjetasDiarias);
-        return pagina;
+        tarjetasKilos = new HBox(14);
+        notaKilos = Ui.texto("La meta de kilos solo aplica dentro de un mismo mes. Cambia el filtro a \"Mes\" para verla.",
+                "texto-ayuda");
+        tablaMarcas = Ui.tabla("Sin ventas en el periodo.");
+        tablaMarcas.getColumns().setAll(
+                Ui.texto("Marca", 220, IndicadoresRepository.MarcaKilos::marca),
+                Ui.texto("Kilos vendidos", 160, m -> Masa.formatear(m.gramos())));
+        tablaMarcas.setPrefHeight(220);
+        VBox tabKilos = new VBox(14, tarjetasKilos, notaKilos, Ui.tarjeta("Kilos por marca", tablaMarcas));
+
+        tablaKpis = Ui.tabla("Sin datos para este periodo.");
+        tablaKpis.getColumns().setAll(
+                Ui.texto("KPI", 180, IndicadoresService.Kpi::nombre),
+                Ui.texto("Logrado", 130, IndicadoresService.Kpi::logrado),
+                Ui.texto("Meta", 130, IndicadoresService.Kpi::meta),
+                Ui.texto("% avance", 110, k -> k.avancePct().map(IndicadoresVista::formatearPorcentaje).orElse("—")),
+                Ui.texto("Ponderación", 110, k -> k.ponderacion() + "%"),
+                Ui.texto("% ponderado", 120, k -> k.avancePonderado().map(IndicadoresVista::formatearPorcentaje).orElse("—")));
+        tablaKpis.setPrefHeight(220);
+        tarjetaAvanceTotal = new HBox(14);
+        VBox tabKpis = new VBox(14, tablaKpis, tarjetaAvanceTotal);
+
+        boolean esAdmin = usuario.rol() == Rol.ADMINISTRADOR;
+
+        Node contenidoUtilidad;
+        if (esAdmin) {
+            tarjetasUtilidad = new HBox(14);
+            contenidoUtilidad = new VBox(14, tarjetasUtilidad);
+        } else {
+            // Gastos y nómina son exclusivos del administrador: la utilidad neta se le queda oculta al supervisor.
+            contenidoUtilidad = placeholder("Solo el administrador puede ver la utilidad neta.");
+        }
+
+        tarjetasInventario = new HBox(14);
+        VBox tabInventario = new VBox(14, tarjetasInventario);
+
+        Tab tabVentasT = pestana("Ventas", tabVentas);
+        Tab tabKilosT = pestana("Kilos", tabKilos);
+        Tab tabKpisT = pestana("KPIs", tabKpis);
+        Tab tabUtilidadT = pestana("Utilidad", contenidoUtilidad);
+        Tab tabInventarioT = pestana("Inventario", tabInventario);
+
+        TabPane pestanas = new TabPane(tabVentasT, tabKilosT, tabKpisT, tabUtilidadT, tabInventarioT);
+        if (esAdmin) {
+            tablaConsolidado = Ui.tabla("Sin datos para este periodo.");
+            tablaConsolidado.getColumns().setAll(
+                    Ui.texto("Sucursal", 170, f -> f.sucursal().nombre()),
+                    Ui.dinero("Venta", 110, IndicadoresService.ConsolidadoFila::ventaNeta),
+                    Ui.dinero("Costo", 110, IndicadoresService.ConsolidadoFila::costoVenta),
+                    Ui.dinero("Utilidad bruta", 120, IndicadoresService.ConsolidadoFila::utilidadBruta),
+                    Ui.dinero("Gastos", 110, IndicadoresService.ConsolidadoFila::gastosCentavos),
+                    Ui.dinero("Utilidad neta", 120, IndicadoresService.ConsolidadoFila::utilidadNeta),
+                    Ui.texto("% cumplimiento", 120,
+                            f -> f.cumplimientoPct().map(IndicadoresVista::formatearPorcentaje).orElse("—")),
+                    Ui.texto("Avance ponderado", 130,
+                            f -> f.avanceTotalPonderado().map(IndicadoresVista::formatearPorcentaje).orElse("—")));
+            tablaConsolidado.setPrefHeight(320);
+            pestanas.getTabs().add(pestana("Consolidado", new VBox(14, tablaConsolidado)));
+        }
+        pestanas.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
+        return pestanas;
+    }
+
+    private static Tab pestana(String titulo, Node contenido) {
+        Tab tab = new Tab(titulo, contenido);
+        tab.setClosable(false);
+        return tab;
+    }
+
+    private static Node placeholder(String texto) {
+        VBox caja = new VBox(Ui.texto(texto, "texto-ayuda"));
+        caja.setPadding(new Insets(24));
+        return caja;
     }
 
     private HBox construirFiltros() {
@@ -285,6 +387,25 @@ public class IndicadoresVista {
         try {
             IndicadoresService.Resumen r = servicio.calcular(usuario, sucursalId, desdeActual, hastaActual);
             pintar(r);
+            IndicadoresService.VentasDetalle vd =
+                    servicio.calcularVentasDetalle(usuario, sucursalId, desdeActual, hastaActual);
+            pintarVentasDetalle(vd);
+            IndicadoresService.KilosResumen kr = servicio.calcularKilos(usuario, sucursalId, desdeActual, hastaActual);
+            pintarKilos(kr);
+            IndicadoresService.KpisResumen kpis = servicio.calcularKpis(usuario, sucursalId, desdeActual, hastaActual);
+            pintarKpis(kpis);
+            IndicadoresService.InventarioResumen ir =
+                    servicio.calcularInventario(usuario, sucursalId, desdeActual, hastaActual);
+            pintarInventario(ir);
+            if (usuario.rol() == Rol.ADMINISTRADOR) {
+                IndicadoresService.UtilidadResumen ur =
+                        servicio.calcularUtilidad(usuario, sucursalId, desdeActual, hastaActual);
+                pintarUtilidad(ur, r);
+                List<Sucursal> todas = sucursalesSeleccionables != null ? sucursalesSeleccionables.get() : List.of();
+                List<IndicadoresService.ConsolidadoFila> consolidado =
+                        servicio.calcularConsolidado(usuario, todas, desdeActual, hastaActual);
+                pintarConsolidado(consolidado);
+            }
         } catch (RuntimeException e) {
             avisos.error(AdminContexto.mensaje(e));
         }
@@ -313,7 +434,7 @@ public class IndicadoresVista {
                         "Aún no se ha capturado la meta de " + MESES[mes - 1] + " " + anio + ".", "texto-ayuda"));
                 if (usuario.rol() == Rol.ADMINISTRADOR) {
                     Button capturar = Ui.principal("Capturar meta", "mdi2t-target");
-                    capturar.setOnAction(e -> capturarMeta(anio, mes, 0));
+                    capturar.setOnAction(e -> capturarMeta(anio, mes));
                     sinMeta.getChildren().add(capturar);
                 }
                 cuerpoMeta.getChildren().add(sinMeta);
@@ -327,6 +448,95 @@ public class IndicadoresVista {
                 Ui.indicador("Meta diaria", r.metaDiaria().map(Dinero::formatear).orElse("—"), "mdi2c-calendar-range"),
                 Ui.indicador("Diferencia contra meta", r.diferenciaVsMeta().map(Dinero::formatear).orElse("—"),
                         "mdi2f-flag-checkered"));
+    }
+
+    private void pintarVentasDetalle(IndicadoresService.VentasDetalle vd) {
+        tarjetasVentasDetalle.getChildren().setAll(
+                Ui.indicador("Número de tickets", String.valueOf(vd.tickets()), "mdi2r-receipt"),
+                Ui.indicador("Ticket promedio", Dinero.formatear(vd.ticketPromedioCentavos()), "mdi2c-cash"),
+                Ui.indicador("Artículos por ticket", formatearUno(vd.articulosPorTicket()), "mdi2b-basket-outline"),
+                Ui.indicador("Valor promedio del artículo", Dinero.formatear(vd.valorPromedioArticuloCentavos()),
+                        "mdi2t-tag-outline"));
+
+        tarjetasClientes.getChildren().setAll(
+                Ui.indicador("Clientes por día", formatearUno(vd.clientesPorDia()), "mdi2a-account-multiple-outline"),
+                Ui.indicador("Clientes por empleado diario",
+                        vd.clientesPorEmpleadoDiario().map(IndicadoresVista::formatearUno).orElse("—"),
+                        "mdi2a-account-group-outline"));
+
+        VBox mayores = new VBox(6, Ui.texto("Horas de mayor venta", "indicador-titulo"));
+        if (vd.horasMayores().isEmpty()) {
+            mayores.getChildren().add(Ui.texto("Sin ventas en el periodo.", "texto-ayuda"));
+        } else {
+            vd.horasMayores().forEach(h -> mayores.getChildren().add(horaTexto(h)));
+        }
+        VBox menores = new VBox(6, Ui.texto("Horas de menor venta", "indicador-titulo"));
+        if (vd.horasMenores().isEmpty()) {
+            menores.getChildren().add(Ui.texto("Sin ventas en el periodo.", "texto-ayuda"));
+        } else {
+            vd.horasMenores().forEach(h -> menores.getChildren().add(horaTexto(h)));
+        }
+        cuerpoHoras.getChildren().setAll(Ui.tarjeta(null, mayores), Ui.tarjeta(null, menores));
+    }
+
+    private static Label horaTexto(IndicadoresService.HoraVenta h) {
+        return new Label(String.format("%02d:00–%02d:00 · %s", h.hora(), h.hora() + 1, Dinero.formatear(h.totalCentavos())));
+    }
+
+    private void pintarKilos(IndicadoresService.KilosResumen kr) {
+        tarjetasKilos.getChildren().setAll(
+                Ui.indicador("Kilos vendidos", Masa.formatear(kr.kilosVendidosGramos()), "mdi2s-scale-balance"),
+                Ui.indicador("Meta de kilos", kr.metaKilosGramos().map(Masa::formatear).orElse("—"), "mdi2t-target"),
+                Ui.indicador("Diferencia", kr.diferenciaGramos().map(Masa::formatear).orElse("—"),
+                        "mdi2f-flag-checkered"));
+
+        boolean periodoEsUnMes = desdeActual.getYear() == hastaActual.getYear()
+                && desdeActual.getMonthValue() == hastaActual.getMonthValue();
+        notaKilos.setVisible(!periodoEsUnMes);
+        notaKilos.setManaged(!periodoEsUnMes);
+
+        tablaMarcas.setItems(FXCollections.observableArrayList(kr.porMarca()));
+    }
+
+    private void pintarKpis(IndicadoresService.KpisResumen kpis) {
+        tablaKpis.setItems(FXCollections.observableArrayList(kpis.kpis()));
+        tarjetaAvanceTotal.getChildren().setAll(
+                Ui.indicador("Avance total ponderado",
+                        kpis.avanceTotalPonderado().map(IndicadoresVista::formatearPorcentaje).orElse("—"),
+                        "mdi2c-chart-donut"));
+    }
+
+    private void pintarUtilidad(IndicadoresService.UtilidadResumen u, IndicadoresService.Resumen r) {
+        if (tarjetasUtilidad == null) {
+            return;
+        }
+        tarjetasUtilidad.getChildren().setAll(
+                Ui.indicador("Utilidad bruta", Dinero.formatear(r.utilidadBruta()), "mdi2t-trending-up"),
+                Ui.indicador("Gastos del periodo", Dinero.formatear(u.gastosCentavos()), "mdi2c-cash-minus"),
+                Ui.indicador("Nómina del periodo", Dinero.formatear(u.nominaCentavos()), "mdi2a-account-cash-outline"),
+                Ui.indicador("Mermas (al costo)", Dinero.formatear(u.mermasCentavos()), "mdi2a-alert-outline"),
+                Ui.indicador("Utilidad neta", Dinero.formatear(u.utilidadNeta()), "mdi2c-cash-multiple"),
+                Ui.indicador("Margen neto", formatearPorcentaje(u.margenNetoPct()), "mdi2p-percent"));
+    }
+
+    private void pintarInventario(IndicadoresService.InventarioResumen ir) {
+        tarjetasInventario.getChildren().setAll(
+                Ui.indicador("Inventario inicial (costo)", Dinero.formatear(ir.inventarioInicialCentavos()),
+                        "mdi2p-package-variant-closed"),
+                Ui.indicador("Inventario final (costo)", Dinero.formatear(ir.inventarioFinalCentavos()),
+                        "mdi2p-package-variant-closed"),
+                Ui.indicador("Inventario promedio", Dinero.formatear(ir.inventarioPromedioCentavos()), "mdi2s-scale-balance"),
+                Ui.indicador("Días de inventario", ir.diasInventario().map(IndicadoresVista::formatearUno).orElse("—"),
+                        "mdi2c-calendar-range"),
+                Ui.indicador("Saldo de crédito con el almacén", Dinero.formatear(ir.saldoCreditoCentavos()),
+                        "mdi2c-credit-card-clock-outline"));
+    }
+
+    private void pintarConsolidado(List<IndicadoresService.ConsolidadoFila> filas) {
+        if (tablaConsolidado == null) {
+            return;
+        }
+        tablaConsolidado.setItems(FXCollections.observableArrayList(filas));
     }
 
     private Node pintarMeta(IndicadoresService.Resumen r, int anio, int mes) {
@@ -350,7 +560,7 @@ public class IndicadoresVista {
         VBox contenido = new VBox(10, montos, barra, etiquetaEstado);
         if (usuario.rol() == Rol.ADMINISTRADOR) {
             Button editar = Ui.secundario("Editar meta", "mdi2p-pencil-outline");
-            editar.setOnAction(e -> capturarMeta(anio, mes, r.metaMensual().orElse(0L)));
+            editar.setOnAction(e -> capturarMeta(anio, mes));
             HBox pie = new HBox(editar);
             contenido.getChildren().add(pie);
         }
@@ -364,27 +574,54 @@ public class IndicadoresVista {
         return new VBox(4, t, v);
     }
 
+    private static String formatearUno(double valor) {
+        return String.format(Locale.US, "%.1f", valor);
+    }
+
     private static String formatearPorcentaje(double valor) {
         return String.format(Locale.US, "%.1f%%", valor);
     }
 
-    private void capturarMeta(int anio, int mes, long actualCentavos) {
+    private void capturarMeta(int anio, int mes) {
         String sucursalId = sucursalActual();
         if (sucursalId == null) {
             return;
         }
+        Optional<IndicadoresService.MetaCapturada> actual = servicio.metaCapturada(usuario, sucursalId, anio, mes);
+
         Dialogo d = new Dialogo("Meta de " + MESES[mes - 1] + " " + anio,
                 sucursalesSeleccionables != null && comboSucursal.getValue() != null
                         ? comboSucursal.getValue().nombre() : nombreSucursal.apply(sucursalId),
                 "mdi2t-target", Dialogo.Tono.ACENTO);
-        CampoDinero campo = new CampoDinero();
-        if (actualCentavos > 0) {
-            campo.setCentavos(actualCentavos);
-        }
-        d.setContenido(Ui.campo("Meta mensual de venta", campo));
+
+        CampoDinero campoVenta = new CampoDinero();
+        CampoMasa campoKilos = new CampoMasa();
+        TextField campoArticulos = new TextField();
+        Campos.soloNumeros(campoArticulos, 1);
+        campoArticulos.setPromptText("0.0");
+        TextField campoUtilidad = new TextField();
+        Campos.soloNumeros(campoUtilidad, 1);
+        campoUtilidad.setPromptText("0.0");
+
+        actual.ifPresent(m -> {
+            if (m.ventaCentavos() > 0) {
+                campoVenta.setCentavos(m.ventaCentavos());
+            }
+            m.kilosGramos().ifPresent(campoKilos::setGramos);
+            m.articulosTicket().ifPresent(v -> campoArticulos.setText(v.stripTrailingZeros().toPlainString()));
+            m.utilidadPct().ifPresent(v -> campoUtilidad.setText(String.valueOf(v)));
+        });
+
+        d.setContenido(
+                Ui.campo("Meta mensual de venta", campoVenta),
+                Ui.campo("Meta de kilos vendidos", campoKilos),
+                Ui.campo("Meta de artículos por ticket", campoArticulos),
+                Ui.campo("Meta de utilidad (%)", campoUtilidad));
+
         Runnable guardar = () -> {
             try {
-                servicio.guardarMeta(usuario, sucursalId, anio, mes, campo.centavosOCero());
+                servicio.guardarMeta(usuario, sucursalId, anio, mes, campoVenta.centavosOCero(),
+                        campoKilos.gramos().orElse(null), aBigDecimal(campoArticulos), aDouble(campoUtilidad));
                 d.cerrar();
                 avisos.exito("Meta actualizada.");
                 cargar();
@@ -396,7 +633,17 @@ public class IndicadoresVista {
         d.agregarBoton("Guardar meta", "mdi2c-check", guardar, "success");
         d.setAlCancelar(d::cerrar);
         d.setAlConfirmar(guardar);
-        d.setFocoInicial(campo);
+        d.setFocoInicial(campoVenta);
         dialogos.mostrar(d);
+    }
+
+    private static BigDecimal aBigDecimal(TextField campo) {
+        String t = campo.getText();
+        return (t == null || t.isBlank() || t.equals(".")) ? null : new BigDecimal(t);
+    }
+
+    private static Double aDouble(TextField campo) {
+        BigDecimal v = aBigDecimal(campo);
+        return v == null ? null : v.doubleValue();
     }
 }

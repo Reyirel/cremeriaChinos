@@ -16,8 +16,8 @@ final class TablasNube {
             "presentaciones", "lotes", "lote_precios", "turnos_caja", "movimientos_caja", "ventas",
             "venta_detalle", "venta_pagos", "movimientos_inventario", "surtidos", "surtido_detalle",
             "movimientos_credito", "mermas", "limites_sucursal", "ordenes_reabastecimiento", "reglas_comision",
-            "metas_sucursal", "horarios", "bloqueos_acceso", "configuracion_general", "alertas_sucursal",
-            "bitacora", "sesiones", "bitacora_accesos");
+            "metas_sucursal", "gastos", "nomina_semanal", "horarios", "bloqueos_acceso", "configuracion_general",
+            "alertas_sucursal", "bitacora", "sesiones", "bitacora_accesos");
 
     static final String CREDENCIALES = "usuarios_credenciales";
 

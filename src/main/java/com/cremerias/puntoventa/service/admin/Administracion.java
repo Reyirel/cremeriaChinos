@@ -17,6 +17,8 @@ public class Administracion {
     private final LimitesService limites;
     private final CreditoService credito;
     private final ComisionService comisiones;
+    private final GastoService gastos;
+    private final NominaService nomina;
     private final AlertaService alertas;
     private final BitacoraService bitacora;
 
@@ -31,6 +33,8 @@ public class Administracion {
         this.limites = new LimitesService(database, dispositivoId);
         this.credito = new CreditoService(database, dispositivoId);
         this.comisiones = new ComisionService(database, dispositivoId);
+        this.gastos = new GastoService(database, dispositivoId);
+        this.nomina = new NominaService(database, dispositivoId);
         this.alertas = new AlertaService(database, reloj, dispositivoId);
         this.bitacora = new BitacoraService(database);
     }
@@ -69,6 +73,14 @@ public class Administracion {
 
     public ComisionService comisiones() {
         return comisiones;
+    }
+
+    public GastoService gastos() {
+        return gastos;
+    }
+
+    public NominaService nomina() {
+        return nomina;
     }
 
     public AlertaService alertas() {

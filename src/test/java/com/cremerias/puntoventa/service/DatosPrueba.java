@@ -299,7 +299,7 @@ final class DatosPrueba {
         almacenId = db.con(c -> texto(c, "SELECT id FROM sucursales WHERE es_almacen = 1 LIMIT 1"));
         String local = db.enTransaccion(c -> new DispositivoRepository().obtenerOCrear(c, null));
         adm = new Administracion(db, hasherRapido, reloj, local);
-        indicadores = new IndicadoresService(db, local);
+        indicadores = new IndicadoresService(db, local, adm.gastos(), adm.nomina(), adm.credito());
         cajaLocal = caja(local, true);
     }
 
@@ -632,7 +632,7 @@ final class DatosPrueba {
                 presentaciones.add(new Presentacion(null, null, pr.nombre(), pr.granel(), pr.factor(), codigo,
                         pr == p.presentaciones().getFirst(), true));
             }
-            adm.productos().guardar(new ProductoAdminService.Datos(null, p.nombre(), p.categoria(), p.clave(),
+            adm.productos().guardar(new ProductoAdminService.Datos(null, p.nombre(), p.categoria(), null, p.clave(),
                     p.codigoInventario(), p.unidad(), p.sujetoMerma(), p.disponibilidad(), p.temporada(),
                     presentaciones, List.of(), BigDecimal.valueOf(p.gramaje()), BigDecimal.valueOf(p.merma()),
                     p.aviso()), admin);
@@ -793,7 +793,7 @@ final class DatosPrueba {
     }
 
     private void guardarMeta(Suc s, YearMonth mes, long centavos) {
-        indicadores.guardarMeta(admin, s.sucursal.id(), mes.getYear(), mes.getMonthValue(), centavos);
+        indicadores.guardarMeta(admin, s.sucursal.id(), mes.getYear(), mes.getMonthValue(), centavos, null, null, null);
         avanzar(1);
     }
 
@@ -982,9 +982,9 @@ final class DatosPrueba {
             // Se ajusta la merma del Oaxaca: se pierde más al deshebrarlo.
             Prod oaxaca = prod("Queso Oaxaca");
             ProductoCatalogo pc = pc(oaxaca);
-            adm.productos().guardar(new ProductoAdminService.Datos(pc.id(), pc.nombre(), pc.categoria(), pc.clave(),
-                    pc.codigoInventario(), pc.unidad(), true, pc.disponibilidad(), pc.temporada(), pc.presentaciones(),
-                    List.of(), pc.gramajeGramos(), new BigDecimal("35"), pc.avisoSinVenta()), admin);
+            adm.productos().guardar(new ProductoAdminService.Datos(pc.id(), pc.nombre(), pc.categoria(), pc.marca(),
+                    pc.clave(), pc.codigoInventario(), pc.unidad(), true, pc.disponibilidad(), pc.temporada(),
+                    pc.presentaciones(), List.of(), pc.gramajeGramos(), new BigDecimal("35"), pc.avisoSinVenta()), admin);
             refrescarProductos();
         }
         if (transcurridos == total / 2 && ir(dia, 6, 7)) {

@@ -71,7 +71,8 @@ public final class AppContext implements AutoCloseable {
         this.ventasEspera = new VentaEsperaService(database);
         this.inventarioSucursal = new InventarioSucursalService(database);
         this.sinVenta = new SinVentaService(database, Clock.systemDefaultZone());
-        this.indicadores = new IndicadoresService(database, caja.dispositivoId());
+        this.indicadores = new IndicadoresService(database, caja.dispositivoId(), administracion.gastos(),
+                administracion.nomina(), administracion.credito());
         this.administracion = administracion;
     }
 

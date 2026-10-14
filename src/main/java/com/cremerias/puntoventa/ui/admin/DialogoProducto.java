@@ -70,6 +70,8 @@ final class DialogoProducto {
         if (!nuevo && p.categoria() != null) {
             categoria.setValue(p.categoria());
         }
+        TextField marca = new TextField(nuevo || p.marca() == null ? "" : p.marca());
+        marca.setPromptText("Ej. Lala (opcional)");
         TextField clave = new TextField(nuevo || p.clave() == null ? "" : p.clave());
         clave.setPromptText("PLU de báscula (opcional)");
         TextField codigoInventario = new TextField(nuevo || p.codigoInventario() == null ? "" : p.codigoInventario());
@@ -290,7 +292,7 @@ final class DialogoProducto {
         VBox presentaciones = Ui.tarjeta("Presentaciones", grid, masPresentacion, ayuda);
 
         VBox formulario = new VBox(16,
-                Ui.fila(Ui.campo("Nombre", nombre), Ui.campo("Categoría", categoria)),
+                Ui.fila(Ui.campo("Nombre", nombre), Ui.campo("Categoría", categoria), Ui.campo("Marca", marca)),
                 Ui.fila(Ui.campo("Se maneja", unidad), Ui.campo("Clave / PLU", clave),
                         Ui.campo("Código de inventario", codigoInventario), Ui.campo("Disponibilidad", disponibilidad)),
                 bloqueGramaje, bloqueTemporada, bloqueAviso, presentaciones);
@@ -323,8 +325,8 @@ final class DialogoProducto {
                             repetirTemporada.isSelected() ? unidadTemporada.getValue() : null)
                     : null;
             var datos = new ProductoAdminService.Datos(nuevo ? null : p.id(), nombre.getText(),
-                    categoria.getEditor().getText(), clave.getText(), codigoInventario.getText(), unidad.getValue(),
-                    merma.isSelected(), disponibilidad.getValue(), temporada, lista, eliminadas,
+                    categoria.getEditor().getText(), marca.getText(), clave.getText(), codigoInventario.getText(),
+                    unidad.getValue(), merma.isSelected(), disponibilidad.getValue(), temporada, lista, eliminadas,
                     gramaje.gramos().orElse(null), merma.isSelected() ? cantidadMerma.gramos().orElse(null) : null, aviso);
             if (a.ejecutar(nuevo ? "Producto creado" : "Producto actualizado",
                     () -> a.admin().productos().guardar(datos, a.usuario()))) {

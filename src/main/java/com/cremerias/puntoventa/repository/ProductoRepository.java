@@ -38,8 +38,8 @@ public class ProductoRepository {
         Map<String, List<Presentacion>> presentaciones = presentaciones(c, null);
         List<ProductoCatalogo> lista = new ArrayList<>();
         try (PreparedStatement ps = c.prepareStatement("""
-                SELECT p.id, p.nombre, p.categoria_id, c.nombre AS categoria, p.clave, p.codigo_inventario, p.unidad,
-                       p.sujeto_merma, p.disponibilidad, p.activo, p.gramaje_gramos, p.merma_gramos,
+                SELECT p.id, p.nombre, p.categoria_id, c.nombre AS categoria, p.marca, p.clave, p.codigo_inventario,
+                       p.unidad, p.sujeto_merma, p.disponibilidad, p.activo, p.gramaje_gramos, p.merma_gramos,
                        p.aviso_plazo, p.aviso_unidad, p.aviso_admin, p.aviso_supervisor, p.aviso_caja,
                        p.temporada_desde, p.temporada_fin, p.temporada_repetir_cada, p.temporada_repetir_unidad
                 FROM productos p LEFT JOIN categorias c ON c.id = p.categoria_id
@@ -55,8 +55,8 @@ public class ProductoRepository {
 
     public Optional<ProductoCatalogo> porId(Connection c, String id) throws SQLException {
         try (PreparedStatement ps = c.prepareStatement("""
-                SELECT p.id, p.nombre, p.categoria_id, c.nombre AS categoria, p.clave, p.codigo_inventario, p.unidad,
-                       p.sujeto_merma, p.disponibilidad, p.activo, p.gramaje_gramos, p.merma_gramos,
+                SELECT p.id, p.nombre, p.categoria_id, c.nombre AS categoria, p.marca, p.clave, p.codigo_inventario,
+                       p.unidad, p.sujeto_merma, p.disponibilidad, p.activo, p.gramaje_gramos, p.merma_gramos,
                        p.aviso_plazo, p.aviso_unidad, p.aviso_admin, p.aviso_supervisor, p.aviso_caja,
                        p.temporada_desde, p.temporada_fin, p.temporada_repetir_cada, p.temporada_repetir_unidad
                 FROM productos p LEFT JOIN categorias c ON c.id = p.categoria_id
@@ -134,48 +134,51 @@ public class ProductoRepository {
         }
     }
 
-    public void insertar(Connection c, String id, String nombre, String categoriaId, String clave,
+    public void insertar(Connection c, String id, String nombre, String categoriaId, String marca, String clave,
                          String codigoInventario, Unidad unidad, boolean sujetoMerma, Disponibilidad disponibilidad,
                          BigDecimal gramaje, BigDecimal merma) throws SQLException {
         String ahora = Tiempo.ahora();
         try (PreparedStatement ps = c.prepareStatement("""
-                INSERT INTO productos (id, nombre, categoria_id, clave, codigo_inventario, unidad, precio_centavos,
-                                       sujeto_merma, disponibilidad, gramaje_gramos, merma_gramos, creado_en,
-                                       actualizado_en)
-                VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)""")) {
+                INSERT INTO productos (id, nombre, categoria_id, marca, clave, codigo_inventario, unidad,
+                                       precio_centavos, sujeto_merma, disponibilidad, gramaje_gramos, merma_gramos,
+                                       creado_en, actualizado_en)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)""")) {
             ps.setString(1, id);
             ps.setString(2, nombre);
             ps.setString(3, categoriaId);
-            ps.setString(4, clave);
-            ps.setString(5, codigoInventario);
-            ps.setString(6, unidad.name());
-            ps.setBoolean(7, sujetoMerma);
-            ps.setString(8, disponibilidad.name());
-            ps.setBigDecimal(9, gramaje);
-            ps.setBigDecimal(10, merma);
-            ps.setString(11, ahora);
+            ps.setString(4, marca);
+            ps.setString(5, clave);
+            ps.setString(6, codigoInventario);
+            ps.setString(7, unidad.name());
+            ps.setBoolean(8, sujetoMerma);
+            ps.setString(9, disponibilidad.name());
+            ps.setBigDecimal(10, gramaje);
+            ps.setBigDecimal(11, merma);
             ps.setString(12, ahora);
+            ps.setString(13, ahora);
             ps.executeUpdate();
         }
     }
 
-    public void actualizar(Connection c, String id, String nombre, String categoriaId, String clave,
+    public void actualizar(Connection c, String id, String nombre, String categoriaId, String marca, String clave,
                            String codigoInventario, boolean sujetoMerma, Disponibilidad disponibilidad,
                            BigDecimal gramaje, BigDecimal merma) throws SQLException {
         try (PreparedStatement ps = c.prepareStatement("""
-                UPDATE productos SET nombre = ?, categoria_id = ?, clave = ?, codigo_inventario = ?, sujeto_merma = ?,
-                                     disponibilidad = ?, gramaje_gramos = ?, merma_gramos = ?, actualizado_en = ?
+                UPDATE productos SET nombre = ?, categoria_id = ?, marca = ?, clave = ?, codigo_inventario = ?,
+                                     sujeto_merma = ?, disponibilidad = ?, gramaje_gramos = ?, merma_gramos = ?,
+                                     actualizado_en = ?
                 WHERE id = ?""")) {
             ps.setString(1, nombre);
             ps.setString(2, categoriaId);
-            ps.setString(3, clave);
-            ps.setString(4, codigoInventario);
-            ps.setBoolean(5, sujetoMerma);
-            ps.setString(6, disponibilidad.name());
-            ps.setBigDecimal(7, gramaje);
-            ps.setBigDecimal(8, merma);
-            ps.setString(9, Tiempo.ahora());
-            ps.setString(10, id);
+            ps.setString(3, marca);
+            ps.setString(4, clave);
+            ps.setString(5, codigoInventario);
+            ps.setBoolean(6, sujetoMerma);
+            ps.setString(7, disponibilidad.name());
+            ps.setBigDecimal(8, gramaje);
+            ps.setBigDecimal(9, merma);
+            ps.setString(10, Tiempo.ahora());
+            ps.setString(11, id);
             ps.executeUpdate();
         }
     }
@@ -311,7 +314,7 @@ public class ProductoRepository {
 
     private static ProductoCatalogo mapear(ResultSet rs, List<Presentacion> presentaciones) throws SQLException {
         return new ProductoCatalogo(rs.getString("id"), rs.getString("nombre"), rs.getString("categoria_id"),
-                rs.getString("categoria"), rs.getString("clave"), rs.getString("codigo_inventario"),
+                rs.getString("categoria"), rs.getString("marca"), rs.getString("clave"), rs.getString("codigo_inventario"),
                 Unidad.valueOf(rs.getString("unidad")), rs.getBoolean("sujeto_merma"),
                 Disponibilidad.valueOf(rs.getString("disponibilidad")), temporada(rs), rs.getBoolean("activo"),
                 List.copyOf(presentaciones), gramos(rs, "gramaje_gramos"),

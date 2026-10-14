@@ -13,6 +13,7 @@ public record ProductoCatalogo(
         String nombre,
         String categoriaId,
         String categoria,
+        String marca,
         String clave,
         String codigoInventario,
         Unidad unidad,

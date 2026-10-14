@@ -63,12 +63,15 @@ public class AdminController {
         opcion("ordenes", "Órdenes de reabasto", "mdi2c-clipboard-list-outline", OrdenesPagina::new);
         seccion("SUCURSALES");
         opcion("sucursales", "Sucursales", "mdi2s-storefront-outline", SucursalesPagina::new);
+        opcion("productos-sucursal", "Productos por sucursal", "mdi2p-package-variant-closed", ProductosSucursalPagina::new);
         opcion("indicadores", "Indicadores", "mdi2c-chart-line", IndicadoresPagina::new);
         opcion("limites", "Mínimos y máximos", "mdi2t-tune-vertical", LimitesPagina::new);
         opcion("credito", "Crédito de sucursales", "mdi2c-credit-card-clock-outline", CreditoPagina::new);
+        opcion("gastos", "Gastos", "mdi2c-cash-minus", GastosPagina::new);
         opcion("cortes", "Cortes de caja", "mdi2c-calculator-variant-outline", CortesPagina::new);
         seccion("PERSONAL");
         opcion("usuarios", "Usuarios y horarios", "mdi2a-account-group-outline", UsuariosPagina::new);
+        opcion("nomina", "Nómina", "mdi2a-account-cash-outline", NominaPagina::new);
         opcion("comisiones", "Comisiones", "mdi2h-hand-coin-outline", ComisionesPagina::new);
         seccion("REGISTRO");
         opcion("historial", "Historial", "mdi2h-history", HistorialPagina::new);

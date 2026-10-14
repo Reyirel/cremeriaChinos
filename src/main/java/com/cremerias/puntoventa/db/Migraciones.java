@@ -40,7 +40,10 @@ public class Migraciones {
             "V8__codigo_inventario_productos.sql",
             "V9__aviso_sin_venta_por_producto.sql",
             "V10__metas_sucursal.sql",
-            "V11__temporada_productos.sql"
+            "V11__temporada_productos.sql",
+            "V12__metas_kpi.sql",
+            "V13__gastos_y_nomina.sql",
+            "V14__marca_productos.sql"
     );
 
     private final Database database;

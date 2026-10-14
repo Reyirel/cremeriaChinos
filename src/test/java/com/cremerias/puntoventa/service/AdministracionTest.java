@@ -358,16 +358,16 @@ class AdministracionTest {
                 null, true, true));
         // Sin gramaje no se puede guardar un producto por pieza.
         assertThrows(IllegalArgumentException.class, () -> admin.productos().guardar(new com.cremerias.puntoventa.service
-                .admin.ProductoAdminService.Datos(null, "Lapicero", "Papelería", null, null, com.cremerias.puntoventa.model.Unidad.PZA,
+                .admin.ProductoAdminService.Datos(null, "Lapicero", "Papelería", null, null, null, com.cremerias.puntoventa.model.Unidad.PZA,
                 false, com.cremerias.puntoventa.model.Disponibilidad.REGULAR, null, pieza, List.of(), null, null, null), administrador));
         // La merma debe ser menor que el gramaje.
         assertThrows(IllegalArgumentException.class, () -> admin.productos().guardar(new com.cremerias.puntoventa.service
-                .admin.ProductoAdminService.Datos(null, "Jabón", "Limpieza", null, null, com.cremerias.puntoventa.model.Unidad.PZA,
+                .admin.ProductoAdminService.Datos(null, "Jabón", "Limpieza", null, null, null, com.cremerias.puntoventa.model.Unidad.PZA,
                 true, com.cremerias.puntoventa.model.Disponibilidad.REGULAR, null, pieza, List.of(), new BigDecimal("150"),
                 new BigDecimal("150"), null), administrador));
 
         String folio = admin.productos().guardar(new com.cremerias.puntoventa.service.admin.ProductoAdminService.Datos(
-                null, "Queso de bola", "Quesos", null, null, com.cremerias.puntoventa.model.Unidad.PZA, true,
+                null, "Queso de bola", "Quesos", null, null, null, com.cremerias.puntoventa.model.Unidad.PZA, true,
                 com.cremerias.puntoventa.model.Disponibilidad.TEMPORADA,
                 new Temporada(LocalDate.of(2020, 1, 1), LocalDate.of(2030, 12, 31), null, null), pieza, List.of(),
                 new BigDecimal("1000"), new BigDecimal("50"), null), administrador);
@@ -376,7 +376,7 @@ class AdministracionTest {
         assertEquals(0, new BigDecimal("950").compareTo(bola.gramajeNeto()));
         // Admite microgramos (0.0005 g = 500 µg).
         admin.productos().guardar(new com.cremerias.puntoventa.service.admin.ProductoAdminService.Datos(
-                null, "Vitamina", "Farmacia", null, null, com.cremerias.puntoventa.model.Unidad.PZA, false,
+                null, "Vitamina", "Farmacia", null, null, null, com.cremerias.puntoventa.model.Unidad.PZA, false,
                 com.cremerias.puntoventa.model.Disponibilidad.REGULAR, null, pieza, List.of(), new BigDecimal("0.0005"), null, null),
                 administrador);
         assertEquals("500 µg", com.cremerias.puntoventa.util.Masa.formatear(catalogoAdmin("Vitamina").gramajeGramos()));
@@ -389,13 +389,13 @@ class AdministracionTest {
                 null, true, true));
         // Sin gramaje tampoco se puede guardar un producto por kilo (ya no se fuerza a 1000 en automático).
         assertThrows(IllegalArgumentException.class, () -> admin.productos().guardar(new ProductoAdminService.Datos(
-                null, "Salmón ahumado", "Carnes frías", null, null, com.cremerias.puntoventa.model.Unidad.KG, false,
+                null, "Salmón ahumado", "Carnes frías", null, null, null, com.cremerias.puntoventa.model.Unidad.KG, false,
                 com.cremerias.puntoventa.model.Disponibilidad.REGULAR, null, granel, List.of(), null, null, null),
                 administrador));
 
         // Con 1200 g de referencia por kilo y 60 g de merma, el neto es 1140 g por kilo (no 980 g de un 1000 fijo).
         String folio = admin.productos().guardar(new ProductoAdminService.Datos(
-                null, "Salmón ahumado", "Carnes frías", null, null, com.cremerias.puntoventa.model.Unidad.KG, true,
+                null, "Salmón ahumado", "Carnes frías", null, null, null, com.cremerias.puntoventa.model.Unidad.KG, true,
                 com.cremerias.puntoventa.model.Disponibilidad.REGULAR, null, granel, List.of(), new BigDecimal("1200"),
                 new BigDecimal("60"), null), administrador);
         assertTrue(folio.startsWith("PRD-"));
@@ -406,7 +406,7 @@ class AdministracionTest {
 
     private ProductoCatalogo crearProductoDeTemporada(String nombre, Temporada temporada) {
         var pieza = List.of(new Presentacion(null, null, "Pieza", false, BigDecimal.ONE, null, true, true));
-        admin.productos().guardar(new ProductoAdminService.Datos(null, nombre, "Temporada", null, null, Unidad.PZA,
+        admin.productos().guardar(new ProductoAdminService.Datos(null, nombre, "Temporada", null, null, null, Unidad.PZA,
                 false, Disponibilidad.TEMPORADA, temporada, pieza, List.of(), new BigDecimal("100"), null, null),
                 administrador);
         return catalogoAdmin(nombre);
@@ -532,8 +532,8 @@ class AdministracionTest {
     }
 
     private String guardarConAviso(ProductoCatalogo p, AvisoSinVenta aviso) {
-        return admin.productos().guardar(new ProductoAdminService.Datos(p.id(), p.nombre(), p.categoria(), p.clave(),
-                p.codigoInventario(), p.unidad(), p.sujetoMerma(), p.disponibilidad(), p.temporada(),
+        return admin.productos().guardar(new ProductoAdminService.Datos(p.id(), p.nombre(), p.categoria(), p.marca(),
+                p.clave(), p.codigoInventario(), p.unidad(), p.sujetoMerma(), p.disponibilidad(), p.temporada(),
                 p.presentaciones(), List.of(), p.gramajeGramos(), p.mermaGramos(), aviso), administrador);
     }
 

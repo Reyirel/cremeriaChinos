@@ -39,6 +39,13 @@ public enum AccionBitacora {
     REGLA_COMISION_EDITADA("COM", "Regla de comisión editada"),
     REGLA_COMISION_ELIMINADA("COM", "Regla de comisión eliminada"),
 
+    GASTO_CREADO("GAS", "Gasto creado"),
+    GASTO_EDITADO("GAS", "Gasto editado"),
+    GASTO_ELIMINADO("GAS", "Gasto eliminado"),
+
+    NOMINA_CAPTURADA("NOM", "Nómina semanal capturada"),
+    NOMINA_EDITADA("NOM", "Nómina semanal editada"),
+
     CORTE_CAJA("CRT", "Corte de caja"),
     VENTA_CANCELADA("CAN", "Venta cancelada"),
     MOVIMIENTO_CAJA("MOV", "Entrada/retiro de efectivo"),
