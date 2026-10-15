@@ -238,17 +238,17 @@ class PruebaOfflineYModulosTest {
 
     private List<String> altaDeProductos() {
         List<String> ids = new ArrayList<>();
-        ids.add(producto(new ProductoAdminService.Datos(null, "Queso Oaxaca", "Quesos", "101", "INV-Q01", Unidad.KG,
+        ids.add(producto(new ProductoAdminService.Datos(null, "Queso Oaxaca", "Quesos", null, "101", "INV-Q01", Unidad.KG,
                 true, Disponibilidad.REGULAR, null, List.of(
                         pres("Kilo", true, "1", null, true),
                         pres("Bola 1 kg", false, "1", "750123400001", false)),
                 List.of(), new BigDecimal("1000"), new BigDecimal("30"), null)));
-        ids.add(producto(new ProductoAdminService.Datos(null, "Crema ácida 450 ml", "Cremas y lácteos", null, "INV-C12",
+        ids.add(producto(new ProductoAdminService.Datos(null, "Crema ácida 450 ml", "Cremas y lácteos", null, null, "INV-C12",
                 Unidad.PZA, false, Disponibilidad.REGULAR, null, List.of(
                         pres("Pieza", false, "1", "750123400002", true),
                         pres("Caja 12 pzas", false, "12", "750123400003", false)),
                 List.of(), new BigDecimal("460"), BigDecimal.ZERO, null)));
-        ids.add(producto(new ProductoAdminService.Datos(null, "Jamón de pierna", "Carnes frías", "301", "INV-CF01",
+        ids.add(producto(new ProductoAdminService.Datos(null, "Jamón de pierna", "Carnes frías", null, "301", "INV-CF01",
                 Unidad.KG, true, Disponibilidad.REGULAR, null, List.of(
                         pres("Kilo", true, "1", null, true),
                         pres("Paquete 250 g", false, "0.25", "750123400004", false)),
@@ -293,12 +293,12 @@ class PruebaOfflineYModulosTest {
         adm.alertas().guardarDiasSinVenta(norte, 15, luis);
         adm.alertas().guardarDiasSinVenta(mercado, 10, luis);
         adm.alertas().guardarDiasSinVenta(sur, 7, luis);
-        IndicadoresService indicadores = new IndicadoresService(db, caja);
+        IndicadoresService indicadores = new IndicadoresService(db, caja, adm.gastos(), adm.nomina(), adm.credito());
         int anio = java.time.LocalDate.now().getYear();
         int mes = java.time.LocalDate.now().getMonthValue();
-        indicadores.guardarMeta(luis, norte.id(), anio, mes, 4_500_000);
-        indicadores.guardarMeta(luis, mercado.id(), anio, mes, 3_800_000);
-        indicadores.guardarMeta(luis, sur.id(), anio, mes, 3_000_000);
+        indicadores.guardarMeta(luis, norte.id(), anio, mes, 4_500_000, null, null, null);
+        indicadores.guardarMeta(luis, mercado.id(), anio, mes, 3_800_000, null, null, null);
+        indicadores.guardarMeta(luis, sur.id(), anio, mes, 3_000_000, null, null, null);
         avisar("Avisos de días sin venta y metas del mes");
 
         // Usuarios y horarios. Las horas se acomodan a la hora en que corre la prueba: Daniela llega
