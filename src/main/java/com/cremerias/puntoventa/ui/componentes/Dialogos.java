@@ -1,6 +1,7 @@
 package com.cremerias.puntoventa.ui.componentes;
 
 import atlantafx.base.controls.ModalPane;
+import atlantafx.base.util.Animations;
 import javafx.animation.PauseTransition;
 import javafx.application.Platform;
 import javafx.scene.Node;
@@ -32,12 +33,18 @@ public class Dialogos {
         ModalPane modal = new ModalPane();
         modal.setPersistent(true);
         modal.getStyleClass().add("modal-app");
+        // Aparición breve; sin animación con movimiento reducido.
+        Duration entrada = Diseno.movimientoReducido() ? Duration.ONE : Diseno.MOVIMIENTO;
+        Duration salida = Diseno.movimientoReducido() ? Duration.ONE : Diseno.MOVIMIENTO_CORTO;
+        modal.setInTransitionFactory(n -> Animations.fadeIn(n, entrada));
+        modal.setOutTransitionFactory(n -> Animations.fadeOut(n, salida));
         raiz.getChildren().add(modal);
         // El skin del ModalPane debe existir antes de show(); si no, el diálogo no se muestra.
         modal.applyCss();
         Abierto abierto = new Abierto(modal, dialogo);
         abiertos.add(abierto);
         dialogo.setCerrador(() -> cerrar(abierto));
+        dialogo.setDialogos(this);
         modal.show(dialogo);
         Platform.runLater(dialogo::enfocar);
     }
@@ -47,7 +54,7 @@ public class Dialogos {
             return;
         }
         abierto.modal().hide(true);
-        PauseTransition espera = new PauseTransition(Duration.millis(350));
+        PauseTransition espera = new PauseTransition(Duration.millis(Diseno.movimientoReducido() ? 0 : 250));
         espera.setOnFinished(e -> raiz.getChildren().remove(abierto.modal()));
         espera.play();
         if (!abiertos.isEmpty()) {

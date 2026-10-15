@@ -10,6 +10,8 @@ public class ConfigLocalRepository {
 
     public static final String ULTIMO_USUARIO = "login.ultimo_usuario";
     public static final String TEMA = "ui.tema";
+    public static final String MOVIMIENTO_REDUCIDO = "ui.movimiento_reducido";
+    public static final String MENU_COMPACTO = "ui.menu_compacto";
 
     public Optional<String> obtener(Connection c, String clave) throws SQLException {
         try (PreparedStatement ps = c.prepareStatement("SELECT valor FROM config_local WHERE clave = ?")) {

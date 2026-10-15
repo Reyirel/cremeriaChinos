@@ -3,19 +3,17 @@ package com.cremerias.puntoventa.ui.supervisor;
 import com.cremerias.puntoventa.model.Rol;
 import com.cremerias.puntoventa.model.Sesion;
 import com.cremerias.puntoventa.service.InventarioSucursalService.Bajo;
+import com.cremerias.puntoventa.ui.ConMenuLateral;
 import com.cremerias.puntoventa.ui.Navegador;
 import com.cremerias.puntoventa.ui.caja.CajaController;
 import com.cremerias.puntoventa.ui.componentes.IndicadoresVista;
+import com.cremerias.puntoventa.ui.componentes.MenuLateral;
 import com.cremerias.puntoventa.util.Cantidades;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.scene.Parent;
-import javafx.scene.control.Label;
-import javafx.scene.control.ToggleButton;
-import javafx.scene.control.ToggleGroup;
-import javafx.scene.control.Tooltip;
 import javafx.scene.layout.StackPane;
 import javafx.util.Duration;
 
@@ -28,11 +26,11 @@ import java.util.stream.Collectors;
  * y consultar (sin editar) los productos de su sucursal.
  * Las vistas se crean una sola vez para no perder la venta en curso al cambiar de sección.
  */
-public class SupervisorController {
+public class SupervisorController implements ConMenuLateral {
 
     private final Navegador navegador;
     private final Sesion sesion;
-    private final ToggleGroup menu = new ToggleGroup();
+    private final MenuLateral menu;
     private Parent vistaCaja;
     private Navegador.Vista<CortesController> vistaCortes;
     private ProductosVista vistaProductos;
@@ -42,41 +40,32 @@ public class SupervisorController {
     /** Productos en su mínimo de los que ya se avisó; nulo hasta la primera revisión. */
     private Set<String> minimosAvisados;
 
-    @FXML private ToggleButton opcionCaja;
-    @FXML private ToggleButton opcionCortes;
-    @FXML private ToggleButton opcionProductos;
-    @FXML private ToggleButton opcionIndicadores;
-    @FXML private ToggleButton opcionAccesos;
     @FXML private StackPane contenido;
-    @FXML private Label nombreSucursal;
-    @FXML private Label contadorAbiertas;
-    @FXML private Label contadorOfertar;
-    @FXML private Label detalleProductos;
-    @FXML private Label contadorAccesos;
 
     public SupervisorController(Navegador navegador) {
         this.navegador = navegador;
         this.sesion = navegador.contexto().sesionActual().obtener().orElseThrow();
+        this.menu = new MenuLateral(navegador.contexto().nombreSucursal(sesion.usuario().sucursalId()));
+    }
+
+    @Override
+    public MenuLateral menuLateral() {
+        return menu;
     }
 
     @FXML
     private void initialize() {
-        opcionCaja.setToggleGroup(menu);
-        opcionCortes.setToggleGroup(menu);
-        opcionProductos.setToggleGroup(menu);
-        opcionIndicadores.setToggleGroup(menu);
-        opcionAccesos.setToggleGroup(menu);
-        menu.selectedToggleProperty().addListener((o, antes, ahora) -> {
-            if (ahora == null && antes != null) {
-                antes.setSelected(true);
-            }
-        });
-        nombreSucursal.setText(navegador.contexto().nombreSucursal(sesion.usuario().sucursalId()));
-        contadorAbiertas.managedProperty().bind(contadorAbiertas.visibleProperty());
-        contadorOfertar.managedProperty().bind(contadorOfertar.visibleProperty());
-        contadorAccesos.managedProperty().bind(contadorAccesos.visibleProperty());
-        contadorOfertar.setTooltip(new Tooltip("Productos que llevan tiempo sin venderse: ofértalos"));
-        detalleProductos.setTooltip(new Tooltip("Existencias y precios de tu sucursal"));
+        menu.opcion("caja", "Caja", "mdi2c-cash-register", this::onCaja);
+        menu.setDetalle("caja", "Vender y cobrar", false);
+        menu.opcion("cortes", "Cortes de caja", "mdi2c-calculator-variant-outline", this::onCortes);
+        menu.setDetalle("cortes", "De tu sucursal", false);
+        menu.opcion("productos", "Productos", "mdi2p-package-variant-closed", this::onProductos);
+        menu.setDetalle("productos", "Existencias y precios", false);
+        menu.opcion("indicadores", "Indicadores", "mdi2c-chart-line", this::onIndicadores);
+        menu.setDetalle("indicadores", "De tu sucursal", false);
+        menu.opcion("accesos", "Accesos", "mdi2a-account-lock-outline", this::onAccesos);
+        menu.setDetalle("accesos", "Bloqueados por horario", false);
+
         // Al cobrar en la caja se revisa enseguida si algún producto llegó a su mínimo.
         contenido.addEventHandler(CajaController.VENTA_REGISTRADA, e -> actualizarContador());
         // El aviso de mínimos espera a que el panel esté en pantalla (al mostrarlo se limpian los avisos).
@@ -95,9 +84,8 @@ public class SupervisorController {
         });
     }
 
-    @FXML
     private void onCaja() {
-        opcionCaja.setSelected(true);
+        menu.seleccionar("caja");
         if (vistaCaja == null) {
             vistaCaja = navegador.cargar("caja-view.fxml");
         }
@@ -105,9 +93,8 @@ public class SupervisorController {
         actualizarContador();
     }
 
-    @FXML
     private void onCortes() {
-        opcionCortes.setSelected(true);
+        menu.seleccionar("cortes");
         if (vistaCortes == null) {
             vistaCortes = navegador.cargarVista("supervisor/cortes-view.fxml");
             vistaCortes.controlador().setAlCambiar(this::actualizarContador);
@@ -117,9 +104,8 @@ public class SupervisorController {
         contenido.getChildren().setAll(vistaCortes.nodo());
     }
 
-    @FXML
     private void onProductos() {
-        opcionProductos.setSelected(true);
+        menu.seleccionar("productos");
         if (vistaProductos == null) {
             vistaProductos = new ProductosVista(navegador);
         }
@@ -128,9 +114,8 @@ public class SupervisorController {
         actualizarContador();
     }
 
-    @FXML
     private void onIndicadores() {
-        opcionIndicadores.setSelected(true);
+        menu.seleccionar("indicadores");
         if (vistaIndicadores == null) {
             // sin selector de sucursal: siempre la propia del supervisor, también validado en el servicio.
             vistaIndicadores = new IndicadoresVista(navegador.contexto().indicadores(), sesion.usuario(), null,
@@ -140,9 +125,8 @@ public class SupervisorController {
         contenido.getChildren().setAll(vistaIndicadores.nodo());
     }
 
-    @FXML
     private void onAccesos() {
-        opcionAccesos.setSelected(true);
+        menu.seleccionar("accesos");
         if (vistaAccesos == null) {
             vistaAccesos = new AccesosVista(navegador);
         }
@@ -153,14 +137,11 @@ public class SupervisorController {
     private void actualizarContador() {
         String sucursal = sesion.usuario().sucursalId();
         int abiertas = sucursal == null ? 0 : navegador.contexto().caja().abiertosDeSucursal(sucursal).size();
-        contadorAbiertas.setText(String.valueOf(abiertas));
+        menu.setContador("cortes", abiertas);
         int ofertar = sucursal == null ? 0 : navegador.contexto().sinVenta().pendientes(Rol.SUPERVISOR, sucursal).size();
-        contadorOfertar.setText(String.valueOf(ofertar));
-        contadorOfertar.setVisible(ofertar > 0);
-        contadorAbiertas.setVisible(abiertas > 0);
+        menu.setContador("productos", ofertar);
         int bloqueos = sucursal == null ? 0 : navegador.contexto().auth().accesos().pendientesDeSucursal(sucursal).size();
-        contadorAccesos.setText(String.valueOf(bloqueos));
-        contadorAccesos.setVisible(bloqueos > 0);
+        menu.setContador("accesos", bloqueos);
         if (bloqueosAnteriores >= 0 && bloqueos > bloqueosAnteriores) {
             navegador.avisos().conAccion("Un empleado de tu sucursal tiene el acceso bloqueado.", "Ver",
                     this::onAccesos);
@@ -175,11 +156,8 @@ public class SupervisorController {
      */
     private void revisarMinimos(String sucursal) {
         List<Bajo> bajos = sucursal == null ? List.of() : navegador.contexto().inventarioSucursal().enMinimo(sucursal);
-        detalleProductos.setText(bajos.isEmpty() ? "Existencias y precios" : bajos.size() + " en su mínimo");
-        detalleProductos.getStyleClass().remove("menu-opcion-alerta");
-        if (!bajos.isEmpty()) {
-            detalleProductos.getStyleClass().add("menu-opcion-alerta");
-        }
+        menu.setDetalle("productos", bajos.isEmpty() ? "Existencias y precios" : bajos.size() + " en su mínimo",
+                !bajos.isEmpty());
         if (contenido.getScene() == null) {
             return;
         }

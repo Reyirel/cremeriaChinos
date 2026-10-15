@@ -1,56 +1,64 @@
 package com.cremerias.puntoventa.ui.admin;
 
-import atlantafx.base.controls.Spacer;
-import com.cremerias.puntoventa.util.Dinero;
-import javafx.beans.property.ReadOnlyObjectWrapper;
-import javafx.geometry.Insets;
+import com.cremerias.puntoventa.ui.componentes.BarraHerramientas;
+import com.cremerias.puntoventa.ui.componentes.Diseno;
+import com.cremerias.puntoventa.ui.componentes.EncabezadoPagina;
+import com.cremerias.puntoventa.ui.componentes.Etiqueta;
+import com.cremerias.puntoventa.ui.componentes.Formulario;
+import com.cremerias.puntoventa.ui.componentes.TablaDatos;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
-import javafx.scene.control.TableCell;
-import javafx.scene.control.TableColumn;
-import javafx.scene.control.TableView;
-import javafx.scene.control.TextField;
-import javafx.scene.control.Tooltip;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
-import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import org.kordamp.ikonli.javafx.FontIcon;
 
-import java.util.function.Function;
-
-/** Piezas de interfaz comunes del panel del administrador. */
+/**
+ * Atajos para armar páginas del panel con los componentes compartidos (ver ui/componentes).
+ * Solo composición: la apariencia está en app.css.
+ */
 public final class Ui {
 
     private Ui() {
     }
 
-    /** Contenedor de página con título, subtítulo y acciones a la derecha. */
-    public static VBox pagina(String titulo, String subtitulo, Node... acciones) {
-        Label t = new Label(titulo);
-        t.getStyleClass().add("pagina-titulo");
-        Label s = new Label(subtitulo);
-        s.getStyleClass().add("pagina-subtitulo");
-        s.setWrapText(true);
-        VBox textos = new VBox(2, t, s);
-        // El subtítulo se ajusta en varias líneas; los botones nunca se recortan ("✓ …").
-        textos.setMinWidth(0);
-        HBox.setHgrow(textos, Priority.ALWAYS);
-        HBox encabezado = new HBox(10, textos, new Spacer());
-        encabezado.getChildren().addAll(acciones);
-        for (Node accion : acciones) {
-            if (accion instanceof Region r) {
-                r.setMinWidth(Region.USE_PREF_SIZE);
-            }
-        }
-        encabezado.setAlignment(Pos.CENTER_LEFT);
-        VBox pagina = new VBox(16, encabezado);
-        pagina.getStyleClass().add("pagina-admin");
-        pagina.setPadding(new Insets(24, 28, 24, 28));
+    /** Contenedor de página con su encabezado (título, contexto y acciones). */
+    public static VBox pagina(String titulo, String descripcion, Node... acciones) {
+        return pagina(new EncabezadoPagina(titulo, descripcion).acciones(acciones));
+    }
+
+    public static VBox pagina(EncabezadoPagina encabezado) {
+        VBox pagina = new VBox(Diseno.ESPACIO_L, encabezado);
+        pagina.getStyleClass().add("pagina");
         return pagina;
+    }
+
+    /**
+     * Página cuya pieza principal (la tabla) llena el alto disponible; en ventanas bajas la página
+     * entera se desplaza para que esa pieza conserve un alto útil en lugar de aplastarse.
+     */
+    public static ScrollPane ajustable(VBox pagina, Region principal, double altoMinimo) {
+        principal.setMinHeight(altoMinimo);
+        VBox.setVgrow(principal, Priority.ALWAYS);
+        ScrollPane scroll = new ScrollPane(pagina);
+        scroll.setFitToWidth(true);
+        scroll.setFitToHeight(true);
+        scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scroll.getStyleClass().add("pagina-desplazable");
+        return scroll;
+    }
+
+    /** Página larga que se desplaza completa (varias secciones). */
+    public static ScrollPane desplazable(VBox pagina) {
+        ScrollPane scroll = new ScrollPane(pagina);
+        scroll.setFitToWidth(true);
+        scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scroll.getStyleClass().add("pagina-desplazable");
+        return scroll;
     }
 
     public static Button boton(String texto, String icono, String... clases) {
@@ -59,81 +67,146 @@ public final class Ui {
         return b;
     }
 
+    /** Acción principal de la pantalla (una por pantalla). */
     public static Button principal(String texto, String icono) {
-        return boton(texto, icono, "accent", "boton-principal");
+        return boton(texto, icono, "accent");
     }
 
     public static Button secundario(String texto, String icono) {
-        return boton(texto, icono, "boton-blanco");
+        return boton(texto, icono);
     }
 
-    /** Botón pequeño de ícono para acciones de una fila. */
-    public static Button accion(String icono, String ayuda, Runnable accion, String... clases) {
-        Button b = new Button(null, new FontIcon(icono));
-        b.getStyleClass().addAll("button-icon", "flat", "accion-fila");
-        b.getStyleClass().addAll(clases);
-        b.setTooltip(new Tooltip(ayuda));
-        b.setOnAction(e -> accion.run());
-        return b;
-    }
-
-    public static HBox acciones(Node... botones) {
-        HBox h = new HBox(2, botones);
-        h.setAlignment(Pos.CENTER_LEFT);
-        return h;
-    }
-
-    /** Chip de estado. Tonos: exito, peligro, advertencia, acento, neutro. */
+    /** Etiqueta de estado. Tonos: exito, peligro, advertencia, acento, neutro, info. */
     public static Label chip(String texto, String tono) {
-        Label l = new Label(texto);
-        l.getStyleClass().addAll("chip", "chip-" + tono);
+        return switch (tono) {
+            case "exito" -> Etiqueta.de(texto, Etiqueta.Tono.EXITO);
+            case "peligro" -> Etiqueta.de(texto, Etiqueta.Tono.PELIGRO);
+            case "advertencia" -> Etiqueta.de(texto, Etiqueta.Tono.AVISO);
+            case "acento" -> Etiqueta.de(texto, Etiqueta.Tono.ACENTO);
+            case "info", "azul" -> Etiqueta.de(texto, Etiqueta.Tono.INFO);
+            case "tachado" -> Etiqueta.tachada(texto);
+            default -> Etiqueta.de(texto, Etiqueta.Tono.NEUTRO);
+        };
+    }
+
+    /** Campo con su etiqueta arriba. */
+    public static Formulario.Campo campo(String etiqueta, Node control) {
+        return Formulario.campo(etiqueta, control);
+    }
+
+    /** Campos que se reparten el ancho. */
+    public static HBox fila(Node... campos) {
+        return Formulario.fila(campos);
+    }
+
+    public static Label texto(String contenido, String clase) {
+        Label l = new Label(contenido);
+        l.getStyleClass().add(clase);
+        l.setWrapText(true);
         return l;
     }
 
-    public static TextField buscador(String ayuda) {
-        TextField t = new TextField();
-        t.setPromptText(ayuda);
-        t.getStyleClass().add("buscador");
-        t.setPrefWidth(300);
-        return t;
+    /** Panel blanco con la barra de búsqueda y filtros arriba y la tabla debajo. */
+    public static VBox panelTabla(BarraHerramientas barra, TablaDatos<?> tabla) {
+        VBox panel = new VBox();
+        panel.getStyleClass().add("panel-tabla");
+        if (barra != null) {
+            panel.getChildren().add(barra);
+        }
+        panel.getChildren().add(tabla.tabla());
+        VBox.setVgrow(tabla.tabla(), Priority.ALWAYS);
+        Diseno.recortarRedondeado(panel, Diseno.RADIO_PANEL);
+        return panel;
     }
 
-    public static <T> TableView<T> tabla(String vacio) {
-        TableView<T> t = new TableView<>();
-        t.getStyleClass().add("tabla-admin");
+    /** Panel con título, una línea de contexto opcional, acciones a la derecha y su contenido. */
+    public static VBox panel(String titulo, String descripcion, Node accion, Node... contenido) {
+        Label t = new Label(titulo);
+        t.getStyleClass().add("panel-titulo");
+        VBox textos = new VBox(2, t);
+        if (descripcion != null && !descripcion.isBlank()) {
+            Label d = new Label(descripcion);
+            d.getStyleClass().add("panel-descripcion");
+            d.setWrapText(true);
+            textos.getChildren().add(d);
+        }
+        textos.setMinWidth(0);
+        HBox.setHgrow(textos, Priority.ALWAYS);
+        HBox encabezado = new HBox(10, textos);
+        encabezado.getStyleClass().add("panel-encabezado");
+        encabezado.setAlignment(Pos.CENTER_LEFT);
+        if (accion != null) {
+            if (accion instanceof Region r) {
+                r.setMinWidth(Region.USE_PREF_SIZE);
+            }
+            encabezado.getChildren().add(accion);
+        }
+        VBox panel = new VBox(encabezado);
+        panel.getStyleClass().add("panel");
+        if (contenido.length > 0) {
+            VBox cuerpo = new VBox(Diseno.ESPACIO_M, contenido);
+            cuerpo.getStyleClass().add("panel-cuerpo");
+            panel.getChildren().add(cuerpo);
+        }
+        return panel;
+    }
+
+    /** Espacio flexible en una fila. */
+    public static Region espacio() {
+        Region r = new Region();
+        HBox.setHgrow(r, Priority.ALWAYS);
+        return r;
+    }
+
+    // ==================================================================================
+    // TRANSICIÓN: piezas anteriores, solo mientras se migran las páginas restantes.
+    // Se eliminan al terminar la migración (el compilador confirma que nada las usa).
+    // ==================================================================================
+
+    @Deprecated
+    public static <T> javafx.scene.control.TableView<T> tabla(String vacio) {
+        javafx.scene.control.TableView<T> t = new javafx.scene.control.TableView<>();
+        t.getStyleClass().add("tabla-datos");
         t.setPlaceholder(new Label(vacio));
-        t.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
-        t.setFixedCellSize(50);
+        t.setColumnResizePolicy(javafx.scene.control.TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
+        t.setFixedCellSize(48);
         VBox.setVgrow(t, Priority.ALWAYS);
         return t;
     }
 
-    public static <T> TableColumn<T, String> texto(String titulo, double ancho, Function<T, String> valor) {
-        TableColumn<T, String> c = new TableColumn<>(titulo);
-        c.setCellValueFactory(f -> new ReadOnlyObjectWrapper<>(valor.apply(f.getValue())));
+    @Deprecated
+    public static <T> javafx.scene.control.TableColumn<T, String> texto(String titulo, double ancho,
+                                                                        java.util.function.Function<T, String> valor) {
+        javafx.scene.control.TableColumn<T, String> c = new javafx.scene.control.TableColumn<>(titulo);
+        c.setCellValueFactory(f -> new javafx.beans.property.ReadOnlyObjectWrapper<>(valor.apply(f.getValue())));
         c.setPrefWidth(ancho);
         c.setSortable(false);
         return c;
     }
 
-    /** Columna que no se encoge cuando la tabla no cabe (folios, fechas, botones). */
-    public static <T, S> TableColumn<T, S> fija(TableColumn<T, S> c) {
+    @Deprecated
+    public static <T, S> javafx.scene.control.TableColumn<T, S> fija(javafx.scene.control.TableColumn<T, S> c) {
         c.setMinWidth(c.getPrefWidth());
         return c;
     }
 
-    public static <T> TableColumn<T, String> dinero(String titulo, double ancho, Function<T, Long> valor) {
-        TableColumn<T, String> c = texto(titulo, ancho, x -> Dinero.formatear(valor.apply(x)));
-        c.getStyleClass().add("columna-derecha");
+    @Deprecated
+    public static <T> javafx.scene.control.TableColumn<T, String> dinero(String titulo, double ancho,
+                                                                         java.util.function.Function<T, Long> valor) {
+        javafx.scene.control.TableColumn<T, String> c = texto(titulo, ancho,
+                x -> com.cremerias.puntoventa.util.Dinero.formatear(valor.apply(x)));
+        c.getStyleClass().add("columna-numero");
         return c;
     }
 
-    public static <T> TableColumn<T, T> nodo(String titulo, double ancho, Function<T, Node> fabrica) {
-        TableColumn<T, T> c = new TableColumn<>(titulo);
-        c.setCellValueFactory(f -> new ReadOnlyObjectWrapper<>(f.getValue()));
+    @Deprecated
+    public static <T> javafx.scene.control.TableColumn<T, T> nodo(String titulo, double ancho,
+                                                                  java.util.function.Function<T, Node> fabrica) {
+        javafx.scene.control.TableColumn<T, T> c = new javafx.scene.control.TableColumn<>(titulo);
+        c.setCellValueFactory(f -> new javafx.beans.property.ReadOnlyObjectWrapper<>(f.getValue()));
         c.setPrefWidth(ancho);
         c.setSortable(false);
-        c.setCellFactory(col -> new TableCell<>() {
+        c.setCellFactory(col -> new javafx.scene.control.TableCell<>() {
             @Override
             protected void updateItem(T item, boolean vacio) {
                 super.updateItem(item, vacio);
@@ -143,18 +216,17 @@ public final class Ui {
         return c;
     }
 
-    /** Columna con el id único (8 primeros caracteres; el completo en la ayuda). */
-    public static <T> TableColumn<T, T> id(Function<T, String> valor) {
+    @Deprecated
+    public static <T> javafx.scene.control.TableColumn<T, T> id(java.util.function.Function<T, String> valor) {
         return nodo("ID", 96, x -> {
             String id = valor.apply(x);
             Label l = new Label(id == null ? "" : id.substring(0, Math.min(8, id.length())));
             l.getStyleClass().add("texto-id");
-            l.setTooltip(new Tooltip(id));
             return l;
         });
     }
 
-    /** Nombre con texto secundario debajo. */
+    @Deprecated
     public static VBox dosLineas(String principal, String secundario) {
         Label a = new Label(principal);
         a.getStyleClass().add("celda-principal");
@@ -168,64 +240,47 @@ public final class Ui {
         return v;
     }
 
-    /** Campo con su etiqueta arriba. */
-    public static VBox campo(String etiqueta, Node control) {
-        Label l = new Label(etiqueta);
-        l.getStyleClass().add("campo-etiqueta");
-        VBox v = new VBox(6, l, control);
-        if (control instanceof Region r) {
-            r.setMaxWidth(Double.MAX_VALUE);
-        }
-        return v;
-    }
-
-    /** Fila de campos que se reparten el ancho. */
-    public static HBox fila(Node... campos) {
-        HBox h = new HBox(12, campos);
-        for (Node n : campos) {
-            HBox.setHgrow(n, Priority.ALWAYS);
-            if (n instanceof Region r) {
-                r.setMaxWidth(Double.MAX_VALUE);
-                r.setPrefWidth(10);
-            }
-        }
-        return h;
-    }
-
-    /** Tarjeta blanca con título. */
+    @Deprecated
     public static VBox tarjeta(String titulo, Node... contenido) {
-        VBox v = new VBox(12);
-        v.getStyleClass().add("tarjeta-admin");
-        if (titulo != null) {
-            Label t = new Label(titulo);
-            t.getStyleClass().add("tarjeta-admin-titulo");
-            v.getChildren().add(t);
-        }
-        v.getChildren().addAll(contenido);
-        return v;
+        return panel(titulo == null ? "" : titulo, null, null, contenido);
     }
 
-    /** Indicador numérico (tarjeta blanca pequeña). */
+    @Deprecated
     public static VBox indicador(String titulo, String valor, String icono) {
         Label t = new Label(titulo);
-        t.getStyleClass().add("indicador-titulo");
-        StackPane iconoCaja = new StackPane(new FontIcon(icono));
-        iconoCaja.getStyleClass().add("indicador-icono");
-        HBox arriba = new HBox(t, new Spacer(), iconoCaja);
-        arriba.setAlignment(Pos.CENTER_LEFT);
+        t.getStyleClass().add("metrica-etiqueta");
         Label v = new Label(valor);
-        v.getStyleClass().add("indicador-valor");
-        VBox caja = new VBox(6, arriba, v);
-        caja.getStyleClass().add("indicador");
+        v.getStyleClass().add("metrica-valor");
+        VBox caja = new VBox(4, t, v);
+        caja.getStyleClass().addAll("kpi");
         caja.setMaxWidth(Double.MAX_VALUE);
         HBox.setHgrow(caja, Priority.ALWAYS);
         return caja;
     }
 
-    public static Label texto(String contenido, String clase) {
-        Label l = new Label(contenido);
-        l.getStyleClass().add(clase);
-        l.setWrapText(true);
-        return l;
+    @Deprecated
+    public static Button accion(String icono, String ayuda, Runnable accion, String... clases) {
+        Button b = new Button(null, new FontIcon(icono));
+        b.getStyleClass().addAll("flat", "boton-icono");
+        b.getStyleClass().addAll(clases);
+        b.setTooltip(new javafx.scene.control.Tooltip(ayuda));
+        b.setAccessibleText(ayuda);
+        b.setOnAction(e -> accion.run());
+        return b;
+    }
+
+    @Deprecated
+    public static HBox acciones(Node... botones) {
+        HBox h = new HBox(2, botones);
+        h.setAlignment(Pos.CENTER_LEFT);
+        return h;
+    }
+
+    @Deprecated
+    public static javafx.scene.control.TextField buscador(String ayuda) {
+        javafx.scene.control.TextField t = new javafx.scene.control.TextField();
+        t.setPromptText(ayuda);
+        t.setPrefWidth(300);
+        return t;
     }
 }

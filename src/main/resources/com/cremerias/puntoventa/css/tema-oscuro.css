@@ -1,0 +1,127 @@
+/* =====================================================================
+   Tema oscuro: los mismos tokens semánticos que tema-claro.css con
+   valores para fondo oscuro. Se carga en lugar del claro (ver Temas).
+   ===================================================================== */
+
+.root {
+    -fondo: #14171B;
+    -superficie: #1B1F25;
+    -superficie-sutil: #20252C;
+    -superficie-hover: #252B33;
+    -superficie-presionada: #2C333C;
+    -borde: #323943;
+    -borde-sutil: #2A3038;
+    -borde-fuerte: #434C57;
+
+    -texto: #E5E8EC;                /* 13.5:1 */
+    -texto-secundario: #A2ABB6;     /* 7.1:1 */
+    -texto-tenue: #7D8794;
+    -texto-inverso: #FFFFFF;
+
+    -nav: #101317;
+    -nav-hover: #1B2026;
+    -nav-activo: #262D36;
+    -nav-texto: #B9C1CA;
+    -nav-texto-activo: #FFFFFF;
+    -nav-titulo: #808A96;
+    -nav-borde: #22282F;
+
+    -acento: #B45309;
+    -acento-hover: #C25E10;
+    -acento-presionado: #9C4708;
+    -acento-texto: #F0A262;         /* 7.9:1 sobre la superficie */
+    -acento-suave: #3A2918;
+    -acento-suave-hover: #45311C;
+    -acento-borde: #7A4B22;
+
+    -exito: #6CCB8F;
+    -exito-suave: #16291E;
+    -exito-borde: #2C5A3C;
+    -exito-solido: #1D8A47;
+    -aviso: #E9B45C;
+    -aviso-suave: #2E2412;
+    -aviso-borde: #6B5221;
+    -peligro: #F2897E;
+    -peligro-suave: #33191A;
+    -peligro-borde: #6E3330;
+    -info: #7FB2EE;
+    -info-suave: #152437;
+    -info-borde: #2D4D73;
+    -neutro: #B4BCC6;
+    -neutro-suave: #262B33;
+    -neutro-borde: #3A424C;
+
+    -foco: #F0A262;
+    -foco-anillo: rgba(240, 162, 98, 0.30);
+    -sombra: rgba(0, 0, 0, 0.30);
+    -sombra-fuerte: rgba(0, 0, 0, 0.55);
+    -velo: rgba(0, 0, 0, 0.55);
+
+    -grafica-1: #E8873A;
+    -grafica-2: #6F9BCB;
+    -grafica-3: #93B36A;
+    -grafica-4: #B497D0;
+    -grafica-rejilla: #2A3038;
+
+    -color-dark: #101317;
+    -color-light: #FFFFFF;
+    -color-base-0: #20252C;
+    -color-base-1: #252B33;
+    -color-base-2: #323943;
+    -color-base-3: #434C57;
+    -color-base-4: #5C6672;
+    -color-base-5: #7D8794;
+    -color-base-6: #A2ABB6;
+    -color-base-7: #C3CAD2;
+    -color-base-8: #DCE0E5;
+    -color-base-9: #E5E8EC;
+
+    -color-accent-0: #2A1D11;
+    -color-accent-1: #3A2918;
+    -color-accent-2: #5A3A1D;
+    -color-accent-3: #7A4B22;
+    -color-accent-4: #A05E24;
+    -color-accent-5: #B45309;
+    -color-accent-6: #C25E10;
+    -color-accent-7: #E08236;
+    -color-accent-8: #F0A262;
+    -color-accent-9: #F8C9A0;
+
+    -color-fg-default: -texto;
+    -color-fg-muted: -texto-secundario;
+    -color-fg-subtle: -texto-tenue;
+    -color-fg-emphasis: #FFFFFF;
+    -color-bg-default: -superficie;
+    -color-bg-overlay: #22272E;
+    -color-bg-subtle: -superficie-sutil;
+    -color-bg-inset: -fondo;
+    -color-border-default: -borde;
+    -color-border-muted: -borde-sutil;
+    -color-border-subtle: -borde-sutil;
+    -color-shadow-default: rgba(0, 0, 0, 0.6);
+
+    -color-neutral-emphasis-plus: #E5E8EC;
+    -color-neutral-emphasis: #7D8794;
+    -color-neutral-muted: rgba(110, 120, 132, 0.30);
+    -color-neutral-subtle: rgba(110, 120, 132, 0.12);
+
+    -color-accent-fg: -acento-texto;
+    -color-accent-emphasis: -acento;
+    -color-accent-muted: -acento-borde;
+    -color-accent-subtle: -acento-suave;
+    -color-success-fg: -exito;
+    -color-success-emphasis: -exito-solido;
+    -color-success-muted: -exito-borde;
+    -color-success-subtle: -exito-suave;
+    -color-warning-fg: -aviso;
+    -color-warning-emphasis: #B98A2E;
+    -color-warning-muted: -aviso-borde;
+    -color-warning-subtle: -aviso-suave;
+    -color-danger-fg: -peligro;
+    -color-danger-emphasis: #D0473D;
+    -color-danger-muted: -peligro-borde;
+    -color-danger-subtle: -peligro-suave;
+
+    -marca: -acento;
+    -fondo-app: -fondo;
+}

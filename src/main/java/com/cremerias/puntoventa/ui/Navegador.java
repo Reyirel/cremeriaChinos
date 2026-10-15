@@ -2,15 +2,15 @@ package com.cremerias.puntoventa.ui;
 
 import com.cremerias.puntoventa.AppContext;
 import com.cremerias.puntoventa.model.Sesion;
+import com.cremerias.puntoventa.model.Rol;
 import com.cremerias.puntoventa.ui.componentes.Avisos;
 import com.cremerias.puntoventa.ui.componentes.Dialogos;
-import javafx.animation.FadeTransition;
+import com.cremerias.puntoventa.ui.componentes.Diseno;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
-import javafx.util.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,10 +36,10 @@ public class Navegador {
         this.contexto = contexto;
         raiz.getStyleClass().add("app-raiz");
         Scene scene = new Scene(raiz, 1200, 760);
-        scene.getStylesheets().add(getClass().getResource("/com/cremerias/puntoventa/css/app.css").toExternalForm());
         stage.setScene(scene);
         temaOscuro = contexto.preferencias().temaOscuro();
-        Temas.aplicar(raiz, temaOscuro);
+        Temas.aplicar(scene, temaOscuro);
+        Diseno.movimientoReducidoProperty().set(Diseno.movimientoReducido() || contexto.preferencias().movimientoReducido());
     }
 
     public AppContext contexto() {
@@ -69,6 +69,8 @@ public class Navegador {
         contexto.sincronizador().revisarAhora();
         stage.setTitle("Cremería · " + sesion.usuario().rol().nombre());
         stage.setMaximized(true);
+        // En la caja los avisos van arriba del botón «Cobrar»; en el panel, en la esquina.
+        avisos.setMargenInferior(sesion.usuario().rol() == Rol.ADMINISTRADOR ? 24 : 160);
         mostrar(cargar("inicio-view.fxml"));
     }
 
@@ -85,8 +87,19 @@ public class Navegador {
 
     public void alternarTema() {
         temaOscuro = !temaOscuro;
-        Temas.aplicar(raiz, temaOscuro);
+        Temas.aplicar(stage.getScene(), temaOscuro);
         contexto.preferencias().guardarTemaOscuro(temaOscuro);
+    }
+
+    public boolean movimientoReducido() {
+        return Diseno.movimientoReducido();
+    }
+
+    /** Activa o quita las animaciones de transición (se recuerda en este equipo). */
+    public void alternarMovimientoReducido() {
+        boolean reducido = !Diseno.movimientoReducido();
+        Diseno.movimientoReducidoProperty().set(reducido);
+        contexto.preferencias().guardarMovimientoReducido(reducido);
     }
 
     /** Vista cargada junto con su controlador. */
@@ -127,9 +140,6 @@ public class Navegador {
         dialogos.limpiar();
         avisos.contenedor().getChildren().clear();
         raiz.getChildren().setAll(vista, avisos.contenedor());
-        FadeTransition fade = new FadeTransition(Duration.millis(260), vista);
-        fade.setFromValue(0);
-        fade.setToValue(1);
-        fade.play();
+        Diseno.aparecer(vista);
     }
 }

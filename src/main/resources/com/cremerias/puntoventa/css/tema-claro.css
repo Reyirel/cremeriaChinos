@@ -1,0 +1,139 @@
+/* =====================================================================
+   Tema claro: tokens de color semánticos.
+   app.css solo usa estos nombres; aquí se define su valor y cómo se
+   conectan con las variables de AtlantaFX (Primer), para que todos los
+   controles (campos, listas, menús, calendarios) usen la misma paleta.
+   Contraste revisado (WCAG AA) para todo el texto informativo.
+   ===================================================================== */
+
+.root {
+    /* --- Superficies --- */
+    -fondo: #F5F6F8;                /* área de trabajo */
+    -superficie: #FFFFFF;           /* paneles, tablas, diálogos */
+    -superficie-sutil: #F8F9FB;     /* encabezados de tabla, bloques internos */
+    -superficie-hover: #F1F3F6;
+    -superficie-presionada: #E8EBEF;
+    -borde: #DDE2E7;
+    -borde-sutil: #ECEFF2;          /* separadores de filas */
+    -borde-fuerte: #C5CCD4;
+
+    /* --- Texto --- */
+    -texto: #20242A;                /* 15.6:1 sobre blanco */
+    -texto-secundario: #59636F;     /* 6.1:1 */
+    -texto-tenue: #737D89;          /* solo marcadores de posición y deshabilitado */
+    -texto-inverso: #FFFFFF;
+
+    /* --- Navegación lateral (grafito) --- */
+    -nav: #20252B;
+    -nav-hover: #2B323B;
+    -nav-activo: #353D48;
+    -nav-texto: #C5CCD4;            /* 9.5:1 */
+    -nav-texto-activo: #FFFFFF;
+    -nav-titulo: #8D97A3;           /* 5.2:1 */
+    -nav-borde: #2E353E;
+
+    /* --- Acento de marca (naranja cobrizo) --- */
+    -acento: #B45309;               /* relleno de botones; 5.0:1 con texto blanco */
+    -acento-hover: #9C4708;
+    -acento-presionado: #843C06;
+    -acento-texto: #B45309;         /* acento usado como texto o ícono */
+    -acento-suave: #FFF1E5;         /* selección clara */
+    -acento-suave-hover: #FFE7D3;
+    -acento-borde: #F2C7A1;
+
+    /* --- Estados (siempre acompañados de texto) --- */
+    -exito: #146C34;
+    -exito-suave: #EAF6EE;
+    -exito-borde: #B9DFC6;
+    -exito-solido: #15803D;
+    -aviso: #8A5100;
+    -aviso-suave: #FFF4D6;
+    -aviso-borde: #F1D48C;
+    -peligro: #B42318;
+    -peligro-suave: #FDEEEC;
+    -peligro-borde: #F5C3BD;
+    -info: #1D5A9E;
+    -info-suave: #EAF2FB;
+    -info-borde: #BFD5EF;
+    -neutro: #475263;
+    -neutro-suave: #EEF0F3;
+    -neutro-borde: #D8DDE3;
+
+    /* --- Interacción y profundidad --- */
+    -foco: #B45309;
+    -foco-anillo: rgba(180, 83, 9, 0.28);
+    -sombra: rgba(16, 24, 40, 0.07);
+    -sombra-fuerte: rgba(16, 24, 40, 0.18);
+    -velo: rgba(17, 21, 26, 0.42);
+
+    /* --- Gráficas --- */
+    -grafica-1: #B45309;
+    -grafica-2: #3F6E9E;
+    -grafica-3: #5F7A3A;
+    -grafica-4: #8A6BA8;
+    -grafica-rejilla: #ECEFF2;
+
+    /* --- AtlantaFX con la paleta propia --- */
+    -color-dark: #20252B;
+    -color-light: #FFFFFF;
+    -color-base-0: #F8F9FB;
+    -color-base-1: #F1F3F6;
+    -color-base-2: #DDE2E7;
+    -color-base-3: #C5CCD4;
+    -color-base-4: #9AA3AE;
+    -color-base-5: #737D89;
+    -color-base-6: #59636F;
+    -color-base-7: #434B56;
+    -color-base-8: #2E353E;
+    -color-base-9: #20252B;
+
+    -color-accent-0: #FFF7F0;
+    -color-accent-1: #FFF1E5;
+    -color-accent-2: #FDD9B8;
+    -color-accent-3: #F7B57C;
+    -color-accent-4: #EB8D46;
+    -color-accent-5: #D26C1C;
+    -color-accent-6: #B45309;
+    -color-accent-7: #9C4708;
+    -color-accent-8: #7C3906;
+    -color-accent-9: #5C2B05;
+
+    -color-fg-default: -texto;
+    -color-fg-muted: -texto-secundario;
+    -color-fg-subtle: -texto-tenue;
+    -color-fg-emphasis: #FFFFFF;
+    -color-bg-default: -superficie;
+    -color-bg-overlay: -superficie;
+    -color-bg-subtle: -superficie-sutil;
+    -color-bg-inset: -fondo;
+    -color-border-default: -borde;
+    -color-border-muted: -borde-sutil;
+    -color-border-subtle: -borde-sutil;
+    -color-shadow-default: rgba(16, 24, 40, 0.14);
+
+    -color-neutral-emphasis-plus: #20252B;
+    -color-neutral-emphasis: #59636F;
+    -color-neutral-muted: rgba(150, 160, 172, 0.22);
+    -color-neutral-subtle: rgba(236, 239, 242, 0.6);
+
+    -color-accent-fg: -acento-texto;
+    -color-accent-emphasis: -acento;
+    -color-accent-muted: -acento-borde;
+    -color-accent-subtle: -acento-suave;
+    -color-success-fg: -exito;
+    -color-success-emphasis: -exito-solido;
+    -color-success-muted: -exito-borde;
+    -color-success-subtle: -exito-suave;
+    -color-warning-fg: -aviso;
+    -color-warning-emphasis: #B7791F;
+    -color-warning-muted: -aviso-borde;
+    -color-warning-subtle: -aviso-suave;
+    -color-danger-fg: -peligro;
+    -color-danger-emphasis: #C8322A;
+    -color-danger-muted: -peligro-borde;
+    -color-danger-subtle: -peligro-suave;
+
+    /* Compatibilidad con estilos anteriores de la caja */
+    -marca: -acento;
+    -fondo-app: -fondo;
+}

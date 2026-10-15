@@ -5,306 +5,481 @@ import com.cremerias.puntoventa.model.ProductoCatalogo;
 import com.cremerias.puntoventa.model.Sucursal;
 import com.cremerias.puntoventa.model.Unidad;
 import com.cremerias.puntoventa.repository.LoteRepository;
+import com.cremerias.puntoventa.service.InventarioSucursalService;
 import com.cremerias.puntoventa.service.admin.AlmacenService;
-import com.cremerias.puntoventa.ui.componentes.CampoDinero;
-import com.cremerias.puntoventa.ui.componentes.CampoMasa;
+import com.cremerias.puntoventa.ui.componentes.BarraHerramientas;
+import com.cremerias.puntoventa.ui.componentes.Cargador;
 import com.cremerias.puntoventa.ui.componentes.Campos;
+import com.cremerias.puntoventa.ui.componentes.Diseno;
 import com.cremerias.puntoventa.ui.componentes.Dialogo;
+import com.cremerias.puntoventa.ui.componentes.EstadoVacio;
+import com.cremerias.puntoventa.ui.componentes.Etiqueta;
+import com.cremerias.puntoventa.ui.componentes.Formulario;
+import com.cremerias.puntoventa.ui.componentes.MaestroDetalle;
+import com.cremerias.puntoventa.ui.componentes.PanelDetalle;
+import com.cremerias.puntoventa.ui.componentes.ResumenMetricas;
+import com.cremerias.puntoventa.ui.componentes.TablaDatos;
+import com.cremerias.puntoventa.ui.componentes.TablaDatos.Accion;
+import com.cremerias.puntoventa.ui.componentes.Texto;
 import com.cremerias.puntoventa.util.Cantidades;
 import com.cremerias.puntoventa.util.Dinero;
-import com.cremerias.puntoventa.util.Masa;
 import javafx.collections.FXCollections;
 import javafx.scene.Node;
+import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
-import javafx.scene.control.Label;
-import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
-import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
-import javafx.util.StringConverter;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
-import java.util.function.Supplier;
+import java.util.Map;
+import java.util.stream.Collectors;
 
-/** Inventario del almacén central por lotes: reabastecer, ver lotes y registrar merma. */
+/**
+ * Inventario del almacén central por lotes. Pantalla de referencia del sistema de diseño:
+ * resumen compacto, tabla con búsqueda y filtros, y detalle del producto elegido con sus
+ * presentaciones, lotes y últimos movimientos. Registrar entrada, ver lotes y registrar merma.
+ */
 public class AlmacenPagina extends Pagina {
 
-    private static final DateTimeFormatter FECHA = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+    /** Filtro de estado de la tabla. */
+    private enum Estado {
+        TODOS("Todos los estados"), CON_EXISTENCIA("Con existencia"), AGOTADOS("Agotados"),
+        VARIOS_LOTES("Con más de un lote");
 
-    private TableView<AlmacenService.Existencia> tabla;
-    private HBox indicadores;
-    private TextField buscador;
-    private List<AlmacenService.Existencia> todos = List.of();
+        final String texto;
+
+        Estado(String texto) {
+            this.texto = texto;
+        }
+    }
+
+    /** Lo que se señala en la columna de estado (solo excepciones; lo normal va sin etiqueta). */
+    private enum Situacion {
+        AGOTADO("Agotado", Etiqueta.Tono.PELIGRO), DESHABILITADO("Deshabilitado", Etiqueta.Tono.NEUTRO),
+        NORMAL(null, Etiqueta.Tono.NEUTRO);
+
+        final String texto;
+        final Etiqueta.Tono tono;
+
+        Situacion(String texto, Etiqueta.Tono tono) {
+            this.texto = texto;
+            this.tono = tono;
+        }
+    }
+
+    /** Lotes y movimientos del producto en el detalle (se cargan aparte). */
+    private record DatosDetalle(List<LoteRepository.Lote> lotes, List<InventarioSucursalService.Movimiento> movimientos) {
+    }
+
+    private static final String TODAS = "Todas las categorías";
+    private static final int LOTES_EN_DETALLE = 4;
+
+    private final Cargador carga = new Cargador();
+    private final Cargador cargaDetalle = new Cargador();
+    private TablaDatos<AlmacenService.Existencia> tabla;
+    private BarraHerramientas barra;
+    private ComboBox<Estado> estado;
+    private ComboBox<String> categoria;
+    private ResumenMetricas.Metrica metricaValor;
+    private ResumenMetricas.Metrica metricaConExistencia;
+    private ResumenMetricas.Metrica metricaAgotados;
+    private PanelDetalle detalle;
+    private MaestroDetalle maestro;
+    private Map<String, BigDecimal> existencias = Map.of();
 
     public AlmacenPagina(AdminContexto a) {
         super(a);
     }
 
     @Override
+    public String titulo() {
+        return "Inventario del almacén";
+    }
+
+    @Override
+    public TextField busqueda() {
+        return barra.campoBusqueda();
+    }
+
+    @Override
     protected Node construir() {
-        var reabastecer = Ui.principal("Reabastecer", "mdi2t-tray-arrow-down");
-        reabastecer.setOnAction(e -> reabastecer(null));
+        Button registrar = Ui.principal("Registrar entrada", "mdi2t-tray-arrow-down");
+        registrar.setOnAction(e -> registrarEntrada(null));
         VBox pagina = Ui.pagina("Inventario del almacén",
-                "Cada entrada crea un lote con su costo. Al surtir, sale primero el lote más antiguo.", reabastecer);
-        indicadores = new HBox(14);
-        buscador = Ui.buscador("Buscar producto");
-        buscador.textProperty().addListener((o, x, y) -> filtrar());
-        tabla = Ui.tabla("No hay productos en el catálogo.");
-        tabla.getColumns().setAll(List.of(
-                Ui.nodo("Producto", 280, e -> Ui.dosLineas(e.producto().nombre(),
-                        e.producto().categoria() == null ? "" : e.producto().categoria())),
-                Ui.nodo("Existencia", 150, e -> {
-                    Label l = new Label(Cantidades.formatear(e.producto().unidad(), e.existencia()));
-                    l.getStyleClass().add(e.existencia().signum() > 0 ? "texto-negrita" : "texto-apagado");
-                    return l;
-                }),
-                Ui.texto("Lotes", 70, e -> String.valueOf(e.lotesConExistencia())),
-                Ui.texto("Costo del lote actual", 170, e -> e.lotesConExistencia() == 0 ? "—"
-                        : Dinero.formatear(e.costoActualCentavos()) + (e.producto().unidad() == Unidad.KG ? " / kg" : " / pza")),
-                Ui.dinero("Valor en almacén", 150, AlmacenService.Existencia::valorCentavos),
-                Ui.nodo("", 150, e -> {
-                    HBox acciones = Ui.acciones(
-                            Ui.accion("mdi2t-tray-arrow-down", "Reabastecer", () -> reabastecer(e.producto())),
-                            Ui.accion("mdi2l-layers-outline", "Ver lotes", () -> lotes(e.producto())));
-                    if (e.producto().sujetoMerma()) {
-                        acciones.getChildren().add(Ui.accion("mdi2d-delete-variant", "Registrar merma",
-                                () -> merma(e.producto()), "danger"));
-                    }
-                    return acciones;
-                })));
-        pagina.getChildren().addAll(indicadores, new HBox(10, buscador), tabla);
-        return pagina;
+                "Existencias por lote, valuadas al costo. Al surtir sale primero el lote más antiguo.", registrar);
+
+        ResumenMetricas resumen = new ResumenMetricas();
+        metricaValor = resumen.agregar("Valor del inventario").principal();
+        metricaConExistencia = resumen.agregar("Con existencia");
+        metricaAgotados = resumen.agregar("Agotados");
+
+        barra = new BarraHerramientas();
+        barra.buscador("Buscar producto, clave o código");
+        estado = barra.filtro("Estado", new ComboBox<>(FXCollections.observableArrayList(Estado.values())),
+                Estado.TODOS, e -> e.texto);
+        estado.setValue(Estado.TODOS);
+        categoria = barra.filtro("Categoría", new ComboBox<>(FXCollections.observableArrayList(TODAS)), TODAS, c -> c);
+        categoria.setValue(TODAS);
+        barra.setAlCambiar(this::filtrar);
+
+        tabla = new TablaDatos<>(Diseno.Densidad.NORMAL);
+        tabla.setClave(e -> e.producto().id());
+        tabla.dosLineas("Producto", e -> e.producto().nombre(), e -> Formatos.codigos(e.producto(), true)).flexible(220);
+        tabla.cantidad("Existencia", AlmacenService.Existencia::existencia, e -> e.producto().unidad()).ancho(120);
+        tabla.numero("Lotes", AlmacenService.Existencia::lotesConExistencia, String::valueOf).ancho(76)
+                .ayuda("Lotes con existencia");
+        tabla.formato("Costo actual", AlmacenService.Existencia::costoActualCentavos,
+                        (e, v) -> e.lotesConExistencia() == 0 ? "—" : Dinero.formatear(v) + Formatos.porUnidad(e.producto().unidad()))
+                .numero().ancho(136)
+                .ayuda("Costo del lote más antiguo con existencia: es el que sale primero.");
+        tabla.dinero("Valor", AlmacenService.Existencia::valorCentavos).ancho(124)
+                .ayuda("Existencia de cada lote por su costo.");
+        var columnaEstado = tabla.etiqueta("Estado", this::situacion, s -> s.texto, s -> s.tono).ancho(130);
+        var columnaAcciones = tabla.acciones(
+                Accion.<AlmacenService.Existencia>boton("mdi2t-tray-arrow-down", "Registrar entrada",
+                        e -> registrarEntrada(e.producto())),
+                Accion.<AlmacenService.Existencia>boton("mdi2l-layers-outline", "Ver lotes", e -> lotes(e.producto())),
+                Accion.<AlmacenService.Existencia>menu("mdi2d-delete-variant", e -> "Registrar merma", e -> merma(e.producto()))
+                        .si(e -> e.producto().sujetoMerma()).peligrosa());
+        tabla.setVacio(new EstadoVacio("mdi2p-package-variant", "Aún no hay productos en el catálogo.",
+                "Da de alta los productos para registrar sus entradas al almacén.")
+                .accion("Ir a Productos", "mdi2a-arrow-right", () -> a.irA().accept("productos")));
+        tabla.setSinResultados(EstadoVacio.sinResultados("No encontramos productos con estos filtros.", barra::limpiar));
+        tabla.setAlActivar(e -> {
+            mostrarDetalle(e);
+            maestro.abrir();
+        });
+        tabla.seleccionadoProperty().addListener((o, x, e) -> {
+            if (e != null && maestro.estaAbierto()) {
+                mostrarDetalle(e);
+            }
+        });
+
+        detalle = new PanelDetalle();
+        maestro = new MaestroDetalle(Ui.panelTabla(barra, tabla), detalle, 640);
+        maestro.setAlCerrar(() -> {
+            cargaDetalle.cancelar();
+            tabla.tabla().requestFocus();
+        });
+        // Con el detalle acoplado, sus acciones y su estado ya están en el panel.
+        maestro.acopladoAbiertoProperty().addListener((o, x, abierto) -> {
+            columnaEstado.columna().setVisible(!abierto);
+            columnaAcciones.columna().setVisible(!abierto);
+        });
+        pagina.getChildren().addAll(resumen, maestro);
+        return Ui.ajustable(pagina, maestro, 320);
     }
 
     @Override
     public void alMostrar() {
-        todos = a.admin().almacen().existencias();
-        long valor = todos.stream().mapToLong(AlmacenService.Existencia::valorCentavos).sum();
-        long conExistencia = todos.stream().filter(e -> e.existencia().signum() > 0).count();
-        long agotados = todos.stream().filter(e -> e.producto().activo() && e.existencia().signum() <= 0).count();
-        indicadores.getChildren().setAll(
-                Ui.indicador("Valor del inventario (al costo)", Dinero.formatear(valor), "mdi2c-cash-multiple"),
-                Ui.indicador("Productos con existencia", String.valueOf(conExistencia), "mdi2p-package-variant"),
-                Ui.indicador("Productos agotados", String.valueOf(agotados), "mdi2a-alert-outline"));
-        filtrar();
+        cargar();
+    }
+
+    private void cargar() {
+        tabla.cargando("Cargando inventario…");
+        carga.cargar(() -> a.admin().almacen().existencias(), lista -> {
+            existencias = lista.stream().collect(Collectors.toMap(e -> e.producto().id(),
+                    AlmacenService.Existencia::existencia, (x, y) -> x));
+            actualizarCategorias(lista);
+            actualizarResumen(lista);
+            tabla.setDatos(lista.stream().filter(e -> e.producto().activo() || e.existencia().signum() > 0).toList());
+            filtrar();
+            if (maestro.estaAbierto() && tabla.seleccionado() != null) {
+                mostrarDetalle(tabla.seleccionado());
+            }
+        }, e -> {
+            if (tabla.sinDatos()) {
+                tabla.error("No se pudo cargar el inventario.", AdminContexto.mensaje(e), this::cargar);
+            } else {
+                a.avisos().errorConAccion("No se pudo actualizar el inventario: " + AdminContexto.mensaje(e),
+                        "Reintentar", this::cargar);
+            }
+        });
+    }
+
+    private void actualizarCategorias(List<AlmacenService.Existencia> lista) {
+        List<String> categorias = new ArrayList<>();
+        categorias.add(TODAS);
+        lista.stream().map(e -> e.producto().categoria()).filter(c -> c != null && !c.isBlank()).distinct()
+                .sorted(Texto.ORDEN).forEach(categorias::add);
+        if (!categorias.equals(categoria.getItems())) {
+            String actual = categoria.getValue();
+            categoria.setItems(FXCollections.observableArrayList(categorias));
+            categoria.setValue(categorias.contains(actual) ? actual : TODAS);
+        }
+    }
+
+    private void actualizarResumen(List<AlmacenService.Existencia> lista) {
+        long valor = lista.stream().mapToLong(AlmacenService.Existencia::valorCentavos).sum();
+        int lotes = lista.stream().mapToInt(AlmacenService.Existencia::lotesConExistencia).sum();
+        long activos = lista.stream().filter(e -> e.producto().activo()).count();
+        long conExistencia = lista.stream().filter(e -> e.producto().activo() && e.existencia().signum() > 0).count();
+        long agotados = lista.stream().filter(e -> e.producto().activo() && e.existencia().signum() <= 0).count();
+        metricaValor.setValor(Dinero.formatear(valor)).setContexto("Al costo · " + Texto.plural(lotes, "lote", "lotes")
+                + " con existencia");
+        metricaConExistencia.setValor(String.valueOf(conExistencia))
+                .setContexto("De " + Texto.plural(activos, "producto activo", "productos activos"));
+        metricaAgotados.setValor(String.valueOf(agotados))
+                .setContexto(agotados == 0 ? "Todos los activos tienen existencia" : "Activos sin existencia en el almacén")
+                .setTono(agotados > 0 ? Etiqueta.Tono.PELIGRO : null);
     }
 
     private void filtrar() {
-        String t = buscador.getText() == null ? "" : buscador.getText().strip().toLowerCase(Locale.ROOT);
-        tabla.setItems(FXCollections.observableArrayList(todos.stream()
-                .filter(e -> e.producto().activo() || e.existencia().signum() > 0)
-                .filter(e -> t.isEmpty() || e.producto().nombre().toLowerCase(Locale.ROOT).contains(t))
-                .toList()));
+        String t = barra.busqueda();
+        Estado e = estado.getValue() == null ? Estado.TODOS : estado.getValue();
+        String cat = categoria.getValue() == null ? TODAS : categoria.getValue();
+        tabla.setFiltro(x -> coincide(x.producto(), t)
+                && switch (e) {
+                    case TODOS -> true;
+                    case CON_EXISTENCIA -> x.existencia().signum() > 0;
+                    case AGOTADOS -> x.existencia().signum() <= 0;
+                    case VARIOS_LOTES -> x.lotesConExistencia() > 1;
+                }
+                && (TODAS.equals(cat) || cat.equals(x.producto().categoria())));
+        long valor = tabla.visibles().stream().mapToLong(AlmacenService.Existencia::valorCentavos).sum();
+        barra.setResultados(tabla.mostrados() == tabla.total()
+                ? Texto.plural(tabla.total(), "producto", "productos")
+                : tabla.mostrados() + " de " + Texto.plural(tabla.total(), "producto", "productos")
+                + " · " + Dinero.formatear(valor));
     }
 
-    private void reabastecer(ProductoCatalogo fijo) {
-        Dialogo d = new Dialogo("Reabastecer almacén", "La mercancía entra como un lote nuevo con su propio costo.",
-                "mdi2t-tray-arrow-down", Dialogo.Tono.ACENTO);
-        d.setPrefWidth(560);
-        List<ProductoCatalogo> productos = a.admin().productos().listar().stream().filter(ProductoCatalogo::activo).toList();
-        ComboBox<ProductoCatalogo> producto = SelectorProducto.crear(productos);
-
-        // Si el producto tiene varias presentaciones (pieza suelta, caja de 12...) se elige en
-        // cuál se está capturando, para no tener que calcular a mano las piezas y el costo unitario.
-        ComboBox<Presentacion> presentacion = new ComboBox<>();
-        presentacion.setConverter(new StringConverter<>() {
-            @Override
-            public String toString(Presentacion p) {
-                return p == null ? "" : p.nombre() + " (" + Cantidades.formatear(Unidad.PZA, p.factor()) + ")";
-            }
-
-            @Override
-            public Presentacion fromString(String texto) {
-                return presentacion.getValue();
-            }
-        });
-        VBox campoPresentacion = Ui.campo("Presentación", presentacion);
-        campoPresentacion.managedProperty().bind(campoPresentacion.visibleProperty());
-
-        TextField cantidadPiezas = new TextField();
-        Campos.soloNumeros(cantidadPiezas, 0);
-        cantidadPiezas.getStyleClass().add("campo-dinero");
-        CampoMasa cantidadGranel = new CampoMasa();
-        cantidadGranel.selectorUnidad().setValue(Masa.KG);
-        Label etiquetaCantidad = new Label("Cantidad en piezas");
-        etiquetaCantidad.getStyleClass().add("campo-etiqueta");
-        VBox campoPiezas = new VBox(6, etiquetaCantidad, cantidadPiezas);
-        VBox campoGranel = Ui.campo("Cantidad (kg, toneladas...)", cantidadGranel);
-        campoPiezas.managedProperty().bind(campoPiezas.visibleProperty());
-        campoGranel.managedProperty().bind(campoGranel.visibleProperty());
-        CampoDinero costo = new CampoDinero();
-        Label unidadCosto = Ui.texto("", "texto-ayuda");
-        Label equivalencia = Ui.texto("", "texto-ayuda");
-        equivalencia.visibleProperty().bind(equivalencia.textProperty().isNotEmpty());
-        equivalencia.managedProperty().bind(equivalencia.visibleProperty());
-        TextField notas = new TextField();
-        notas.setPromptText("Proveedor, factura... (opcional)");
-        Label total = Ui.texto("$0.00", "total-grande");
-
-        // Cantidad y costo tal como se escriben en pantalla (en piezas, en la presentación elegida,
-        // o en kg si es a granel). «cantidadBase»/«costoBase» más abajo los llevan a la unidad base.
-        Supplier<BigDecimal> cantidadCapturada = () -> {
-            ProductoCatalogo p = SelectorProducto.valor(producto);
-            Unidad u = p == null ? Unidad.PZA : p.unidad();
-            return u == Unidad.KG
-                    ? cantidadGranel.gramos().map(g -> g.movePointLeft(3).setScale(3, RoundingMode.HALF_UP)).orElse(BigDecimal.ZERO)
-                    : Cantidades.desdeCaptura(u, cantidadPiezas.getText()).orElse(BigDecimal.ZERO);
-        };
-        Supplier<Presentacion> presentacionElegida = () -> campoPresentacion.isVisible() ? presentacion.getValue() : null;
-        Supplier<BigDecimal> factorElegido = () -> {
-            Presentacion pr = presentacionElegida.get();
-            return pr == null || pr.factor() == null || pr.factor().signum() <= 0 ? BigDecimal.ONE : pr.factor();
-        };
-        Supplier<BigDecimal> cantidadBase = () -> cantidadCapturada.get().multiply(factorElegido.get())
-                .setScale(0, RoundingMode.HALF_UP);
-        Supplier<Long> costoBase = () -> {
-            long capturado = costo.centavosOCero();
-            BigDecimal factor = factorElegido.get();
-            return factor.compareTo(BigDecimal.ONE) == 0 ? capturado
-                    : BigDecimal.valueOf(capturado).divide(factor, 0, RoundingMode.HALF_UP).longValueExact();
-        };
-
-        Runnable actualizar = () -> {
-            ProductoCatalogo p = SelectorProducto.valor(producto);
-            Unidad u = p == null ? Unidad.PZA : p.unidad();
-            List<Presentacion> activas = p == null ? List.of()
-                    : p.presentaciones().stream().filter(Presentacion::activo).toList();
-            boolean variasPresentaciones = u != Unidad.KG && activas.size() > 1;
-            campoPresentacion.setVisible(variasPresentaciones);
-            if (variasPresentaciones && !activas.equals(presentacion.getItems())) {
-                presentacion.setItems(FXCollections.observableArrayList(activas));
-                Presentacion principal = p.principal();
-                presentacion.setValue(activas.contains(principal) ? principal : activas.getFirst());
-            }
-            campoPiezas.setVisible(u != Unidad.KG);
-            campoGranel.setVisible(u == Unidad.KG);
-            Presentacion elegida = presentacionElegida.get();
-            etiquetaCantidad.setText(u == Unidad.KG ? "" : elegida == null ? "Cantidad en piezas"
-                    : "Cantidad de " + elegida.nombre());
-            unidadCosto.setText(u == Unidad.KG ? "Costo por kilo"
-                    : elegida == null ? "Costo por pieza" : "Costo por " + elegida.nombre().toLowerCase(Locale.ROOT));
-            BigDecimal factor = factorElegido.get();
-            if (u != Unidad.KG && factor.compareTo(BigDecimal.ONE) != 0) {
-                long costoPorPieza = costo.centavosOCero() > 0 ? costoBase.get() : 0;
-                equivalencia.setText("= " + Cantidades.formatear(Unidad.PZA, cantidadBase.get())
-                        + (costoPorPieza > 0 ? " · " + Dinero.formatear(costoPorPieza) + " c/u" : ""));
-            } else {
-                equivalencia.setText("");
-            }
-            total.setText(Dinero.formatear(Dinero.importe(costo.centavosOCero(), cantidadCapturada.get())));
-        };
-        producto.valueProperty().addListener((o, x, y) -> actualizar.run());
-        presentacion.valueProperty().addListener((o, x, y) -> actualizar.run());
-        cantidadPiezas.textProperty().addListener((o, x, y) -> actualizar.run());
-        cantidadGranel.campo().textProperty().addListener((o, x, y) -> actualizar.run());
-        cantidadGranel.selectorUnidad().valueProperty().addListener((o, x, y) -> actualizar.run());
-        costo.textProperty().addListener((o, x, y) -> actualizar.run());
-        if (fijo != null) {
-            producto.setValue(fijo);
-            producto.setDisable(true);
+    static boolean coincide(ProductoCatalogo p, String busqueda) {
+        if (busqueda.isEmpty()) {
+            return true;
         }
-        actualizar.run();
-        VBox totalCaja = new VBox(2, Ui.texto("TOTAL DE LA ENTRADA", "total-grande-etiqueta"), total);
-        totalCaja.getStyleClass().add("caja-total-plana");
-        d.setContenido(Ui.campo("Producto", producto), campoPresentacion,
-                Ui.fila(new VBox(6, campoPiezas, campoGranel), new VBox(6, unidadCosto, costo)),
-                equivalencia, Ui.campo("Notas", notas), totalCaja);
-        Runnable guardar = () -> {
-            ProductoCatalogo p = SelectorProducto.valor(producto);
-            if (p == null) {
-                a.avisos().error("Elige el producto.");
-                return;
+        return Texto.contiene(p.nombre(), busqueda) || Texto.empieza(p.clave(), busqueda)
+                || Texto.empieza(p.codigoInventario(), busqueda) || Texto.contiene(p.marca(), busqueda)
+                || p.presentaciones().stream().anyMatch(pr -> Texto.empieza(pr.codigoBarras(), busqueda));
+    }
+
+    private Situacion situacion(AlmacenService.Existencia e) {
+        if (!e.producto().activo()) {
+            return Situacion.DESHABILITADO;
+        }
+        return e.existencia().signum() <= 0 ? Situacion.AGOTADO : Situacion.NORMAL;
+    }
+
+    // ------------------------------------------------------------------ detalle
+
+    private void mostrarDetalle(AlmacenService.Existencia e) {
+        ProductoCatalogo p = e.producto();
+        Unidad u = p.unidad();
+        detalle.setTitulo(p.nombre(), Formatos.codigos(p, true)
+                + (p.marca() == null || p.marca().isBlank() ? "" : " · " + p.marca()));
+        List<Node> etiquetas = new ArrayList<>();
+        etiquetas.add(Etiqueta.simple(Formatos.seVende(u), Etiqueta.Tono.NEUTRO));
+        Situacion s = situacion(e);
+        if (s.texto != null) {
+            etiquetas.add(Etiqueta.de(s.texto, s.tono));
+        }
+        if (p.sujetoMerma()) {
+            etiquetas.add(Etiqueta.simple("Sujeto a merma", Etiqueta.Tono.NEUTRO));
+        }
+        detalle.setEtiquetas(etiquetas.toArray(Node[]::new));
+
+        String[] partes = Formatos.cantidadPartida(u, e.existencia());
+        VBox existencia = PanelDetalle.cifra("Existencia en el almacén", partes[0], partes[1]);
+        VBox datos = new VBox(6,
+                PanelDetalle.dato("Valor al costo", Dinero.formatear(e.valorCentavos())),
+                PanelDetalle.dato("Costo del lote actual", e.lotesConExistencia() == 0 ? "—"
+                        : Dinero.formatear(e.costoActualCentavos()) + Formatos.porUnidad(u)),
+                PanelDetalle.dato("Lotes con existencia", String.valueOf(e.lotesConExistencia())));
+
+        List<Node> filasPresentacion = new ArrayList<>();
+        for (Presentacion pr : p.presentaciones()) {
+            String contenido = pr.granel() ? "A granel, por kilo" : "Contiene " + Cantidades.formatear(u, pr.factor());
+            String codigo = pr.codigoBarras() == null || pr.codigoBarras().isBlank() ? null : pr.codigoBarras();
+            Node marca = !pr.activo() ? Etiqueta.simple("Inactiva", Etiqueta.Tono.NEUTRO)
+                    : pr.principal() ? Etiqueta.simple("Principal", Etiqueta.Tono.ACENTO) : null;
+            filasPresentacion.add(PanelDetalle.filaLista(pr.nombre(), codigo == null ? contenido : contenido + " · " + codigo,
+                    null, marca));
+        }
+        VBox presentaciones = PanelDetalle.seccion("Presentaciones", filasPresentacion.isEmpty()
+                ? Ui.texto("Sin presentaciones.", "texto-secundario") : PanelDetalle.lista(filasPresentacion));
+
+        VBox lotes = PanelDetalle.seccion("Lotes con existencia", Ui.texto("Cargando lotes…", "texto-secundario"));
+        VBox movimientos = PanelDetalle.seccion("Últimos movimientos", Ui.texto("Cargando movimientos…", "texto-secundario"));
+        detalle.setContenido(existencia, datos, presentaciones, lotes, movimientos);
+
+        Button entrada = Ui.principal("Registrar entrada", "mdi2t-tray-arrow-down");
+        entrada.setOnAction(x -> registrarEntrada(p));
+        Button verLotes = Ui.secundario("Ver lotes", "mdi2l-layers-outline");
+        verLotes.setOnAction(x -> lotes(p));
+        List<Node> acciones = new ArrayList<>(List.of(entrada, verLotes));
+        if (p.sujetoMerma()) {
+            Button merma = Ui.boton("Merma", "mdi2d-delete-variant", "flat", "danger");
+            merma.setOnAction(x -> merma(p));
+            acciones.add(merma);
+        }
+        detalle.setAcciones(acciones.toArray(Node[]::new));
+
+        String almacen = a.admin().almacen().almacenId();
+        cargaDetalle.cargar(() -> new DatosDetalle(a.admin().almacen().lotes(p.id(), almacen),
+                        a.ctx().inventarioSucursal().movimientos(a.usuario(), p.id(), almacen, 6)),
+                d -> {
+                    llenarLotes(lotes, p, d.lotes());
+                    llenarMovimientos(movimientos, u, d.movimientos());
+                },
+                err -> {
+                    lotes.getChildren().set(1, Ui.texto("No se pudieron cargar los lotes.", "texto-error"));
+                    movimientos.getChildren().set(1, Ui.texto("No se pudieron cargar los movimientos.", "texto-error"));
+                });
+    }
+
+    private void llenarLotes(VBox seccion, ProductoCatalogo p, List<LoteRepository.Lote> todos) {
+        List<LoteRepository.Lote> conExistencia = todos.stream().filter(l -> l.existencia().signum() > 0).toList();
+        List<Node> filas = new ArrayList<>();
+        for (LoteRepository.Lote l : conExistencia.stream().limit(LOTES_EN_DETALLE).toList()) {
+            String titulo = l.folio() == null ? Formatos.origenLote(l.origen()) : l.folio();
+            filas.add(PanelDetalle.filaLista(titulo,
+                    "Ingresó " + Formatos.fechaCorta(l.fechaIngreso()) + " · " + Dinero.formatear(l.costoUnitarioCentavos())
+                            + Formatos.porUnidad(p.unidad()),
+                    Cantidades.formatear(p.unidad(), l.existencia()), null));
+        }
+        Node contenido = filas.isEmpty()
+                ? Ui.texto("No hay lotes con existencia en el almacén.", "texto-secundario")
+                : PanelDetalle.lista(filas);
+        seccion.getChildren().set(1, contenido);
+        if (conExistencia.size() > LOTES_EN_DETALLE) {
+            Button todosLotes = Ui.boton("Ver los " + conExistencia.size() + " lotes", "mdi2l-layers-outline", "flat", "small");
+            todosLotes.setOnAction(e -> lotes(p));
+            if (seccion.getChildren().size() > 2) {
+                seccion.getChildren().set(2, todosLotes);
+            } else {
+                seccion.getChildren().add(todosLotes);
             }
-            BigDecimal c = cantidadBase.get();
-            long costoUnitario = costoBase.get();
-            if (a.ejecutar("Entrada registrada", () -> a.admin().almacen().reabastecer(p, c, costoUnitario,
-                    notas.getText(), a.usuario()))) {
-                d.cerrar();
-                alMostrar();
-            }
-        };
-        d.agregarBoton("Cancelar", null, d::cerrar, "flat");
-        d.agregarBoton("Registrar entrada", "mdi2c-check", guardar, "accent");
-        d.setAlCancelar(d::cerrar);
-        d.setAlConfirmar(guardar);
-        d.setFocoInicial(fijo == null ? producto : cantidadPiezas);
-        a.dialogos().mostrar(d);
+        } else if (seccion.getChildren().size() > 2) {
+            seccion.getChildren().remove(2);
+        }
+    }
+
+    private void llenarMovimientos(VBox seccion, Unidad u, List<InventarioSucursalService.Movimiento> lista) {
+        if (lista.isEmpty()) {
+            seccion.getChildren().set(1, Ui.texto("Sin movimientos registrados.", "texto-secundario"));
+            return;
+        }
+        List<Node> filas = new ArrayList<>();
+        for (InventarioSucursalService.Movimiento m : lista) {
+            String signo = m.cantidad().signum() < 0 ? "−" : "+";
+            String cantidad = signo + Cantidades.formatear(u, m.cantidad().abs());
+            String notas = m.notas() == null || m.notas().isBlank() ? "" : " · " + m.notas();
+            filas.add(PanelDetalle.filaLista(Formatos.movimiento(m.tipo()), Formatos.cuando(m.fecha()) + notas, cantidad, null));
+        }
+        seccion.getChildren().set(1, PanelDetalle.lista(filas));
+    }
+
+    // ------------------------------------------------------------------ acciones
+
+    private void registrarEntrada(ProductoCatalogo fijo) {
+        DialogoEntradaAlmacen.mostrar(a, fijo, existencias::get, this::cargar);
     }
 
     private void lotes(ProductoCatalogo producto) {
         Dialogo d = new Dialogo("Lotes de " + producto.nombre(),
-                "Se venden y surten en orden: primero el más antiguo con existencia.", "mdi2l-layers-outline",
+                "Se surten y venden en orden: primero el lote más antiguo con existencia.", "mdi2l-layers-outline",
                 Dialogo.Tono.INFO);
         d.setPrefWidth(900);
-        ComboBox<Sucursal> ubicacion = new ComboBox<>(FXCollections.observableArrayList(a.admin().sucursales().ubicaciones()));
-        TableView<LoteRepository.Lote> tabla = Ui.tabla("No hay lotes en esta ubicación.");
-        tabla.setPrefHeight(360);
-        tabla.getColumns().setAll(List.of(
-                Ui.texto("Folio", 160, l -> l.folio() == null ? origen(l.origen()) : l.folio()),
-                Ui.texto("Ingreso", 140, l -> FECHA.format(l.fechaIngreso().atZone(ZoneId.systemDefault()))),
-                Ui.texto("Origen", 110, l -> origen(l.origen())),
-                Ui.texto("Cantidad inicial", 130, l -> Cantidades.formatear(producto.unidad(), l.cantidadInicial())),
-                Ui.nodo("Existencia", 120, l -> l.existencia().signum() > 0
-                        ? Ui.chip(Cantidades.formatear(producto.unidad(), l.existencia()), "exito")
-                        : Ui.chip("Agotado", "neutro")),
-                Ui.texto("Costo", 120, l -> Dinero.formatear(l.costoUnitarioCentavos())
-                        + (producto.unidad() == Unidad.KG ? " / kg" : " / pza")),
-                Ui.id(LoteRepository.Lote::id)));
-        ubicacion.valueProperty().addListener((o, x, u) -> tabla.setItems(FXCollections.observableArrayList(
-                a.admin().almacen().lotes(producto.id(), u.id()))));
-        ubicacion.setValue(ubicacion.getItems().getFirst());
-        d.setContenido(Ui.campo("Ubicación", ubicacion), tabla);
+        List<Sucursal> ubicaciones = a.admin().sucursales().ubicaciones();
+        ComboBox<Sucursal> ubicacion = new ComboBox<>(FXCollections.observableArrayList(ubicaciones));
+        ubicacion.setConverter(Combos.sucursal());
+        TablaDatos<LoteRepository.Lote> lista = new TablaDatos<>(Diseno.Densidad.COMPACTA);
+        lista.setClave(LoteRepository.Lote::id);
+        lista.dosLineas("Lote", l -> l.folio() == null ? Formatos.origenLote(l.origen()) : l.folio(),
+                l -> Formatos.origenLote(l.origen())).flexible(170);
+        lista.fecha("Ingreso", LoteRepository.Lote::fechaIngreso, Formatos.FECHA_HORA).ancho(150);
+        lista.cantidad("Cantidad inicial", LoteRepository.Lote::cantidadInicial, l -> producto.unidad()).ancho(140);
+        lista.cantidad("Existencia", LoteRepository.Lote::existencia, l -> producto.unidad()).ancho(130);
+        lista.formato("Costo", LoteRepository.Lote::costoUnitarioCentavos,
+                (l, v) -> Dinero.formatear(v) + Formatos.porUnidad(producto.unidad())).numero().ancho(130);
+        lista.texto("ID del lote", LoteRepository.Lote::id).ancho(300).clase("columna-tenue").oculta();
+        lista.marcar("atenuada", l -> l.existencia().signum() <= 0);
+        lista.setVacio(new EstadoVacio("mdi2l-layers-off-outline", "No hay lotes en esta ubicación.", null).compacto());
+        lista.tabla().setPrefHeight(340);
+        Cargador cargaLotes = new Cargador();
+        Runnable cargar = () -> {
+            Sucursal u = ubicacion.getValue();
+            if (u == null) {
+                return;
+            }
+            lista.cargando("Cargando lotes…");
+            cargaLotes.cargar(() -> a.admin().almacen().lotes(producto.id(), u.id()), lista::setDatos,
+                    e -> lista.error("No se pudieron cargar los lotes.", AdminContexto.mensaje(e), null));
+        };
+        ubicacion.valueProperty().addListener((o, x, u) -> cargar.run());
+        ubicacion.setValue(ubicaciones.isEmpty() ? null : ubicaciones.getFirst());
+        VBox tablaPanel = new VBox(lista.tabla());
+        tablaPanel.getStyleClass().add("panel-tabla");
+        Diseno.recortarRedondeado(tablaPanel, Diseno.RADIO_PANEL);
+        d.setContenido(Formulario.campo("Ubicación", ubicacion), tablaPanel,
+                Ui.texto("Los lotes agotados se muestran atenuados. El id de cada lote está en el menú de columnas.",
+                        "campo-ayuda"));
         d.agregarBoton("Cerrar", null, d::cerrar, "accent");
         d.setAlCancelar(d::cerrar);
         d.setAlConfirmar(d::cerrar);
         a.dialogos().mostrar(d);
     }
 
-    private static String origen(String origen) {
-        return switch (origen) {
-            case "ENTRADA" -> "Reabastecimiento";
-            case "SURTIDO" -> "Surtido";
-            case "INICIAL" -> "Inventario inicial";
-            default -> "Migración";
-        };
-    }
-
     private void merma(ProductoCatalogo producto) {
-        Dialogo d = new Dialogo("Registrar merma", producto.nombre() + " · se descuenta del lote más antiguo",
-                "mdi2d-delete-variant", Dialogo.Tono.PELIGRO);
-        d.setPrefWidth(520);
-        ComboBox<Sucursal> ubicacion = new ComboBox<>(FXCollections.observableArrayList(a.admin().sucursales().ubicaciones()));
-        ubicacion.setValue(ubicacion.getItems().getFirst());
-        Label existencia = Ui.texto("", "texto-ayuda");
+        Dialogo d = new Dialogo("Registrar merma", producto.nombre(), "mdi2d-delete-variant", Dialogo.Tono.PELIGRO);
+        d.setPrefWidth(540);
+        List<Sucursal> ubicaciones = a.admin().sucursales().ubicaciones();
+        ComboBox<Sucursal> ubicacion = new ComboBox<>(FXCollections.observableArrayList(ubicaciones));
+        ubicacion.setConverter(Combos.sucursal());
+        ubicacion.setValue(ubicaciones.isEmpty() ? null : ubicaciones.getFirst());
+        Formulario.Campo campoUbicacion = Formulario.campo("Ubicación", ubicacion);
         TextField cantidad = new TextField();
         Campos.soloNumeros(cantidad, 0);
+        cantidad.setAlignment(javafx.geometry.Pos.CENTER_RIGHT);
+        cantidad.setPromptText("0");
+        Formulario.Campo campoCantidad = Formulario.campo("Cantidad que se pierde",
+                Formulario.conUnidad(cantidad, Cantidades.unidadCaptura(producto.unidad())));
         TextField motivo = new TextField();
         motivo.setPromptText("Ej. Se echó a perder, se cayó, caducó");
-        Runnable actualizar = () -> existencia.setText("Existencia en " + ubicacion.getValue().nombre() + ": "
-                + Cantidades.formatear(producto.unidad(), a.admin().almacen().existencia(producto.id(), ubicacion.getValue().id())));
+        Formulario.Campo campoMotivo = Formulario.campo("Motivo", motivo);
+        Runnable actualizar = () -> {
+            Sucursal u = ubicacion.getValue();
+            if (u == null) {
+                return;
+            }
+            Cargador.ejecutar(() -> a.admin().almacen().existencia(producto.id(), u.id()),
+                    ex -> campoUbicacion.ayuda("Existencia en " + u.nombre() + ": " + Cantidades.formatear(producto.unidad(), ex)),
+                    err -> campoUbicacion.ayuda(null));
+        };
         ubicacion.valueProperty().addListener((o, x, y) -> actualizar.run());
+        cantidad.textProperty().addListener((o, x, y) -> campoCantidad.setError(null));
+        motivo.textProperty().addListener((o, x, y) -> campoMotivo.setError(null));
         actualizar.run();
-        d.setContenido(Ui.campo("Ubicación", ubicacion), existencia,
-                Ui.campo("Cantidad (" + Cantidades.unidadCaptura(producto.unidad()) + ")", cantidad),
-                Ui.campo("Motivo", motivo));
+        d.setContenido(Formulario.nota("mdi2a-alert-outline",
+                        "Se descuenta del lote más antiguo de esa ubicación y queda en el historial con su costo.", "peligro"),
+                campoUbicacion, campoCantidad, campoMotivo);
         Runnable guardar = () -> {
             BigDecimal c = Cantidades.desdeCaptura(producto.unidad(), cantidad.getText()).orElse(BigDecimal.ZERO);
-            if (a.ejecutar("Merma registrada", () -> a.admin().almacen().registrarMerma(producto, ubicacion.getValue(), c,
-                    motivo.getText(), a.usuario()))) {
-                d.cerrar();
-                alMostrar();
+            boolean valido = true;
+            if (c.signum() <= 0) {
+                campoCantidad.setError("Escribe una cantidad mayor a cero.");
+                valido = false;
             }
+            if (motivo.getText() == null || motivo.getText().isBlank()) {
+                campoMotivo.setError("Escribe por qué se pierde.");
+                valido = false;
+            }
+            Sucursal u = ubicacion.getValue();
+            if (!valido || u == null) {
+                return;
+            }
+            String texto = motivo.getText();
+            a.guardar(d, "Merma registrada: " + producto.nombre(),
+                    () -> a.admin().almacen().registrarMerma(producto, u, c, texto, a.usuario()), this::cargar);
         };
-        d.agregarBoton("Cancelar", null, d::cerrar, "flat");
+        d.agregarBoton("Cancelar", null, d::cancelar, "flat");
         d.agregarBoton("Registrar merma", "mdi2c-check", guardar, "danger");
         d.setAlCancelar(d::cerrar);
         d.setAlConfirmar(guardar);
         d.setFocoInicial(cantidad);
+        d.vigilarCambios(cantidad, motivo);
         a.dialogos().mostrar(d);
     }
 }

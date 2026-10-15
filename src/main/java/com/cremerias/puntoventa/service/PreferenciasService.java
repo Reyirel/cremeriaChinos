@@ -40,4 +40,33 @@ public class PreferenciasService {
             return null;
         });
     }
+
+    /** Sin animaciones de transición (para quien las encuentra molestas o en equipos lentos). */
+    public boolean movimientoReducido() {
+        return marcada(ConfigLocalRepository.MOVIMIENTO_REDUCIDO);
+    }
+
+    public void guardarMovimientoReducido(boolean reducido) {
+        marcar(ConfigLocalRepository.MOVIMIENTO_REDUCIDO, reducido);
+    }
+
+    /** Menú lateral del panel solo con íconos. */
+    public boolean menuCompacto() {
+        return marcada(ConfigLocalRepository.MENU_COMPACTO);
+    }
+
+    public void guardarMenuCompacto(boolean compacto) {
+        marcar(ConfigLocalRepository.MENU_COMPACTO, compacto);
+    }
+
+    private boolean marcada(String clave) {
+        return database.con(c -> config.obtener(c, clave)).map("1"::equals).orElse(false);
+    }
+
+    private void marcar(String clave, boolean valor) {
+        database.con(c -> {
+            config.guardar(c, clave, valor ? "1" : "0");
+            return null;
+        });
+    }
 }

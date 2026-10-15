@@ -17,6 +17,12 @@ public class CampoDinero extends CustomTextField {
         Campos.soloNumeros(this, 2);
     }
 
+    /** Tamaño normal de formulario (la caja usa el grande para cobrar). */
+    public CampoDinero normal() {
+        getStyleClass().add("campo-dinero-normal");
+        return this;
+    }
+
     public Optional<Long> centavos() {
         return Dinero.parsear(getText());
     }

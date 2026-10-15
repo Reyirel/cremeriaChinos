@@ -1,61 +1,49 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<?import atlantafx.base.controls.Spacer?>
-<?import javafx.scene.control.Button?>
 <?import javafx.scene.control.Label?>
-<?import javafx.scene.control.Separator?>
-<?import javafx.scene.control.Tooltip?>
+<?import javafx.scene.control.MenuButton?>
 <?import javafx.scene.layout.BorderPane?>
 <?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.StackPane?>
-<?import javafx.scene.layout.VBox?>
 <?import org.kordamp.ikonli.javafx.FontIcon?>
 
-<BorderPane styleClass="inicio" xmlns:fx="http://javafx.com/fxml"
+<!-- Marco común después de iniciar sesión: menú lateral del rol (si tiene) a toda la altura;
+     barra superior con la ruta, la conexión y el menú de usuario; contenido del rol al centro. -->
+<BorderPane styleClass="marco" xmlns:fx="http://javafx.com/fxml"
             fx:controller="com.cremerias.puntoventa.ui.InicioController">
-    <top>
-        <HBox styleClass="barra-superior" alignment="CENTER_LEFT" spacing="14">
-            <StackPane styleClass="barra-logo">
-                <FontIcon iconLiteral="mdi2c-cheese" iconSize="22"/>
-            </StackPane>
-            <VBox spacing="0" alignment="CENTER_LEFT">
-                <Label text="Cremería" styleClass="barra-titulo"/>
-                <Label fx:id="etiquetaSucursal" styleClass="barra-sucursal">
-                    <graphic>
-                        <FontIcon iconLiteral="mdi2s-storefront-outline"/>
-                    </graphic>
-                </Label>
-            </VBox>
-            <Label fx:id="etiquetaRol" styleClass="rol-insignia"/>
-
-            <Spacer/>
-
-            <HBox fx:id="barraEstado" alignment="CENTER_LEFT"/>
-            <Button fx:id="botonTema" onAction="#onAlternarTema" styleClass="button-icon, flat, rounded"
-                    focusTraversable="false">
-                <tooltip>
-                    <Tooltip text="Cambiar tema claro / oscuro"/>
-                </tooltip>
-            </Button>
-            <Separator orientation="VERTICAL"/>
-            <HBox spacing="10" alignment="CENTER_LEFT">
-                <Label fx:id="avatar" styleClass="avatar"/>
-                <VBox alignment="CENTER_LEFT">
-                    <Label fx:id="nombreUsuario" styleClass="usuario-nombre"/>
-                    <Label fx:id="rolUsuario" styleClass="usuario-rol"/>
-                </VBox>
-            </HBox>
-            <Button text="Salir" onAction="#onCerrarSesion" styleClass="flat, boton-salir">
-                <graphic>
-                    <FontIcon iconLiteral="mdi2l-logout"/>
-                </graphic>
-                <tooltip>
-                    <Tooltip text="Cerrar sesión"/>
-                </tooltip>
-            </Button>
-        </HBox>
-    </top>
+    <left>
+        <StackPane fx:id="lateral" managed="false" visible="false"/>
+    </left>
     <center>
-        <StackPane fx:id="contenido" styleClass="inicio-contenido"/>
+        <BorderPane>
+            <top>
+                <HBox fx:id="barraSuperior" styleClass="barra-superior">
+                    <!-- Ruta de la sección (con menú lateral) -->
+                    <HBox fx:id="ruta" spacing="8" alignment="CENTER_LEFT" managed="false" visible="false">
+                        <Label fx:id="rutaGrupo" styleClass="ruta-grupo"/>
+                        <FontIcon fx:id="rutaSeparador" iconLiteral="mdi2c-chevron-right" styleClass="ruta-separador"/>
+                        <Label fx:id="rutaPagina" styleClass="ruta-pagina"/>
+                    </HBox>
+                    <!-- Marca (caja, sin menú lateral) -->
+                    <HBox fx:id="marca" styleClass="barra-marca" managed="false" visible="false">
+                        <StackPane styleClass="marca-icono">
+                            <FontIcon iconLiteral="mdi2c-cheese"/>
+                        </StackPane>
+                        <Label text="Cremería" styleClass="marca-nombre"/>
+                        <Label fx:id="marcaLugar" styleClass="marca-lugar"/>
+                    </HBox>
+
+                    <Region HBox.hgrow="ALWAYS"/>
+
+                    <HBox fx:id="barraEstado" alignment="CENTER_LEFT" spacing="8"/>
+                    <Region styleClass="divisor-vertical"/>
+                    <MenuButton fx:id="menuUsuario" styleClass="menu-usuario"/>
+                </HBox>
+            </top>
+            <center>
+                <StackPane fx:id="contenido" styleClass="contenido-principal"/>
+            </center>
+        </BorderPane>
     </center>
 </BorderPane>
