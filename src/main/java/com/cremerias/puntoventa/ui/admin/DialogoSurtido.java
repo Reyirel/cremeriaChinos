@@ -274,7 +274,9 @@ final class DialogoSurtido {
             }
             BigDecimal factor = presentacionNueva.isVisible() && presentacionNueva.getValue() != null
                     ? presentacionNueva.getValue().factor() : BigDecimal.ONE;
-            BigDecimal c = capturado.multiply(factor).setScale(0, RoundingMode.HALF_UP);
+            // Las piezas se redondean a piezas enteras; los kilos se quedan como se capturaron.
+            BigDecimal c = p.unidad() == Unidad.KG ? capturado
+                    : capturado.multiply(factor).setScale(0, RoundingMode.HALF_UP);
             agregarLinea.accept(p, c);
             selector.getEditor().clear();
             selector.setValue(null);

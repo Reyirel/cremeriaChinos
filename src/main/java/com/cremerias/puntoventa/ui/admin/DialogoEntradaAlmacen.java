@@ -47,6 +47,7 @@ final class DialogoEntradaAlmacen {
         d.setPrefWidth(600);
         List<ProductoCatalogo> productos = a.admin().productos().listar().stream().filter(ProductoCatalogo::activo).toList();
         ComboBox<ProductoCatalogo> producto = SelectorProducto.crear(productos);
+        producto.setId("entrada-producto");
         TextField productoFijo = new TextField();
         productoFijo.setEditable(false);
         productoFijo.setFocusTraversable(false);
@@ -76,7 +77,9 @@ final class DialogoEntradaAlmacen {
         cantidadPiezas.setAlignment(javafx.geometry.Pos.CENTER_RIGHT);
         Label unidadPiezas = new Label("pzas");
         unidadPiezas.getStyleClass().add("unidad-campo");
+        cantidadPiezas.setId("entrada-cantidad");
         CampoMasa cantidadGranel = new CampoMasa();
+        cantidadGranel.campo().setId("entrada-cantidad-granel");
         cantidadGranel.selectorUnidad().setValue(Masa.KG);
         Formulario.Campo campoPiezas = Formulario.campo("Cantidad",
                 Formulario.conUnidad(cantidadPiezas, ""));
@@ -86,6 +89,7 @@ final class DialogoEntradaAlmacen {
         campoGranel.managedProperty().bind(campoGranel.visibleProperty());
 
         CampoDinero costo = new CampoDinero().normal();
+        costo.setId("entrada-costo");
         costo.setPromptText("0.00");
         Formulario.Campo campoCosto = Formulario.campo("Costo por pieza", costo);
         Label equivalencia = new Label();
@@ -124,8 +128,12 @@ final class DialogoEntradaAlmacen {
             return factor.compareTo(BigDecimal.ONE) == 0 ? capturado
                     : BigDecimal.valueOf(capturado).divide(factor, 0, RoundingMode.HALF_UP).longValueExact();
         };
-        // Lo que se registra en el lote (misma conversión que antes del rediseño).
-        Supplier<BigDecimal> cantidadFinal = cantidadBase;
+        // Lo que se registra en el lote. Las piezas se redondean a piezas enteras; los kilos no se
+        // redondean (7,500 g son 7.5 kg, igual que el total que se muestra).
+        Supplier<BigDecimal> cantidadFinal = () -> {
+            ProductoCatalogo p = elegido.get();
+            return p != null && p.unidad() == Unidad.KG ? cantidadCapturada.get() : cantidadBase.get();
+        };
 
         Runnable actualizar = () -> {
             ProductoCatalogo p = elegido.get();
