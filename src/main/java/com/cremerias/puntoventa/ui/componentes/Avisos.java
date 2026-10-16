@@ -76,14 +76,14 @@ public class Avisos {
     private void mostrar(String mensaje, String icono, String tono, String textoAccion, Runnable accion,
                          Duration duracion) {
         Label texto = new Label(mensaje);
-        texto.getStyleClass().add("aviso-texto");
+        texto.getStyleClass().add("notificacion-texto");
         texto.setWrapText(true);
         texto.setMinWidth(0);
         VBox cuerpo = new VBox(8, texto);
         HBox.setHgrow(cuerpo, Priority.ALWAYS);
 
         HBox aviso = new HBox(10);
-        aviso.getStyleClass().addAll("aviso", tono);
+        aviso.getStyleClass().addAll("notificacion", tono);
         aviso.setAccessibleRole(AccessibleRole.TEXT);
         aviso.setAccessibleText(mensaje);
         Runnable quitar = () -> contenedor.getChildren().remove(aviso);

@@ -66,7 +66,8 @@ public class SurtidoService {
     }
 
     public record Resumen(String id, String folio, Instant fecha, String sucursal, FormaPago formaPago,
-                          long costoCentavos, long ventaCentavos, int productos, String usuario, String ordenFolio) {
+                          long costoCentavos, long ventaCentavos, int productos, String usuario, String ordenFolio,
+                          String sucursalId) {
     }
 
     public record DetalleLinea(String producto, Unidad unidad, BigDecimal cantidad, long costoCentavos,
@@ -392,7 +393,7 @@ public class SurtidoService {
         return new Resumen(rs.getString("id"), rs.getString("folio"), Tiempo.leer(rs.getString("fecha")),
                 rs.getString("sucursal"), FormaPago.valueOf(rs.getString("forma_pago")),
                 rs.getLong("total_costo_centavos"), rs.getLong("total_venta_centavos"), rs.getInt("productos"),
-                rs.getString("usuario"), rs.getString("orden"));
+                rs.getString("usuario"), rs.getString("orden"), rs.getString("sucursal_id"));
     }
 
     /** Texto para mostrar una cantidad capturada con su unidad (g o pzas). */

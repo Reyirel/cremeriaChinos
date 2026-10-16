@@ -164,10 +164,11 @@ public class AlmacenPagina extends Pagina {
             cargaDetalle.cancelar();
             tabla.tabla().requestFocus();
         });
-        // Con el detalle acoplado, sus acciones y su estado ya están en el panel.
-        maestro.acopladoAbiertoProperty().addListener((o, x, abierto) -> {
-            columnaEstado.columna().setVisible(!abierto);
-            columnaAcciones.columna().setVisible(!abierto);
+        // Si con el detalle acoplado no cabe todo, se quitan las acciones y el estado: ya están en el panel.
+        maestro.setAnchoCompleto(tabla.anchoNecesario());
+        maestro.tablaReducidaProperty().addListener((o, x, reducida) -> {
+            columnaEstado.columna().setVisible(!reducida);
+            columnaAcciones.columna().setVisible(!reducida);
         });
         pagina.getChildren().addAll(resumen, maestro);
         return Ui.ajustable(pagina, maestro, 320);

@@ -2,35 +2,43 @@ package com.cremerias.puntoventa.ui.admin;
 
 import com.cremerias.puntoventa.model.AccionBitacora;
 import com.cremerias.puntoventa.repository.BitacoraRepository;
-import com.cremerias.puntoventa.ui.componentes.Dialogo;
+import com.cremerias.puntoventa.ui.componentes.BarraHerramientas;
+import com.cremerias.puntoventa.ui.componentes.Cargador;
+import com.cremerias.puntoventa.ui.componentes.Diseno;
+import com.cremerias.puntoventa.ui.componentes.EstadoVacio;
+import com.cremerias.puntoventa.ui.componentes.Etiqueta;
+import com.cremerias.puntoventa.ui.componentes.MaestroDetalle;
+import com.cremerias.puntoventa.ui.componentes.PanelDetalle;
+import com.cremerias.puntoventa.ui.componentes.TablaDatos;
+import com.cremerias.puntoventa.ui.componentes.Texto;
+import javafx.animation.PauseTransition;
 import javafx.collections.FXCollections;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.DatePicker;
 import javafx.scene.control.Label;
-import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
-import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
+import javafx.util.Duration;
 
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Historial de todas las acciones, cada una con su folio e id. */
+/** Historial de todas las acciones, cada una con su folio y el id del registro afectado. */
 public class HistorialPagina extends Pagina {
 
-    private static final DateTimeFormatter FECHA = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
+    private static final DateTimeFormatter FECHA_SEGUNDOS = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
+    private static final int LIMITE = 2000;
     private static final Map<String, String> TIPOS = new LinkedHashMap<>();
 
     static {
-        TIPOS.put(null, "Todas las acciones");
+        TIPOS.put("", "Todas las acciones");
         TIPOS.put("SUC", "Sucursales");
         TIPOS.put("USR", "Usuarios");
         TIPOS.put("HOR", "Horarios");
@@ -49,55 +57,83 @@ public class HistorialPagina extends Pagina {
         TIPOS.put("CFG", "Configuración");
     }
 
-    private TableView<BitacoraRepository.Registro> tabla;
+    private final Cargador carga = new Cargador();
+    private final PauseTransition espera = new PauseTransition(Duration.millis(350));
+    private BarraHerramientas barra;
     private DatePicker desde;
     private DatePicker hasta;
     private ComboBox<String> tipo;
-    private TextField buscador;
-    private Label conteo;
+    private TablaDatos<BitacoraRepository.Registro> tabla;
+    private PanelDetalle detalle;
+    private MaestroDetalle maestro;
 
     public HistorialPagina(AdminContexto a) {
         super(a);
     }
 
     @Override
+    public String titulo() {
+        return "Historial";
+    }
+
+    @Override
+    public TextField busqueda() {
+        return barra.campoBusqueda();
+    }
+
+    @Override
     protected Node construir() {
-        VBox pagina = Ui.pagina("Historial", "Cada acción del sistema tiene un folio y el id único del registro afectado.");
+        VBox pagina = Ui.pagina("Historial", "Cada acción del sistema con su folio, quién la hizo y desde qué sucursal.");
         desde = new DatePicker(LocalDate.now().minusDays(7));
         hasta = new DatePicker(LocalDate.now());
-        desde.setEditable(false);
-        hasta.setEditable(false);
-        tipo = new ComboBox<>(FXCollections.observableArrayList(new ArrayList<>(TIPOS.values())));
-        tipo.setValue(TIPOS.get(null));
-        buscador = Ui.buscador("Folio, descripción, usuario o id");
-        conteo = Ui.texto("", "texto-ayuda");
-        desde.valueProperty().addListener((o, x, y) -> cargar());
-        hasta.valueProperty().addListener((o, x, y) -> cargar());
-        tipo.valueProperty().addListener((o, x, y) -> cargar());
-        buscador.setOnAction(e -> cargar());
-        buscador.textProperty().addListener((o, x, y) -> {
-            if (y.isBlank()) {
-                cargar();
+        for (DatePicker p : List.of(desde, hasta)) {
+            p.setEditable(false);
+            p.setPrefWidth(150);
+            p.valueProperty().addListener((o, x, y) -> cargar());
+        }
+        Label del = new Label("Del");
+        Label al = new Label("al");
+        del.getStyleClass().add("etiqueta-filtro");
+        al.getStyleClass().add("etiqueta-filtro");
+        HBox periodo = new HBox(8, del, desde, al, hasta);
+        periodo.setAlignment(Pos.CENTER_LEFT);
+
+        barra = new BarraHerramientas();
+        barra.buscador("Buscar folio, descripción, usuario o id");
+        barra.agregar(periodo);
+        tipo = barra.filtro("Tipo", new ComboBox<>(FXCollections.observableArrayList(new ArrayList<>(TIPOS.values()))),
+                TIPOS.get(""), t -> t);
+        tipo.setValue(TIPOS.get(""));
+        // La búsqueda consulta la base: espera a que se termine de escribir.
+        espera.setOnFinished(e -> cargar());
+        barra.setAlCambiar(espera::playFromStart);
+
+        tabla = new TablaDatos<>(Diseno.Densidad.NORMAL);
+        tabla.setClave(BitacoraRepository.Registro::id);
+        tabla.fecha("Fecha", BitacoraRepository.Registro::fecha, Formatos.FECHA_HORA).ancho(146);
+        tabla.texto("Folio", BitacoraRepository.Registro::folio).ancho(160);
+        tabla.etiqueta("Acción", BitacoraRepository.Registro::accion, AccionBitacora::descripcion,
+                HistorialPagina::tono).ancho(230);
+        tabla.textoLargo("Descripción", BitacoraRepository.Registro::descripcion).flexible(300);
+        tabla.dosLineas("Usuario", BitacoraRepository.Registro::usuario, BitacoraRepository.Registro::sucursal).ancho(200);
+        tabla.setVacio(new EstadoVacio("mdi2h-history", "No hay acciones con estos filtros.",
+                "Amplía el periodo o cambia el tipo de acción."));
+        tabla.setSinResultados(new EstadoVacio("mdi2h-history", "No hay acciones con estos filtros.", null));
+        tabla.setAlActivar(r -> {
+            mostrarDetalle(r);
+            maestro.abrir();
+        });
+        tabla.seleccionadoProperty().addListener((o, x, r) -> {
+            if (r != null && maestro.estaAbierto()) {
+                mostrarDetalle(r);
             }
         });
-        HBox filtros = new HBox(10, Ui.campo("Desde", desde), Ui.campo("Hasta", hasta), Ui.campo("Tipo", tipo),
-                Ui.campo("Buscar (Enter)", buscador));
-        filtros.setAlignment(Pos.BOTTOM_LEFT);
-        tabla = Ui.tabla("No hay acciones con estos filtros.");
-        tabla.getColumns().setAll(List.of(
-                Ui.texto("Folio", 150, BitacoraRepository.Registro::folio),
-                Ui.texto("Fecha", 175, r -> FECHA.format(r.fecha().atZone(ZoneId.systemDefault()))),
-                Ui.nodo("Acción", 220, r -> Ui.chip(r.accion().descripcion(), tono(r.accion()))),
-                Ui.texto("Descripción", 380, BitacoraRepository.Registro::descripcion),
-                Ui.nodo("Usuario", 180, r -> Ui.dosLineas(r.usuario(), r.sucursal())),
-                Ui.id(BitacoraRepository.Registro::entidadId)));
-        tabla.setOnMouseClicked(e -> {
-            if (e.getClickCount() == 2 && tabla.getSelectionModel().getSelectedItem() != null) {
-                detalle(tabla.getSelectionModel().getSelectedItem());
-            }
-        });
-        pagina.getChildren().addAll(filtros, conteo, tabla);
-        return pagina;
+
+        detalle = new PanelDetalle();
+        maestro = new MaestroDetalle(Ui.panelTabla(barra, tabla), detalle, 700);
+        maestro.setAlCerrar(() -> tabla.tabla().requestFocus());
+        pagina.getChildren().add(maestro);
+        return Ui.ajustable(pagina, maestro, 320);
     }
 
     @Override
@@ -106,62 +142,65 @@ public class HistorialPagina extends Pagina {
     }
 
     private void cargar() {
-        if (desde.getValue() == null || hasta.getValue() == null) {
+        LocalDate d = desde.getValue();
+        LocalDate h = hasta.getValue();
+        if (d == null || h == null) {
             return;
         }
-        // "Todas las acciones" tiene clave nula: por eso no se usa findFirst() (no admite nulos).
-        String prefijo = null;
-        for (Map.Entry<String, String> e : TIPOS.entrySet()) {
-            if (e.getValue().equals(tipo.getValue())) {
-                prefijo = e.getKey();
-                break;
-            }
+        if (d.isAfter(h)) {
+            a.avisos().advertencia("El periodo no es válido: «del» es después de «al».");
+            return;
         }
-        List<BitacoraRepository.Registro> lista = a.admin().bitacora().buscar(desde.getValue(), hasta.getValue(),
-                buscador.getText(), prefijo);
-        tabla.setItems(FXCollections.observableArrayList(lista));
-        conteo.setText(lista.size() + (lista.size() == 1 ? " acción" : " acciones")
-                + (lista.size() >= 2000 ? " (se muestran las 2,000 más recientes)" : "") + " · doble clic para ver el detalle");
+        String prefijo = TIPOS.entrySet().stream().filter(e -> e.getValue().equals(tipo.getValue()))
+                .map(Map.Entry::getKey).findFirst().orElse("");
+        String texto = barra.campoBusqueda().getText();
+        tabla.cargando("Buscando en el historial…");
+        carga.cargar(() -> a.admin().bitacora().buscar(d, h, texto, prefijo.isEmpty() ? null : prefijo), lista -> {
+            tabla.setDatos(lista);
+            barra.setResultados(Texto.plural(lista.size(), "acción", "acciones")
+                    + (lista.size() >= LIMITE ? " (se muestran las 2,000 más recientes)" : ""));
+            if (maestro.estaAbierto() && tabla.seleccionado() != null) {
+                mostrarDetalle(tabla.seleccionado());
+            }
+        }, e -> tabla.error("No se pudo consultar el historial.", AdminContexto.mensaje(e), this::cargar));
     }
 
-    private static String tono(AccionBitacora accion) {
+    private static Etiqueta.Tono tono(AccionBitacora accion) {
         String nombre = accion.name();
         if (nombre.contains("ELIMINAD") || nombre.contains("CANCELADA") || nombre.contains("BLOQUEADO")
                 || nombre.contains("RECHAZADA") || nombre.equals("MERMA")) {
-            return "peligro";
+            return Etiqueta.Tono.PELIGRO;
         }
         if (nombre.contains("CREAD") || nombre.contains("SURTIDO") || nombre.contains("ENTRADA") || nombre.contains("ABONO")
                 || nombre.contains("AUTORIZADO")) {
-            return "exito";
+            return Etiqueta.Tono.EXITO;
         }
-        return "neutro";
+        return Etiqueta.Tono.NEUTRO;
     }
 
-    private void detalle(BitacoraRepository.Registro r) {
-        Dialogo d = new Dialogo("Folio " + r.folio(), r.accion().descripcion(), "mdi2h-history", Dialogo.Tono.INFO);
-        d.setPrefWidth(640);
-        GridPane grid = new GridPane(14, 10);
-        String[][] datos = {
-                {"Fecha", FECHA.format(r.fecha().atZone(ZoneId.systemDefault()))},
-                {"Usuario", r.usuario()},
-                {"Sucursal", r.sucursal()},
-                {"Descripción", r.descripcion()},
-                {"Tabla", r.entidad()},
-                {"Id del registro", r.entidadId() == null ? "" : r.entidadId()},
-                {"Id de la acción", r.id()}};
-        for (int i = 0; i < datos.length; i++) {
-            Label etiqueta = new Label(datos[i][0]);
-            etiqueta.getStyleClass().add("campo-etiqueta");
-            TextField valor = new TextField(datos[i][1]);
-            valor.setEditable(false);
-            valor.getStyleClass().add("campo-solo-lectura");
-            valor.setPrefColumnCount(36);
-            grid.addRow(i, etiqueta, valor);
-        }
-        d.setContenido(grid);
-        d.agregarBoton("Cerrar", null, d::cerrar, "accent");
-        d.setAlCancelar(d::cerrar);
-        d.setAlConfirmar(d::cerrar);
-        a.dialogos().mostrar(d);
+    private void mostrarDetalle(BitacoraRepository.Registro r) {
+        detalle.setTitulo("Folio " + r.folio(), FECHA_SEGUNDOS.format(r.fecha().atZone(java.time.ZoneId.systemDefault())));
+        detalle.setEtiquetas(Etiqueta.de(r.accion().descripcion(), tono(r.accion())));
+        Label descripcion = new Label(r.descripcion());
+        descripcion.setWrapText(true);
+        descripcion.getStyleClass().add("dialogo-texto");
+        detalle.setContenido(
+                PanelDetalle.seccion("Descripción", descripcion),
+                PanelDetalle.seccion("Quién", PanelDetalle.dato("Usuario", r.usuario()),
+                        PanelDetalle.dato("Sucursal", r.sucursal())),
+                PanelDetalle.seccion("Identificadores", campo("Tabla", r.entidad()),
+                        campo("Id del registro", r.entidadId()), campo("Id de la acción", r.id())));
+        detalle.setAcciones();
+    }
+
+    /** Valor seleccionable para copiarlo (ids). */
+    private static Node campo(String etiqueta, String valor) {
+        TextField t = new TextField(valor == null ? "—" : valor);
+        t.setEditable(false);
+        t.getStyleClass().addAll("campo-solo-lectura", "texto-id");
+        t.setAccessibleText(etiqueta);
+        Label l = new Label(etiqueta);
+        l.getStyleClass().add("dato-etiqueta");
+        return new VBox(4, l, t);
     }
 }

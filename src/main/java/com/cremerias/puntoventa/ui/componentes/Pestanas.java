@@ -11,6 +11,12 @@ import javafx.scene.layout.HBox;
 /** Pestañas con su conteo real ("Por aprobar 3"). Siempre hay una seleccionada. */
 public class Pestanas extends HBox {
 
+    /**
+     * El conteo se guarda aparte y se pone como gráfico al conocerse: la piel de un Labeled decide
+     * al crearse si incluye el gráfico, y uno oculto (sin administrar) ya no aparecería después.
+     */
+    private static final String CONTADOR = "pestanas.contador";
+
     private final ToggleGroup grupo = new ToggleGroup();
 
     public Pestanas() {
@@ -29,9 +35,7 @@ public class Pestanas extends HBox {
         t.setToggleGroup(grupo);
         Label contador = new Label();
         contador.getStyleClass().add("contador-pestana");
-        contador.managedProperty().bind(contador.visibleProperty());
-        contador.setVisible(false);
-        t.setGraphic(contador);
+        t.getProperties().put(CONTADOR, contador);
         if (grupo.getSelectedToggle() == null) {
             t.setSelected(true);
         }
@@ -41,13 +45,13 @@ public class Pestanas extends HBox {
 
     /** Conteo junto al nombre; {@code alerta} lo resalta (pendientes por atender). */
     public static void setContador(ToggleButton pestana, int n, boolean alerta) {
-        if (pestana.getGraphic() instanceof Label l) {
+        if (pestana.getProperties().get(CONTADOR) instanceof Label l) {
             l.setText(String.valueOf(n));
-            l.setVisible(n >= 0);
             l.getStyleClass().remove("alerta");
             if (alerta && n > 0) {
                 l.getStyleClass().add("alerta");
             }
+            pestana.setGraphic(n >= 0 ? l : null);
         }
         pestana.setAccessibleText(pestana.getText() + (n >= 0 ? ", " + n : ""));
     }

@@ -2,11 +2,18 @@ package com.cremerias.puntoventa.ui.admin;
 
 import com.cremerias.puntoventa.model.AvisoSinVenta;
 import com.cremerias.puntoventa.model.Sucursal;
+import com.cremerias.puntoventa.model.Unidad;
 import com.cremerias.puntoventa.repository.OrdenRepository;
 import com.cremerias.puntoventa.service.AccesoService;
 import com.cremerias.puntoventa.service.SinVentaService;
+import com.cremerias.puntoventa.ui.componentes.Cargador;
 import com.cremerias.puntoventa.ui.componentes.Campos;
 import com.cremerias.puntoventa.ui.componentes.DialogoConfirmacion;
+import com.cremerias.puntoventa.ui.componentes.Diseno;
+import com.cremerias.puntoventa.ui.componentes.EstadoVacio;
+import com.cremerias.puntoventa.ui.componentes.Etiqueta;
+import com.cremerias.puntoventa.ui.componentes.TablaDatos;
+import com.cremerias.puntoventa.ui.componentes.Texto;
 import com.cremerias.puntoventa.util.Cantidades;
 import javafx.collections.FXCollections;
 import javafx.geometry.Pos;
@@ -14,149 +21,247 @@ import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
-import javafx.scene.control.ScrollPane;
-import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
+import org.kordamp.ikonli.javafx.FontIcon;
 
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 
-/** Lo que requiere atención: órdenes por aprobar, accesos bloqueados y productos sin venta. */
+/**
+ * Inicio del administrador: lo que requiere atención, en orden de prioridad (órdenes por
+ * aprobar, accesos bloqueados y productos sin venta). Solo aparecen las secciones con algo
+ * pendiente; si no hay nada, un estado compacto lo dice.
+ */
 public class AvisosPagina extends Pagina {
 
-    private static final DateTimeFormatter FECHA = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+    private static final int MAXIMO_ORDENES = 5;
 
-    private HBox indicadores;
-    private TableView<OrdenRepository.Orden> ordenes;
-    private TableView<AccesoService.Bloqueo> bloqueos;
-    private TableView<SinVentaService.SinVenta> sinVenta;
+    /** Todo lo que se muestra, cargado de una vez fuera del hilo de la interfaz. */
+    private record Pendientes(List<OrdenRepository.Orden> ordenes, List<AccesoService.Bloqueo> bloqueos,
+                              List<SinVentaService.SinVenta> sinVenta, List<Sucursal> sucursales) {
+    }
+
+    private final Cargador carga = new Cargador();
+    private VBox secciones;
     private ComboBox<Sucursal> sucursalAviso;
     private TextField dias;
+    private Label resultadoDias;
+    private TablaDatos<SinVentaService.SinVenta> tablaSinVenta;
 
     public AvisosPagina(AdminContexto a) {
         super(a);
     }
 
     @Override
+    public String titulo() {
+        return "Avisos";
+    }
+
+    @Override
     protected Node construir() {
-        VBox pagina = Ui.pagina("Avisos", "Lo que requiere tu atención. Se revisa automáticamente cada 30 segundos.");
-        indicadores = new HBox(14);
+        VBox pagina = Ui.pagina("Avisos", "Lo que requiere tu atención. Se revisa solo cada 30 segundos.");
+        secciones = new VBox(Diseno.ESPACIO_L);
+        secciones.getChildren().add(EstadoVacio.cargando("Revisando pendientes…"));
 
-        ordenes = tablaCorta("No hay órdenes por aprobar.");
-        ordenes.getColumns().setAll(List.of(
-                Ui.texto("Folio", 150, OrdenRepository.Orden::folio),
-                Ui.texto("Sucursal", 160, OrdenRepository.Orden::sucursal),
-                Ui.texto("Producto", 220, OrdenRepository.Orden::producto),
-                Ui.texto("Se pide", 130, o -> Cantidades.formatear(com.cremerias.puntoventa.model.Unidad.valueOf(o.unidad()),
-                        o.cantidadSugerida())),
-                Ui.texto("Generada", 140, o -> FECHA.format(o.creadoEn().atZone(ZoneId.systemDefault())))));
-        Button verOrdenes = Ui.secundario("Ir a órdenes", "mdi2c-clipboard-list-outline");
-        verOrdenes.setOnAction(e -> a.irA().accept("ordenes"));
+        tablaSinVenta = new TablaDatos<>(Diseno.Densidad.COMPACTA);
+        tablaSinVenta.setClave(s -> s.sucursalId() + "/" + s.productoId());
+        tablaSinVenta.dosLineas("Producto", SinVentaService.SinVenta::producto,
+                s -> s.sucursal()).flexible(220);
+        tablaSinVenta.cantidad("Existencia", SinVentaService.SinVenta::existencia, SinVentaService.SinVenta::unidad).ancho(120);
+        tablaSinVenta.formato("Sin venderse", SinVentaService.SinVenta::sinVender,
+                (s, v) -> AvisoSinVenta.formatear(v)).ancho(140).clase("columna-fuerte");
+        tablaSinVenta.fecha("Última venta", SinVentaService.SinVenta::ultimaVenta, Formatos.FECHA_HORA).ancho(150);
+        tablaSinVenta.texto("Plazo", s -> s.plazo() + (s.avisoDelProducto() ? " (del producto)" : " (de la sucursal)"))
+                .ancho(200);
+        tablaSinVenta.tabla().setPrefHeight(48 + 6 * 44);
 
-        bloqueos = tablaCorta("Ningún empleado tiene el acceso bloqueado.");
-        bloqueos.getColumns().setAll(List.of(
-                Ui.texto("Folio", 150, AccesoService.Bloqueo::folio),
-                Ui.texto("Empleado", 190, AccesoService.Bloqueo::usuario),
-                Ui.texto("Sucursal", 150, AccesoService.Bloqueo::sucursal),
-                Ui.nodo("Motivo", 300, b -> Ui.dosLineas(b.motivo().descripcion(), b.detalle())),
-                Ui.texto("Fecha", 140, b -> FECHA.format(b.fecha().atZone(ZoneId.systemDefault()))),
-                Ui.nodo("", 150, b -> {
-                    Button dar = Ui.boton("Dar acceso", "mdi2a-account-check-outline", "accent", "small");
-                    dar.setOnAction(e -> darAcceso(b));
-                    return dar;
-                })));
-
+        // Ajuste: plazo de días sin venta por sucursal
         sucursalAviso = new ComboBox<>();
+        sucursalAviso.setConverter(Combos.sucursal());
         sucursalAviso.setPromptText("Sucursal");
         sucursalAviso.valueProperty().addListener((o, x, y) -> cargarDias());
         dias = new TextField();
         Campos.soloNumeros(dias, 0);
         dias.setPrefColumnCount(4);
+        dias.setAlignment(Pos.CENTER_RIGHT);
+        dias.setAccessibleText("Días sin venta");
         Button guardarDias = Ui.secundario("Guardar", "mdi2c-check");
-        guardarDias.setOnAction(e -> {
-            Sucursal s = sucursalAviso.getValue();
-            if (s == null) {
-                a.avisos().error("Elige la sucursal.");
-                return;
-            }
-            int valor = dias.getText().isBlank() ? 0 : Integer.parseInt(dias.getText());
-            a.ejecutar("Configuración guardada", () -> a.admin().alertas().guardarDiasSinVenta(s, valor, a.usuario()));
-            alMostrar();
-        });
-        HBox configuracion = new HBox(8, new Label("Avisar en"), sucursalAviso,
-                new Label("si un producto con existencia no se vende en"), dias, new Label("días"), guardarDias);
-        configuracion.setAlignment(Pos.CENTER_LEFT);
-        Label ayudaAviso = Ui.texto("Los productos con aviso propio (se define al crear o editar el producto) usan su "
-                + "plazo y se avisan solo a quien se eligió: administrador, supervisor y/o caja.", "texto-ayuda");
-        sinVenta = tablaCorta("Todos los productos con existencia se han vendido recientemente.");
-        sinVenta.getColumns().setAll(List.of(
-                Ui.texto("Sucursal", 160, SinVentaService.SinVenta::sucursal),
-                Ui.texto("Producto", 240, SinVentaService.SinVenta::producto),
-                Ui.texto("Existencia", 140, s -> Cantidades.formatear(s.unidad(), s.existencia())),
-                Ui.texto("Última venta", 150, s -> s.ultimaVenta() == null ? "Nunca"
-                        : FECHA.format(s.ultimaVenta().atZone(ZoneId.systemDefault()))),
-                Ui.texto("Plazo", 150, s -> s.plazo() + (s.avisoDelProducto() ? " (producto)" : " (sucursal)")),
-                Ui.nodo("Sin vender", 130, s -> Ui.chip(AvisoSinVenta.formatear(s.sinVender()), "advertencia"))));
+        guardarDias.setOnAction(e -> guardarDias());
+        resultadoDias = new Label();
+        resultadoDias.getStyleClass().add("campo-ayuda");
+        Label en = new Label("En");
+        Label si = new Label("avisar si un producto con existencia no se vende en");
+        Label diasTexto = new Label("días");
+        for (Label l : List.of(en, si, diasTexto)) {
+            l.getStyleClass().add("etiqueta-filtro");
+        }
+        HBox fila = new HBox(8, en, sucursalAviso, si, dias, diasTexto, guardarDias);
+        fila.setAlignment(Pos.CENTER_LEFT);
+        VBox ajustes = Ui.panel("Aviso de productos sin venta",
+                "Los productos con aviso propio (se define en el producto) usan su plazo y avisan solo a quien se eligió.",
+                null, fila, resultadoDias);
 
-        pagina.getChildren().addAll(indicadores,
-                Ui.tarjeta("Órdenes de reabastecimiento por aprobar", ordenes, verOrdenes),
-                Ui.tarjeta("Accesos bloqueados por horario", Ui.texto("El empleado no puede entrar hasta que le des acceso "
-                        + "(también puede autorizarlo ahí mismo un supervisor de su sucursal).", "texto-ayuda"), bloqueos),
-                Ui.tarjeta("Productos sin venta", configuracion, ayudaAviso, sinVenta));
-        ScrollPane scroll = new ScrollPane(pagina);
-        scroll.setFitToWidth(true);
-        scroll.getStyleClass().add("cortes-scroll");
-        return scroll;
-    }
-
-    private static <T> TableView<T> tablaCorta(String vacio) {
-        TableView<T> t = Ui.tabla(vacio);
-        t.setPrefHeight(230);
-        t.setMinHeight(150);
-        VBox.setVgrow(t, Priority.NEVER);
-        return t;
+        pagina.getChildren().addAll(secciones, ajustes);
+        return Ui.desplazable(pagina);
     }
 
     @Override
     public void alMostrar() {
-        List<OrdenRepository.Orden> o = a.admin().ordenes().pendientes();
-        List<AccesoService.Bloqueo> b = a.ctx().auth().accesos().pendientes();
-        List<SinVentaService.SinVenta> s = a.admin().alertas().productosSinVenta();
-        ordenes.setItems(FXCollections.observableArrayList(o));
-        bloqueos.setItems(FXCollections.observableArrayList(b));
-        sinVenta.setItems(FXCollections.observableArrayList(s));
+        carga.cargar(() -> new Pendientes(a.admin().ordenes().pendientes(), a.ctx().auth().accesos().pendientes(),
+                a.admin().alertas().productosSinVenta(), a.admin().sucursales().activas()), this::pintar,
+                e -> secciones.getChildren().setAll(EstadoVacio.error("No se pudieron revisar los pendientes.",
+                        AdminContexto.mensaje(e), this::alMostrar)));
+    }
+
+    private void pintar(Pendientes p) {
+        List<Node> nodos = new ArrayList<>();
+        if (p.ordenes().isEmpty() && p.bloqueos().isEmpty() && p.sinVenta().isEmpty()) {
+            nodos.add(todoAlDia());
+        }
+        if (!p.ordenes().isEmpty()) {
+            nodos.add(seccionOrdenes(p.ordenes()));
+        }
+        if (!p.bloqueos().isEmpty()) {
+            nodos.add(seccionBloqueos(p.bloqueos()));
+        }
+        if (!p.sinVenta().isEmpty()) {
+            tablaSinVenta.setDatos(p.sinVenta());
+            Button ofertar = Ui.boton("Productos por sucursal", "mdi2a-arrow-right", "flat", "small");
+            ofertar.setOnAction(e -> a.irA().accept("productos-sucursal"));
+            VBox panel = Ui.panel("Productos sin venta · " + p.sinVenta().size(),
+                    "Llevan su plazo sin venderse en la sucursal: conviene ofertarlos.", ofertar);
+            VBox tabla = Ui.panelTabla(null, tablaSinVenta);
+            tabla.getStyleClass().setAll();
+            panel.getChildren().add(tabla);
+            Diseno.recortarRedondeado(panel, Diseno.RADIO_PANEL);
+            nodos.add(panel);
+        }
+        secciones.getChildren().setAll(nodos);
 
         Sucursal actual = sucursalAviso.getValue();
-        List<Sucursal> activas = a.admin().sucursales().activas();
-        sucursalAviso.setItems(FXCollections.observableArrayList(activas));
+        sucursalAviso.setItems(FXCollections.observableArrayList(p.sucursales()));
         if (actual != null) {
-            activas.stream().filter(sc -> sc.id().equals(actual.id())).findFirst().ifPresent(sucursalAviso::setValue);
-        } else if (!activas.isEmpty()) {
-            sucursalAviso.setValue(activas.getFirst());
+            p.sucursales().stream().filter(s -> s.id().equals(actual.id())).findFirst().ifPresent(sucursalAviso::setValue);
+        } else if (!p.sucursales().isEmpty()) {
+            sucursalAviso.setValue(p.sucursales().getFirst());
         }
-        cargarDias();
+    }
 
-        indicadores.getChildren().setAll(
-                Ui.indicador("Órdenes por aprobar", String.valueOf(o.size()), "mdi2c-clipboard-list-outline"),
-                Ui.indicador("Accesos bloqueados", String.valueOf(b.size()), "mdi2a-account-lock-outline"),
-                Ui.indicador("Productos sin venta", String.valueOf(s.size()), "mdi2t-timer-sand"));
+    private Node todoAlDia() {
+        Label titulo = new Label("Todo al día");
+        titulo.getStyleClass().add("panel-titulo");
+        Label texto = new Label("No hay órdenes por aprobar, accesos bloqueados ni productos sin venta.");
+        texto.getStyleClass().add("panel-descripcion");
+        texto.setWrapText(true);
+        VBox textos = new VBox(2, titulo, texto);
+        HBox.setHgrow(textos, Priority.ALWAYS);
+        Button atendidas = Ui.boton("Órdenes atendidas", "mdi2c-clipboard-list-outline", "flat");
+        atendidas.setOnAction(e -> a.irA().accept("ordenes"));
+        Button historial = Ui.boton("Historial", "mdi2h-history", "flat");
+        historial.setOnAction(e -> a.irA().accept("historial"));
+        HBox h = new HBox(14, new FontIcon("mdi2c-check-circle-outline"), textos, atendidas, historial);
+        h.getStyleClass().add("todo-al-dia");
+        h.setAlignment(Pos.CENTER_LEFT);
+        return h;
+    }
+
+    private Node seccionOrdenes(List<OrdenRepository.Orden> ordenes) {
+        Button ir = Ui.boton("Ir a órdenes", "mdi2a-arrow-right", "flat", "small");
+        ir.setOnAction(e -> a.irA().accept("ordenes"));
+        VBox lista = new VBox();
+        for (OrdenRepository.Orden o : ordenes.stream().limit(MAXIMO_ORDENES).toList()) {
+            Label producto = new Label(o.producto());
+            producto.getStyleClass().add("tarea-titulo");
+            Label detalle = new Label(o.sucursal() + " · quedan " + cantidad(o, o.existencia()) + " (mínimo "
+                    + cantidad(o, o.minimo()) + ") · " + Formatos.cuando(o.creadoEn()));
+            detalle.getStyleClass().add("tarea-detalle");
+            VBox textos = new VBox(2, producto, detalle);
+            textos.setMinWidth(0);
+            HBox.setHgrow(textos, Priority.ALWAYS);
+            Label pide = Etiqueta.simple("Pide " + cantidad(o, o.cantidadSugerida()), Etiqueta.Tono.ACENTO);
+            Button revisar = Ui.boton("Revisar", null, "small");
+            revisar.setOnAction(e -> a.irA().accept("ordenes"));
+            HBox fila = new HBox(12, textos, pide, revisar);
+            fila.getStyleClass().add("tarea");
+            fila.setAlignment(Pos.CENTER_LEFT);
+            lista.getChildren().add(fila);
+        }
+        VBox panel = Ui.panel("Órdenes por aprobar · " + ordenes.size(),
+                "Sucursales que llegaron a su mínimo y esperan su surtido.", ir, lista);
+        if (ordenes.size() > MAXIMO_ORDENES) {
+            Label mas = Ui.texto("Y " + (ordenes.size() - MAXIMO_ORDENES) + " más en Órdenes de reabasto.", "campo-ayuda");
+            panel.getChildren().add(mas);
+        }
+        quitarRelleno(panel);
+        return panel;
+    }
+
+    private Node seccionBloqueos(List<AccesoService.Bloqueo> bloqueos) {
+        VBox lista = new VBox();
+        for (AccesoService.Bloqueo b : bloqueos) {
+            Label nombre = new Label(b.usuario());
+            nombre.getStyleClass().add("tarea-titulo");
+            Label detalle = new Label(b.sucursal() + " · " + b.motivo().descripcion() + " (" + b.detalle() + ") · "
+                    + Formatos.cuando(b.fecha()));
+            detalle.getStyleClass().add("tarea-detalle");
+            detalle.setWrapText(true);
+            VBox textos = new VBox(2, nombre, detalle);
+            textos.setMinWidth(0);
+            HBox.setHgrow(textos, Priority.ALWAYS);
+            Button dar = Ui.boton("Dar acceso", "mdi2a-account-check-outline", "accent", "small");
+            dar.setOnAction(e -> darAcceso(b));
+            HBox fila = new HBox(12, textos, dar);
+            fila.getStyleClass().add("tarea");
+            fila.setAlignment(Pos.CENTER_LEFT);
+            lista.getChildren().add(fila);
+        }
+        VBox panel = Ui.panel("Accesos bloqueados por horario · " + bloqueos.size(),
+                "No pueden entrar hasta que les des acceso (también puede hacerlo un supervisor de su sucursal).", null, lista);
+        quitarRelleno(panel);
+        return panel;
+    }
+
+    /** Las listas van de borde a borde del panel. */
+    private static void quitarRelleno(VBox panel) {
+        if (panel.getChildren().size() > 1 && panel.getChildren().get(1) instanceof VBox cuerpo) {
+            cuerpo.setStyle("-fx-padding: 0 0 4 0;");
+        }
+    }
+
+    private static String cantidad(OrdenRepository.Orden o, java.math.BigDecimal valor) {
+        return Cantidades.formatear(Unidad.valueOf(o.unidad()), valor);
     }
 
     private void cargarDias() {
         Sucursal s = sucursalAviso.getValue();
-        dias.setText(s == null ? "" : String.valueOf(a.admin().alertas().diasSinVenta(s.id())));
+        resultadoDias.setText("");
+        if (s == null) {
+            dias.setText("");
+            return;
+        }
+        Cargador.ejecutar(() -> a.admin().alertas().diasSinVenta(s.id()), d -> dias.setText(String.valueOf(d)),
+                e -> resultadoDias.setText("No se pudo leer el plazo: " + AdminContexto.mensaje(e)));
+    }
+
+    private void guardarDias() {
+        Sucursal s = sucursalAviso.getValue();
+        if (s == null) {
+            resultadoDias.setText("Elige la sucursal.");
+            return;
+        }
+        int valor = dias.getText().isBlank() ? 0 : Integer.parseInt(dias.getText());
+        a.enFondo("Plazo de aviso guardado para " + s.nombre() + ": " + Texto.plural(valor, "día", "días"),
+                () -> a.admin().alertas().guardarDiasSinVenta(s, valor, a.usuario()), this::alMostrar);
     }
 
     private void darAcceso(AccesoService.Bloqueo b) {
         DialogoConfirmacion.mostrar(a.dialogos(), "¿Dar acceso a " + b.usuario() + "?",
                 b.motivo().descripcion() + " (" + b.detalle() + "). Podrá iniciar sesión una vez.",
-                "Dar acceso", false, () -> {
-                    a.ejecutar("Acceso autorizado", () -> a.ctx().auth().accesos().autorizar(b.id(), a.usuario()));
-                    alMostrar();
-                });
+                "Dar acceso", false,
+                () -> a.enFondo("Acceso autorizado: " + b.usuario(),
+                        () -> a.ctx().auth().accesos().autorizar(b.id(), a.usuario()), this::alMostrar));
     }
 }

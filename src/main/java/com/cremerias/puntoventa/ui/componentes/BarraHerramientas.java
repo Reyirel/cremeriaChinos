@@ -40,7 +40,7 @@ public class BarraHerramientas extends VBox {
     }
 
     private final HBox principal = new HBox(8);
-    private final HBox izquierda = new HBox(8);
+    private final FlowPane izquierda = new FlowPane(8, 8);
     private final HBox derecha = new HBox(12);
     private final FlowPane adicionales = new FlowPane();
     private final FlowPane activos = new FlowPane();
@@ -56,13 +56,12 @@ public class BarraHerramientas extends VBox {
         getStyleClass().add("barra-herramientas");
         setSpacing(0);
         izquierda.setAlignment(Pos.CENTER_LEFT);
+        izquierda.setPrefWrapLength(320);
         derecha.setAlignment(Pos.CENTER_RIGHT);
         derecha.setMinWidth(Region.USE_PREF_SIZE);
-        Region espacio = new Region();
-        HBox.setHgrow(espacio, Priority.ALWAYS);
-        HBox.setHgrow(izquierda, Priority.SOMETIMES);
+        HBox.setHgrow(izquierda, Priority.ALWAYS);
         principal.setAlignment(Pos.CENTER_LEFT);
-        principal.getChildren().addAll(izquierda, espacio, derecha);
+        principal.getChildren().addAll(izquierda, derecha);
 
         resultados.getStyleClass().add("texto-resultados");
         resultados.setMinWidth(Region.USE_PREF_SIZE);
@@ -112,8 +111,8 @@ public class BarraHerramientas extends VBox {
             }
         });
         buscador.textProperty().addListener((o, a, b) -> cambio());
-        HBox.setHgrow(buscador, Priority.SOMETIMES);
-        buscador.setMaxWidth(420);
+        buscador.setPrefWidth(300);
+        buscador.setMinWidth(220);
         izquierda.getChildren().addFirst(buscador);
         filtros.add(new Filtro("Búsqueda", () -> !buscador.getText().isBlank(), () -> buscador.getText().strip(),
                 buscador::clear, false));
@@ -158,6 +157,8 @@ public class BarraHerramientas extends VBox {
         asegurarMasFiltros();
         Label etiqueta = new Label(nombre);
         etiqueta.getStyleClass().add("etiqueta-filtro");
+        etiqueta.managedProperty().bind(etiqueta.visibleProperty());
+        etiqueta.setVisible(!nombre.isBlank());
         HBox campo = new HBox(8, etiqueta, control);
         campo.setAlignment(Pos.CENTER_LEFT);
         adicionales.getChildren().add(campo);
@@ -260,7 +261,7 @@ public class BarraHerramientas extends VBox {
             if (f.nombre().equals("Búsqueda")) {
                 continue; // la búsqueda ya está a la vista en su campo
             }
-            Label texto = new Label(f.nombre() + ": " + f.valor().get());
+            Label texto = new Label(f.nombre().isBlank() ? f.valor().get() : f.nombre() + ": " + f.valor().get());
             Button quitar = new Button(null, new FontIcon("mdi2c-close"));
             quitar.setAccessibleText("Quitar filtro " + f.nombre());
             quitar.setTooltip(new Tooltip("Quitar filtro"));

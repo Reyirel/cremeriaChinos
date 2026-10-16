@@ -31,6 +31,8 @@
     -nav-texto-activo: #FFFFFF;
     -nav-titulo: #8D97A3;           /* 5.2:1 */
     -nav-borde: #2E353E;
+    /* Barra de cambios sin guardar: grafito, contrasta con el área de trabajo clara. */
+    -barra-cambios: #20252B;
 
     /* --- Acento de marca (naranja cobrizo) --- */
     -acento: #B45309;               /* relleno de botones; 5.0:1 con texto blanco */

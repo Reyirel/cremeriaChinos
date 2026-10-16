@@ -7,11 +7,15 @@ import com.cremerias.puntoventa.model.Unidad;
 import com.cremerias.puntoventa.service.admin.SurtidoService;
 import com.cremerias.puntoventa.ui.componentes.CampoDinero;
 import com.cremerias.puntoventa.ui.componentes.Campos;
+import com.cremerias.puntoventa.ui.componentes.Cargador;
 import com.cremerias.puntoventa.ui.componentes.Dialogo;
 import com.cremerias.puntoventa.ui.componentes.DialogoTicket;
+import com.cremerias.puntoventa.ui.componentes.Formulario;
+import com.cremerias.puntoventa.ui.componentes.Segmentado;
 import com.cremerias.puntoventa.ui.componentes.TicketTexto;
 import com.cremerias.puntoventa.util.Cantidades;
 import com.cremerias.puntoventa.util.Dinero;
+import javafx.beans.binding.Bindings;
 import javafx.collections.FXCollections;
 import javafx.css.PseudoClass;
 import javafx.geometry.Pos;
@@ -19,12 +23,16 @@ import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.Separator;
 import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
+import javafx.scene.control.Tooltip;
+import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.util.StringConverter;
 import org.kordamp.ikonli.javafx.FontIcon;
@@ -44,6 +52,8 @@ import java.util.stream.Collectors;
 final class DialogoSurtido {
 
     private static final PseudoClass ERROR = PseudoClass.getPseudoClass("error");
+
+    private enum Pago { EFECTIVO, CREDITO }
 
     /** Renglón del surtido en pantalla. */
     private static final class Linea {
@@ -73,6 +83,10 @@ final class DialogoSurtido {
         }
     }
 
+    /** Costeo por lotes de cada línea y saldo de crédito (se calculan fuera del hilo de la interfaz). */
+    private record Calculo(Map<Linea, SurtidoService.Costeo> costeos, Long saldo) {
+    }
+
     private DialogoSurtido() {
     }
 
@@ -82,34 +96,35 @@ final class DialogoSurtido {
      */
     static void mostrar(AdminContexto a, Sucursal sucursalFija, ProductoCatalogo productoInicial, BigDecimal cantidadInicial,
                         String ordenId, Runnable alTerminar) {
-        Dialogo d = new Dialogo(ordenId == null ? "Nuevo surtido" : "Aprobar orden de reabastecimiento",
+        boolean aprobando = ordenId != null;
+        Dialogo d = new Dialogo(aprobando ? "Aprobar orden de reabastecimiento" : "Nuevo surtido",
                 "La mercancía sale de los lotes más antiguos del almacén y entra a la sucursal con los precios que fijes.",
                 "mdi2t-truck-delivery-outline", Dialogo.Tono.ACENTO);
-        d.setPrefWidth(1340);
+        d.setPrefWidth(1180);
+        d.sceneProperty().addListener((o, x, escena) -> {
+            if (escena != null) {
+                d.prefWidthProperty().bind(Bindings.min(1180, escena.widthProperty().subtract(72)));
+            }
+        });
 
         ComboBox<Sucursal> sucursal = new ComboBox<>(FXCollections.observableArrayList(a.admin().sucursales().activas()));
+        sucursal.setConverter(Combos.sucursal());
         sucursal.setPromptText("Elige la sucursal");
         if (sucursalFija != null) {
             sucursal.getItems().stream().filter(s -> s.id().equals(sucursalFija.id())).findFirst().ifPresent(sucursal::setValue);
             sucursal.setDisable(true);
         }
-        ToggleGroup pago = new ToggleGroup();
-        ToggleButton efectivo = new ToggleButton("Efectivo", new FontIcon("mdi2c-cash"));
-        ToggleButton credito = new ToggleButton("Crédito", new FontIcon("mdi2c-credit-card-clock-outline"));
-        efectivo.getStyleClass().add("left-pill");
-        credito.getStyleClass().add("right-pill");
-        efectivo.setToggleGroup(pago);
-        credito.setToggleGroup(pago);
-        efectivo.setSelected(true);
-        pago.selectedToggleProperty().addListener((o, x, y) -> {
-            if (y == null) {
-                x.setSelected(true);
-            }
-        });
+        Formulario.Campo campoSucursal = Formulario.campo("Sucursal que recibe", sucursal);
+        Segmentado<Pago> pago = new Segmentado<Pago>()
+                .opcion(Pago.EFECTIVO, "Efectivo", "mdi2c-cash")
+                .opcion(Pago.CREDITO, "Crédito", "mdi2c-credit-card-clock-outline");
+        Formulario.Campo campoPago = Formulario.campo("Forma de pago", pago);
+        campoPago.setMaxWidth(Region.USE_PREF_SIZE);
 
         List<ProductoCatalogo> productos = a.admin().productos().listar().stream().filter(ProductoCatalogo::activo).toList();
         ComboBox<ProductoCatalogo> selector = SelectorProducto.crear(productos);
-        selector.setPrefWidth(420);
+        selector.setPrefWidth(380);
+        selector.setId("surtido-producto");
 
         // Si el producto tiene varias presentaciones (pieza suelta, caja de 12...) se elige en
         // cuál se está capturando la cantidad, para no tener que convertir a piezas a mano.
@@ -129,104 +144,147 @@ final class DialogoSurtido {
         presentacionNueva.setManaged(false);
 
         TextField cantidadNueva = new TextField();
+        cantidadNueva.setId("surtido-cantidad");
         Campos.soloNumeros(cantidadNueva, 0);
         cantidadNueva.setPrefColumnCount(7);
+        cantidadNueva.setAlignment(Pos.CENTER_RIGHT);
+        cantidadNueva.setPromptText("Cantidad");
         Label unidadNueva = new Label("pzas");
-        Button agregar = Ui.principal("Agregar", "mdi2p-plus");
+        unidadNueva.getStyleClass().add("unidad-campo");
+        Button agregar = Ui.boton("Agregar", "mdi2p-plus", "accent");
+        Label errorCaptura = new Label();
+        errorCaptura.getStyleClass().add("campo-error");
+        errorCaptura.setGraphic(new FontIcon("mdi2a-alert-circle-outline"));
+        errorCaptura.managedProperty().bind(errorCaptura.visibleProperty());
+        errorCaptura.setVisible(false);
 
         List<Linea> lineas = new ArrayList<>();
-        GridPane grid = new GridPane(12, 6);
+        GridPane grid = new GridPane(12, 8);
         grid.getStyleClass().add("grid-surtido");
-        for (double ancho : new double[]{220, 95, 30, 210, 210, 105, 40}) {
-            javafx.scene.layout.ColumnConstraints col = new javafx.scene.layout.ColumnConstraints();
+        for (double ancho : new double[]{230, 120, 190, 210, 110, 36}) {
+            ColumnConstraints col = new ColumnConstraints();
             col.setPrefWidth(ancho);
-            col.setMinWidth(javafx.scene.layout.Region.USE_PREF_SIZE);
+            col.setMinWidth(Region.USE_PREF_SIZE);
             grid.getColumnConstraints().add(col);
         }
+        grid.getColumnConstraints().getFirst().setHgrow(Priority.ALWAYS);
         ScrollPane scroll = new ScrollPane(grid);
         scroll.setFitToWidth(true);
-        scroll.setPrefViewportHeight(300);
+        scroll.setPrefViewportHeight(260);
         scroll.getStyleClass().add("scroll-surtido");
-        Label vacio = Ui.texto("Agrega los productos que vas a enviar.", "texto-ayuda");
+        Label vacio = Ui.texto("Agrega los productos que vas a enviar: elige el producto, escribe la cantidad y presiona "
+                + "«Agregar» o Enter.", "campo-ayuda");
 
         // Resumen del dinero
         Label totalCosto = Ui.texto("$0.00", "surtido-total");
         Label totalVenta = Ui.texto("$0.00", "surtido-valor");
-        Label numProductos = Ui.texto("0 productos", "surtido-detalle");
+        Label numProductos = Ui.texto("Sin productos", "surtido-detalle");
         Label saldoActual = Ui.texto("", "surtido-detalle");
         Label saldoNuevo = Ui.texto("", "surtido-saldo");
-        VBox bloqueCredito = new VBox(2, Ui.texto("SALDO DE CRÉDITO DE LA SUCURSAL", "surtido-etiqueta"), saldoActual, saldoNuevo);
-        bloqueCredito.visibleProperty().bind(credito.selectedProperty());
+        VBox bloqueCredito = new VBox(2, Ui.texto("Saldo de crédito de la sucursal", "surtido-etiqueta"), saldoActual, saldoNuevo);
+        bloqueCredito.visibleProperty().bind(pago.valorProperty().isEqualTo(Pago.CREDITO));
         bloqueCredito.managedProperty().bind(bloqueCredito.visibleProperty());
-        VBox resumen = new VBox(10,
-                Ui.texto("TOTAL QUE SE ENVÍA (COSTO)", "surtido-etiqueta"), totalCosto,
-                new javafx.scene.control.Separator(),
-                Ui.texto("VALOR A PRECIO DE VENTA", "surtido-etiqueta"), totalVenta, numProductos, bloqueCredito);
+        VBox resumen = new VBox(8,
+                Ui.texto("Se envía (al costo)", "surtido-etiqueta"), totalCosto,
+                new Separator(),
+                Ui.texto("Valor a precio de venta", "surtido-etiqueta"), totalVenta, numProductos, bloqueCredito);
         resumen.getStyleClass().add("surtido-resumen");
-        resumen.setPrefWidth(280);
-        resumen.setMinWidth(260);
+        resumen.setPrefWidth(250);
+        resumen.setMinWidth(230);
 
+        Cargador calculos = new Cargador();
         Runnable[] recalcular = new Runnable[1];
         Runnable[] redibujar = new Runnable[1];
 
+        // Lo que no necesita la base se actualiza al instante; el costeo por lotes y el saldo llegan después.
         recalcular[0] = () -> {
-            long costo = 0;
             long venta = 0;
             for (Linea l : lineas) {
                 BigDecimal base = l.base();
-                l.costeo = a.admin().surtidos().costear(l.producto, base);
-                l.costo.setText(Dinero.formatear(l.costeo.costoCentavos()));
-                boolean insuficiente = !l.costeo.suficiente();
-                l.cantidad.pseudoClassStateChanged(ERROR, insuficiente || base.signum() <= 0);
-                l.existencia.setText("Almacén: " + Cantidades.formatear(l.producto.unidad(), l.costeo.disponible()));
-                l.existencia.pseudoClassStateChanged(ERROR, insuficiente);
-                l.detalleCosto.setText(detalleLotes(l));
+                l.cantidad.pseudoClassStateChanged(ERROR, base.signum() <= 0
+                        || (l.costeo != null && !l.costeo.suficiente()));
                 l.botonPrecios.setText(resumenPrecios(l));
                 l.botonPrecios.pseudoClassStateChanged(ERROR, !l.preciosCompletos());
                 long v = SurtidoService.valorVenta(l.producto, base, l.precios);
                 l.venta.setText(Dinero.formatear(v));
-                costo += l.costeo.costoCentavos();
                 venta += v;
             }
-            totalCosto.setText(Dinero.formatear(costo));
             totalVenta.setText(Dinero.formatear(venta));
-            numProductos.setText(lineas.size() == 1 ? "1 producto" : lineas.size() + " productos");
-            if (sucursal.getValue() != null) {
-                long saldo = a.admin().credito().saldos(List.of(sucursal.getValue())).getFirst().saldo();
-                saldoActual.setText("Actual: " + Dinero.formatear(saldo));
-                saldoNuevo.setText("Después del surtido: " + Dinero.formatear(saldo + costo));
-            } else {
-                saldoActual.setText("Elige la sucursal");
-                saldoNuevo.setText("");
-            }
+            numProductos.setText(lineas.isEmpty() ? "Sin productos" : lineas.size() == 1 ? "1 producto" : lineas.size() + " productos");
+            List<Linea> copia = List.copyOf(lineas);
+            Map<Linea, BigDecimal> cantidades = new HashMap<>();
+            copia.forEach(l -> cantidades.put(l, l.base()));
+            Sucursal s = sucursal.getValue();
+            calculos.cargar(() -> {
+                Map<Linea, SurtidoService.Costeo> costeos = new HashMap<>();
+                for (Linea l : copia) {
+                    costeos.put(l, a.admin().surtidos().costear(l.producto, cantidades.get(l)));
+                }
+                Long saldo = s == null ? null : a.admin().credito().saldos(List.of(s)).getFirst().saldo();
+                return new Calculo(costeos, saldo);
+            }, c -> {
+                long costo = 0;
+                for (Linea l : copia) {
+                    l.costeo = c.costeos().get(l);
+                    if (l.costeo == null) {
+                        continue;
+                    }
+                    l.costo.setText(Dinero.formatear(l.costeo.costoCentavos()));
+                    boolean insuficiente = !l.costeo.suficiente();
+                    l.cantidad.pseudoClassStateChanged(ERROR, insuficiente || l.base().signum() <= 0);
+                    l.existencia.setText("En almacén: " + Cantidades.formatear(l.producto.unidad(), l.costeo.disponible()));
+                    l.existencia.pseudoClassStateChanged(ERROR, insuficiente);
+                    l.detalleCosto.setText(detalleLotes(l));
+                    costo += l.costeo.costoCentavos();
+                }
+                totalCosto.setText(Dinero.formatear(costo));
+                if (c.saldo() != null) {
+                    saldoActual.setText("Hoy: " + Dinero.formatear(c.saldo()));
+                    saldoNuevo.setText("Después del surtido: " + Dinero.formatear(c.saldo() + costo));
+                } else {
+                    saldoActual.setText("Elige la sucursal");
+                    saldoNuevo.setText("");
+                }
+            }, e -> totalCosto.setText("—"));
         };
 
         redibujar[0] = () -> {
             grid.getChildren().clear();
-            String[] titulos = {"Producto", "Cantidad", "", "Costo (por lotes)", "Precios de venta en la sucursal",
+            String[] titulos = {"Producto", "Cantidad", "Costo (por lotes)", "Precios de venta en la sucursal",
                     "Valor de venta", ""};
             for (int i = 0; i < titulos.length; i++) {
                 Label t = new Label(titulos[i]);
-                t.getStyleClass().add("campo-etiqueta");
+                t.getStyleClass().add("grid-surtido-encabezado");
                 grid.add(t, i, 0);
             }
             int r = 1;
             for (Linea l : lineas) {
-                Button quitar = Ui.accion("mdi2t-trash-can-outline", "Quitar", () -> {
+                Button quitar = Ui.boton(null, "mdi2t-trash-can-outline", "flat", "boton-icono", "danger");
+                quitar.setAccessibleText("Quitar " + l.producto.nombre());
+                quitar.setTooltip(new Tooltip("Quitar del surtido"));
+                quitar.setOnAction(e -> {
                     lineas.remove(l);
+                    d.marcarCambios();
                     redibujar[0].run();
-                }, "danger");
-                VBox producto = new VBox(1, Ui.texto(l.producto.nombre(), "celda-principal"), l.existencia);
+                });
+                Label nombre = Ui.texto(l.producto.nombre(), "celda-principal");
+                VBox producto = new VBox(1, nombre, l.existencia);
                 l.existencia.getStyleClass().setAll("celda-secundaria", "existencia-almacen");
+                Label unidad = new Label(Cantidades.unidadCaptura(l.producto.unidad()));
+                unidad.getStyleClass().add("unidad-campo");
+                HBox cantidad = new HBox(6, l.cantidad, unidad);
+                cantidad.setAlignment(Pos.CENTER_LEFT);
                 VBox costo = new VBox(1, l.costo, l.detalleCosto);
                 l.costo.getStyleClass().setAll("celda-principal");
                 l.detalleCosto.getStyleClass().setAll("celda-secundaria");
+                l.detalleCosto.setWrapText(true);
                 l.venta.getStyleClass().setAll("celda-principal");
-                grid.addRow(r++, producto, l.cantidad, new Label(Cantidades.unidadCaptura(l.producto.unidad())), costo,
-                        l.botonPrecios, l.venta, quitar);
+                grid.addRow(r++, producto, cantidad, costo, l.botonPrecios, l.venta, quitar);
             }
             vacio.setVisible(lineas.isEmpty());
             vacio.setManaged(lineas.isEmpty());
+            scroll.setVisible(!lineas.isEmpty());
+            scroll.setManaged(!lineas.isEmpty());
             recalcular[0].run();
         };
 
@@ -244,9 +302,10 @@ final class DialogoSurtido {
             Linea l = new Linea(p);
             l.cantidad.setText(Cantidades.aCaptura(p.unidad(), cantidad));
             Campos.soloNumeros(l.cantidad, 0);
-            l.cantidad.setPrefColumnCount(7);
+            l.cantidad.setPrefColumnCount(6);
             l.cantidad.setAlignment(Pos.CENTER_RIGHT);
             l.cantidad.getStyleClass().add("campo-cantidad-surtido");
+            l.cantidad.setAccessibleText("Cantidad de " + p.nombre());
             l.cantidad.textProperty().addListener((o, x, y) -> recalcular[0].run());
             l.botonPrecios.getStyleClass().addAll("boton-precios");
             l.botonPrecios.setGraphic(new FontIcon("mdi2t-tag-outline"));
@@ -260,15 +319,19 @@ final class DialogoSurtido {
         };
 
         Runnable accionAgregar = () -> {
+            errorCaptura.setVisible(false);
             ProductoCatalogo p = SelectorProducto.valor(selector);
             if (p == null) {
-                a.avisos().error("Elige un producto.");
+                errorCaptura.setText("Elige un producto de la lista.");
+                errorCaptura.setVisible(true);
+                selector.requestFocus();
                 return;
             }
             BigDecimal capturado = Cantidades.desdeCaptura(p.unidad(), cantidadNueva.getText()).orElse(BigDecimal.ZERO);
             if (capturado.signum() <= 0) {
-                a.avisos().error("Escribe la cantidad (" + (presentacionNueva.isVisible()
+                errorCaptura.setText("Escribe la cantidad (" + (presentacionNueva.isVisible()
                         ? "en " + presentacionNueva.getValue().nombre() : Cantidades.unidadCaptura(p.unidad())) + ").");
+                errorCaptura.setVisible(true);
                 cantidadNueva.requestFocus();
                 return;
             }
@@ -278,6 +341,7 @@ final class DialogoSurtido {
             BigDecimal c = p.unidad() == Unidad.KG ? capturado
                     : capturado.multiply(factor).setScale(0, RoundingMode.HALF_UP);
             agregarLinea.accept(p, c);
+            d.marcarCambios();
             selector.getEditor().clear();
             selector.setValue(null);
             cantidadNueva.clear();
@@ -286,6 +350,7 @@ final class DialogoSurtido {
         agregar.setOnAction(e -> accionAgregar.run());
         cantidadNueva.setOnAction(e -> accionAgregar.run());
         selector.valueProperty().addListener((o, x, p) -> {
+            errorCaptura.setVisible(false);
             List<Presentacion> activas = p == null ? List.of()
                     : p.presentaciones().stream().filter(Presentacion::activo).toList();
             boolean varias = p != null && p.unidad() != Unidad.KG && activas.size() > 1;
@@ -303,6 +368,7 @@ final class DialogoSurtido {
             }
         });
         sucursal.valueProperty().addListener((o, x, s) -> {
+            campoSucursal.setError(null);
             javafx.application.Platform.runLater(selector::requestFocus);
             for (Linea l : lineas) {
                 l.precios = new HashMap<>(a.admin().surtidos().preciosSugeridos(s.id(), l.producto.id()));
@@ -314,18 +380,29 @@ final class DialogoSurtido {
             }
             recalcular[0].run();
         });
-        pago.selectedToggleProperty().addListener((o, x, y) -> recalcular[0].run());
+        pago.valorProperty().addListener((o, x, y) -> recalcular[0].run());
         TextField notas = new TextField();
-        notas.setPromptText("Notas (opcional)");
+        notas.setPromptText("Notas para el ticket (opcional)");
 
-        HBox cabecera = new HBox(14, Ui.campo("Sucursal que recibe", sucursal),
-                Ui.campo("Forma de pago", new HBox(efectivo, credito)));
-        HBox captura = new HBox(10, selector, presentacionNueva, cantidadNueva, unidadNueva, agregar);
+        HBox cabecera = new HBox(16, campoSucursal, campoPago);
+        HBox.setHgrow(campoSucursal, Priority.ALWAYS);
+        campoSucursal.setMaxWidth(420);
+        HBox captura = new HBox(8, selector, presentacionNueva, cantidadNueva, unidadNueva, agregar);
         captura.setAlignment(Pos.CENTER_LEFT);
-        captura.getStyleClass().add("surtido-captura");
-        VBox izquierda = new VBox(12, cabecera, captura, vacio, scroll, notas);
+        HBox.setHgrow(selector, Priority.ALWAYS);
+        VBox bloqueCaptura = new VBox(6, captura, errorCaptura);
+        bloqueCaptura.getStyleClass().add("surtido-captura");
+        VBox izquierda = new VBox(12, cabecera, bloqueCaptura, vacio, scroll, notas);
         HBox.setHgrow(izquierda, Priority.ALWAYS);
-        d.setContenido(new HBox(20, izquierda, resumen));
+        izquierda.setMinWidth(0);
+        List<javafx.scene.Node> contenido = new ArrayList<>();
+        if (aprobando) {
+            contenido.add(Formulario.nota("mdi2i-information-outline", "Al aprobar, la mercancía se descuenta del almacén "
+                    + "(primero los lotes más antiguos), entra a la sucursal con los precios que fijes, se genera el ticket "
+                    + "del surtido y la orden queda como aprobada. Puedes ajustar la cantidad que se envía.", null));
+        }
+        contenido.add(new HBox(20, izquierda, resumen));
+        d.setContenido(contenido.toArray(javafx.scene.Node[]::new));
 
         if (productoInicial != null) {
             agregarLinea.accept(productoInicial, cantidadInicial);
@@ -335,34 +412,37 @@ final class DialogoSurtido {
 
         Runnable surtir = () -> {
             if (sucursal.getValue() == null) {
-                a.avisos().error("Elige la sucursal que recibe.");
+                campoSucursal.setError("Elige la sucursal que recibe.");
                 return;
             }
+            if (lineas.isEmpty()) {
+                d.mostrarError("Agrega al menos un producto al surtido.");
+                return;
+            }
+            Sucursal destino = sucursal.getValue();
             List<SurtidoService.Linea> datos = lineas.stream()
                     .map(l -> new SurtidoService.Linea(l.producto, l.base(), l.precios)).toList();
-            SurtidoService.FormaPago forma = credito.isSelected() ? SurtidoService.FormaPago.CREDITO
+            SurtidoService.FormaPago forma = pago.getValor() == Pago.CREDITO ? SurtidoService.FormaPago.CREDITO
                     : SurtidoService.FormaPago.EFECTIVO;
-            try {
-                SurtidoService.Detalle detalle = a.admin().surtidos().registrar(sucursal.getValue(), forma, datos,
-                        notas.getText(), a.usuario(), ordenId);
+            String textoNotas = notas.getText();
+            d.enviar(() -> a.admin().surtidos().registrar(destino, forma, datos, textoNotas, a.usuario(), ordenId), detalle -> {
                 d.cerrar();
-                a.avisos().exito("Surtido registrado · Folio " + detalle.resumen().folio());
+                a.avisos().exito((aprobando ? "Orden aprobada y surtida" : "Surtido registrado") + " · Folio "
+                        + detalle.resumen().folio() + " · " + Dinero.formatear(detalle.resumen().costoCentavos()));
                 a.refrescarContadores().run();
                 a.ctx().sincronizador().revisarAhora();
                 alTerminar.run();
                 DialogoTicket.mostrar(a.dialogos(), a.avisos(), "Surtido " + detalle.resumen().folio(),
                         detalle.resumen().sucursal() + " · " + Dinero.formatear(detalle.resumen().costoCentavos()),
                         TicketTexto.lineasSurtido(detalle), null);
-            } catch (RuntimeException e) {
-                a.avisos().error(AdminContexto.mensaje(e));
-            }
+            });
         };
-        d.agregarBoton("Cancelar", null, d::cerrar, "flat");
+        d.agregarBoton("Cancelar", null, d::cancelar, "flat");
         d.separarBotones();
-        d.agregarBoton(ordenId == null ? "Surtir" : "Aprobar y surtir", "mdi2t-truck-delivery-outline", surtir,
-                "accent", "large");
+        d.agregarBoton(aprobando ? "Aprobar y surtir" : "Surtir", "mdi2t-truck-delivery-outline", surtir, "accent", "large");
         d.setAlCancelar(d::cerrar);
         d.setFocoInicial(sucursalFija == null ? sucursal : selector);
+        d.vigilarCambios(sucursal, pago, notas);
         a.dialogos().mostrar(d);
     }
 
@@ -396,7 +476,7 @@ final class DialogoSurtido {
                 (sucursal == null ? "Precios de venta" : "Precio de venta en " + sucursal.nombre())
                         + ". Se aplican cuando se termine el lote que tiene ahora.",
                 "mdi2t-tag-outline", Dialogo.Tono.ACENTO);
-        d.setPrefWidth(760);
+        d.setPrefWidth(780);
         Map<String, Long> sugeridos = sucursal == null ? Map.of()
                 : a.admin().surtidos().preciosSugeridos(sucursal.id(), l.producto.id());
         SurtidoService.PreciosPromedio promedio = sucursal == null ? null
@@ -407,21 +487,22 @@ final class DialogoSurtido {
         ToggleGroup modo = new ToggleGroup();
         ToggleButton fijo = new ToggleButton("Precio fijo", new FontIcon("mdi2p-pencil-outline"));
         ToggleButton promediado = new ToggleButton("Precio promedio", new FontIcon("mdi2s-scale-balance"));
-        fijo.getStyleClass().add("left-pill");
-        promediado.getStyleClass().add("right-pill");
         fijo.setToggleGroup(modo);
         promediado.setToggleGroup(modo);
         promediado.setDisable(!hayPromedio);
         (l.promedio && hayPromedio ? promediado : fijo).setSelected(true);
-        Label ayudaModo = Ui.texto("", "texto-ayuda");
+        HBox selectorModo = new HBox(2, fijo, promediado);
+        selectorModo.getStyleClass().add("segmentado");
+        selectorModo.setMaxWidth(Region.USE_PREF_SIZE);
+        Label ayudaModo = Ui.texto("", "campo-ayuda");
         long costoBase = l.costeo == null || l.base().signum() == 0 ? 0
                 : BigDecimal.valueOf(l.costeo.costoCentavos()).divide(l.base(), 0, RoundingMode.HALF_UP).longValue();
-        GridPane grid = new GridPane(12, 10);
+        GridPane grid = new GridPane(14, 10);
         String[] titulos = {"Presentación", "Contiene", "Costo aprox.", "Precio anterior", "Promedio", "Precio de venta"};
         for (int i = 0; i < titulos.length; i++) {
             Label t = new Label(titulos[i]);
-            t.getStyleClass().add("campo-etiqueta");
-            t.setMinWidth(javafx.scene.layout.Region.USE_PREF_SIZE);
+            t.getStyleClass().add("grid-surtido-encabezado");
+            t.setMinWidth(Region.USE_PREF_SIZE);
             grid.add(t, i, 0);
         }
         Map<String, CampoDinero> campos = new HashMap<>();
@@ -431,9 +512,9 @@ final class DialogoSurtido {
             if (!p.activo()) {
                 continue;
             }
-            CampoDinero campo = new CampoDinero();
-            campo.getStyleClass().remove("campo-dinero");
+            CampoDinero campo = new CampoDinero().normal();
             campo.setPrefColumnCount(8);
+            campo.setAccessibleText("Precio de venta de " + p.nombre());
             Long actual = l.precios.get(p.id());
             if (actual != null && actual > 0) {
                 campo.setCentavos(actual);
@@ -450,7 +531,7 @@ final class DialogoSurtido {
                     new Label(sugeridos.containsKey(p.id()) ? Dinero.formatear(sugeridos.get(p.id())) : "Nuevo"),
                     new Label(precioPromedio == null ? "—" : Dinero.formatear(precioPromedio))};
             for (Label c : celdas) {
-                c.setMinWidth(javafx.scene.layout.Region.USE_PREF_SIZE);
+                c.setMinWidth(Region.USE_PREF_SIZE);
             }
             grid.addRow(r++, celdas[0], celdas[1], celdas[2], celdas[3], celdas[4], campo);
         }
@@ -506,14 +587,14 @@ final class DialogoSurtido {
             aplicarModo.run();
         });
         aplicarModo.run();
-        HBox selectorModo = new HBox(fijo, promediado);
-        d.setContenido(Ui.campo("Cómo se fija el precio de este lote", selectorModo), grid, ayudaModo);
+        d.setContenido(Formulario.campo("Cómo se fija el precio de este lote", selectorModo), grid, ayudaModo);
         Runnable guardar = () -> {
             Map<String, Long> nuevos = new HashMap<>();
             for (Map.Entry<String, CampoDinero> e : campos.entrySet()) {
                 long v = e.getValue().centavosOCero();
                 if (v <= 0) {
-                    a.avisos().error("Escribe el precio de todas las presentaciones.");
+                    d.mostrarError("Escribe el precio de venta de todas las presentaciones.");
+                    e.getValue().requestFocus();
                     return;
                 }
                 nuevos.put(e.getKey(), v);

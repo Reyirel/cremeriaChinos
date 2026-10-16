@@ -21,6 +21,7 @@ final class Formatos {
     static final DateTimeFormatter FECHA_HORA = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
     static final DateTimeFormatter FECHA_CORTA = DateTimeFormatter.ofPattern("d MMM yyyy", ES);
     static final DateTimeFormatter FECHA_HORA_CORTA = DateTimeFormatter.ofPattern("d MMM, HH:mm", ES);
+    static final DateTimeFormatter HORA = DateTimeFormatter.ofPattern("HH:mm");
 
     private Formatos() {
     }

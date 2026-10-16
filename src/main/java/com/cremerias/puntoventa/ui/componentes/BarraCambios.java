@@ -3,15 +3,15 @@ package com.cremerias.puntoventa.ui.componentes;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.Tooltip;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
-import javafx.scene.layout.StackPane;
 import org.kordamp.ikonli.javafx.FontIcon;
 
 /**
- * Barra contextual de cambios sin guardar: aparece abajo, sobre el contenido, solo mientras hay
- * cambios, con «Descartar» y «Guardar cambios».
+ * Barra contextual de cambios sin guardar, con «Descartar» y «Guardar cambios». Va debajo de la
+ * tabla y ocupa lugar solo mientras hay cambios: no tapa la última fila mientras se captura.
  */
 public class BarraCambios extends HBox {
 
@@ -30,13 +30,19 @@ public class BarraCambios extends HBox {
         HBox.setHgrow(espacio, Priority.ALWAYS);
         descartar.getStyleClass().add("flat");
         guardar.getStyleClass().add("accent");
+        // Si falta espacio se recorta el detalle (queda completo en su ayuda), nunca los botones.
+        texto.setMinWidth(Region.USE_PREF_SIZE);
+        descartar.setMinWidth(Region.USE_PREF_SIZE);
+        guardar.setMinWidth(Region.USE_PREF_SIZE);
+        detalle.setMinWidth(0);
+        detalle.setTooltip(new Tooltip());
+        detalle.getTooltip().textProperty().bind(detalle.textProperty());
         descartar.setOnAction(e -> alDescartar.run());
         guardar.setOnAction(e -> alGuardar.run());
         getChildren().addAll(new FontIcon("mdi2p-pencil-circle-outline"), texto, detalle, espacio, descartar, guardar);
         setMaxHeight(Region.USE_PREF_SIZE);
-        StackPane.setAlignment(this, Pos.BOTTOM_CENTER);
+        managedProperty().bind(visibleProperty());
         setVisible(false);
-        setManaged(false);
     }
 
     /** Muestra u oculta la barra según cuántos cambios hay; {@code problema} explica qué falta corregir. */

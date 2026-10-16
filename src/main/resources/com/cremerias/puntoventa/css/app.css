@@ -128,6 +128,13 @@
     -color-button-border-focused: transparent;
 }
 
+/* Sin fondo propio, el anillo de foco no puede rellenar el botón: se pinta sobre la superficie. */
+.button.flat:focus-visible,
+.toggle-button.flat:focus-visible,
+.menu-button.flat:focus-visible {
+    -fx-background-color: -foco-anillo, -foco, -superficie;
+}
+
 .button.flat.danger {
     -color-button-fg: -peligro;
     -color-button-fg-hover: -peligro;
@@ -1152,7 +1159,6 @@
 }
 
 .campo-busqueda-admin {
-    -fx-pref-width: 300;
 }
 
 .campo-busqueda-admin .ikonli-font-icon {
@@ -1211,12 +1217,17 @@
     -fx-icon-color: -texto-secundario;
 }
 
-.toggle-button.boton-filtros:selected {
-    -color-button-bg: -acento-suave;
-    -color-button-border: -acento-borde;
-    -color-button-bg-hover: -acento-suave-hover;
-    -color-button-border-hover: -acento-borde;
+.toggle-button.boton-filtros:selected,
+.toggle-button.boton-filtros:selected:focused {
+    -fx-background-color: -acento-borde, -acento-suave;
+    -fx-background-insets: 0, 1;
     -fx-text-fill: -texto;
+}
+
+.toggle-button.boton-filtros:selected .label,
+.toggle-button.boton-filtros:selected .ikonli-font-icon {
+    -fx-text-fill: -texto;
+    -fx-icon-color: -acento-texto;
 }
 
 .contador-filtros {
@@ -1345,8 +1356,13 @@
     -fx-alignment: center-right;
 }
 
-.tabla-datos .table-row-cell > .table-cell.columna-fuerte {
+.tabla-datos .table-row-cell > .table-cell.columna-fuerte,
+.tabla-datos .table-row-cell > .table-cell.columna-fuerte .celda-principal {
     -fx-font-family: "Inter SemiBold";
+}
+
+.tabla-datos .table-row-cell > .table-cell.columna-fuerte .celda-secundaria {
+    -fx-font-family: "Inter";
 }
 
 .tabla-datos .table-row-cell > .table-cell.columna-tenue {
@@ -1751,15 +1767,20 @@
 }
 
 .pestana:selected {
-    -fx-background-color: -acento, transparent;
+    -fx-background-color: -acento, -fondo;
     -fx-background-insets: 0, 0 0 2 0;
     -fx-text-fill: -texto;
     -fx-font-family: "Inter SemiBold";
 }
 
 .pestana:focus-visible {
-    -fx-background-color: -foco-anillo, transparent;
+    -fx-background-color: -foco-anillo, -fondo;
     -fx-background-insets: 4 0 4 0, 6 2 6 2;
+}
+
+.pestana:selected:focus-visible {
+    -fx-background-color: -acento, -foco-anillo, -fondo;
+    -fx-background-insets: 0, 0 0 2 0, 4 2 6 2;
 }
 
 .pestana .contador-pestana {
@@ -1831,13 +1852,13 @@
 
 /* ---------- Barra de cambios pendientes ---------- */
 .barra-cambios {
-    -fx-background-color: -nav;
+    -fx-background-color: -barra-cambios;
     -fx-background-radius: 10;
     -fx-padding: 8 8 8 16;
     -fx-spacing: 12;
     -fx-alignment: center-left;
-    -fx-effect: dropshadow(gaussian, -sombra-fuerte, 22, 0, 0, 6);
-    -fx-max-width: 760;
+    -fx-effect: dropshadow(gaussian, -sombra, 10, 0, 0, 2);
+    -fx-max-width: 960;
 }
 
 .barra-cambios .ikonli-font-icon {
@@ -1863,6 +1884,10 @@
 
 .barra-cambios .button.flat .ikonli-font-icon {
     -fx-icon-color: #E5E8EC;
+}
+
+.barra-cambios .button.flat:focus-visible {
+    -fx-background-color: -foco-anillo, -foco, -barra-cambios;
 }
 
 .barra-cambios .button.accent .ikonli-font-icon {
@@ -2007,7 +2032,7 @@
     -fx-spacing: 10;
 }
 
-.aviso {
+.notificacion {
     -fx-background-color: -borde, -superficie;
     -fx-background-insets: 0, 1;
     -fx-background-radius: 8, 7;
@@ -2020,32 +2045,32 @@
     -fx-max-width: 380;
 }
 
-.aviso > .ikonli-font-icon {
+.notificacion > .ikonli-font-icon {
     -fx-icon-size: 20px;
 }
 
-.aviso.exito > .ikonli-font-icon { -fx-icon-color: -exito; }
-.aviso.info > .ikonli-font-icon { -fx-icon-color: -info; }
-.aviso.advertencia > .ikonli-font-icon { -fx-icon-color: -aviso; }
-.aviso.error > .ikonli-font-icon { -fx-icon-color: -peligro; }
+.notificacion.exito > .ikonli-font-icon { -fx-icon-color: -exito; }
+.notificacion.info > .ikonli-font-icon { -fx-icon-color: -info; }
+.notificacion.advertencia > .ikonli-font-icon { -fx-icon-color: -aviso; }
+.notificacion.error > .ikonli-font-icon { -fx-icon-color: -peligro; }
 
-.aviso.exito { -fx-background-color: -exito-borde, -superficie; }
-.aviso.error { -fx-background-color: -peligro-borde, -superficie; }
-.aviso.advertencia { -fx-background-color: -aviso-borde, -superficie; }
+.notificacion.exito { -fx-background-color: -exito-borde, -superficie; }
+.notificacion.error { -fx-background-color: -peligro-borde, -superficie; }
+.notificacion.advertencia { -fx-background-color: -aviso-borde, -superficie; }
 
-.aviso-texto {
+.notificacion-texto {
     -fx-font-size: 13.5px;
     -fx-text-fill: -texto;
     -fx-wrap-text: true;
 }
 
-.aviso-titulo {
+.notificacion-titulo {
     -fx-font-family: "Inter SemiBold";
     -fx-font-size: 13.5px;
     -fx-text-fill: -texto;
 }
 
-.aviso .button.small {
+.notificacion .button.small {
     -fx-min-height: 26px;
     -fx-pref-height: 26px;
 }
@@ -2412,6 +2437,12 @@
     -fx-background-insets: 0, 2;
     -fx-background-radius: 5, 3;
     -fx-padding: 4;
+}
+
+.grafica .linea-meta {
+    -fx-stroke: -texto-secundario;
+    -fx-stroke-width: 1.5px;
+    -fx-stroke-dash-array: 6 5;
 }
 
 .grafica.barras-horizontales .default-color0.chart-bar {

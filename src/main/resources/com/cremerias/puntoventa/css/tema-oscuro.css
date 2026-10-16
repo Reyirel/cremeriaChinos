@@ -25,6 +25,8 @@
     -nav-texto-activo: #FFFFFF;
     -nav-titulo: #808A96;
     -nav-borde: #22282F;
+    /* Más clara que el fondo oscuro para que la barra de cambios se distinga. */
+    -barra-cambios: #2C333C;
 
     -acento: #B45309;
     -acento-hover: #C25E10;

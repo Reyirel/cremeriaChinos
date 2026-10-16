@@ -5,53 +5,81 @@ import com.cremerias.puntoventa.model.Sucursal;
 import com.cremerias.puntoventa.model.Usuario;
 import com.cremerias.puntoventa.repository.IndicadoresRepository;
 import com.cremerias.puntoventa.service.IndicadoresService;
-import com.cremerias.puntoventa.ui.admin.AdminContexto;
-import com.cremerias.puntoventa.ui.admin.Ui;
 import com.cremerias.puntoventa.util.Dinero;
 import com.cremerias.puntoventa.util.Masa;
 import javafx.collections.FXCollections;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
+import javafx.scene.chart.BarChart;
+import javafx.scene.chart.CategoryAxis;
+import javafx.scene.chart.NumberAxis;
+import javafx.scene.chart.XYChart;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.DatePicker;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressBar;
-import javafx.scene.control.Tab;
-import javafx.scene.control.TabPane;
-import javafx.scene.control.TableView;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextField;
-import javafx.scene.control.ToggleButton;
-import javafx.scene.control.ToggleGroup;
+import javafx.scene.control.Tooltip;
+import javafx.scene.layout.ColumnConstraints;
+import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.shape.Line;
+import javafx.util.StringConverter;
+import org.kordamp.ikonli.javafx.FontIcon;
 
 import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
+import java.time.format.TextStyle;
+import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.IntStream;
 
 /**
- * Venta, costo, utilidad, kilos, KPIs y avance de meta mensual de una sucursal, calculados
- * directo de las operaciones del POS. La usan tanto el panel de Administrador (con selector de
- * sucursal) como el de Supervisor (fija a la sucursal del usuario, sin selector).
+ * Indicadores de una sucursal calculados directo de las operaciones del POS: venta, utilidad,
+ * margen y avance de la meta mensual, su evolución por día y, debajo, las métricas de detalle.
+ * La usan el Administrador (con selector de sucursal y comparación entre sucursales) y el
+ * Supervisor (fija a su sucursal; el servicio también lo valida).
+ *
+ * <p>Las fórmulas son las de {@link IndicadoresService}; aquí solo se presentan. No se calculan
+ * comparaciones contra otros periodos.
  */
 public class IndicadoresVista {
 
+    private static final Locale ES = Locale.forLanguageTag("es-MX");
     private static final String[] MESES = {"Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio",
             "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"};
+    private static final DateTimeFormatter DIA_LARGO = DateTimeFormatter.ofPattern("EEEE d 'de' MMMM", ES);
+    private static final DateTimeFormatter FECHA = DateTimeFormatter.ofPattern("d 'de' MMMM 'de' yyyy", ES);
+    /** Con más días que esto la gráfica agrupa por mes. */
+    private static final int DIAS_POR_DIA = 62;
 
-    private enum Modo { ANIO, MES, RANGO }
+    private enum Modo { MES, ANIO, RANGO }
+
+    /** Todo lo que se pinta, calculado fuera del hilo de la interfaz. */
+    private record Datos(String sucursalId, LocalDate desde, LocalDate hasta, IndicadoresService.Resumen resumen,
+                         IndicadoresService.VentasDetalle ventas, IndicadoresService.KilosResumen kilos,
+                         IndicadoresService.KpisResumen kpis, IndicadoresService.InventarioResumen inventario,
+                         IndicadoresService.UtilidadResumen utilidad, List<IndicadoresService.VentaDia> dias) {
+    }
 
     private final IndicadoresService servicio;
     private final Usuario usuario;
@@ -59,39 +87,42 @@ public class IndicadoresVista {
     private final Function<String, String> nombreSucursal;
     private final Dialogos dialogos;
     private final Avisos avisos;
+    private final boolean esAdmin;
+    private final Cargador carga = new Cargador();
+    private final Cargador cargaConsolidado = new Cargador();
 
-    private Modo modo = Modo.MES;
-    private LocalDate desdeActual;
-    private LocalDate hastaActual;
-
-    private VBox raiz;
+    private ScrollPane raiz;
     private ComboBox<Sucursal> comboSucursal;
-    private ToggleGroup grupoModo;
-    private ToggleButton botonAnio;
-    private ToggleButton botonMes;
-    private ToggleButton botonRango;
+    private Segmentado<Modo> modo;
     private ComboBox<Integer> comboAnio;
     private ComboBox<String> comboMes;
-    private VBox campoMes;
-    private HBox filaAnioMes;
     private DatePicker campoDesde;
     private DatePicker campoHasta;
-    private HBox filaRango;
+    private Label periodoTexto;
+    private Label actualizando;
+    private VBox contenido;
+    private StackPane zonaContenido;
+    private VBox estadoCarga;
+    private boolean cargado;
 
-    private HBox tarjetasKpi;
+    private Tarjeta tarjetaVenta;
+    private Tarjeta tarjetaUtilidad;
+    private Tarjeta tarjetaMargen;
+    private Tarjeta tarjetaMeta;
+    private GraficaVentas grafica;
+    private StackPane zonaGrafica;
+    private Label tituloGrafica;
     private VBox cuerpoMeta;
-    private HBox tarjetasDiarias;
-    private HBox tarjetasVentasDetalle;
-    private HBox tarjetasClientes;
-    private HBox cuerpoHoras;
-    private HBox tarjetasKilos;
-    private Label notaKilos;
-    private TableView<IndicadoresRepository.MarcaKilos> tablaMarcas;
-    private TableView<IndicadoresService.Kpi> tablaKpis;
-    private HBox tarjetaAvanceTotal;
-    private HBox tarjetasUtilidad;
-    private HBox tarjetasInventario;
-    private TableView<IndicadoresService.ConsolidadoFila> tablaConsolidado;
+    private Grupo grupoVentas;
+    private Grupo grupoKilos;
+    private VBox marcas;
+    private Grupo grupoUtilidad;
+    private Grupo grupoInventario;
+    private TablaDatos<IndicadoresService.Kpi> tablaKpis;
+    private Label avanceTotal;
+    private TablaDatos<IndicadoresService.ConsolidadoFila> tablaConsolidado;
+    private BarChart<Number, String> graficaSucursales;
+    private StackPane zonaComparacion;
 
     public IndicadoresVista(IndicadoresService servicio, Usuario usuario,
                             Supplier<List<Sucursal>> sucursalesSeleccionables, Function<String, String> nombreSucursal,
@@ -102,6 +133,7 @@ public class IndicadoresVista {
         this.nombreSucursal = nombreSucursal;
         this.dialogos = dialogos;
         this.avisos = avisos;
+        this.esAdmin = usuario.rol() == Rol.ADMINISTRADOR;
     }
 
     public Node nodo() {
@@ -115,244 +147,365 @@ public class IndicadoresVista {
     public void actualizar() {
         nodo();
         if (sucursalesSeleccionables != null) {
-            Sucursal actual = comboSucursal.getValue();
-            List<Sucursal> lista = sucursalesSeleccionables.get();
-            comboSucursal.setItems(FXCollections.observableArrayList(lista));
-            if (actual != null) {
-                lista.stream().filter(s -> s.id().equals(actual.id())).findFirst().ifPresent(comboSucursal::setValue);
-            } else if (!lista.isEmpty()) {
-                comboSucursal.setValue(lista.getFirst());
-            }
-        }
-        cargar();
-    }
-
-    private VBox construir() {
-        VBox pagina = Ui.pagina("Indicadores", sucursalesSeleccionables != null
-                ? "Venta, costo, utilidad y avance de meta, calculados de las ventas ya registradas."
-                : "Sucursal: " + nombreSucursal.apply(usuario.sucursalId()));
-
-        HBox filtros = construirFiltros();
-        TabPane pestanas = construirPestanas();
-
-        pagina.getChildren().addAll(filtros, pestanas);
-        return pagina;
-    }
-
-    private TabPane construirPestanas() {
-        tarjetasKpi = new HBox(14);
-        cuerpoMeta = new VBox(14);
-        VBox tarjetaMeta = Ui.tarjeta("Meta mensual", cuerpoMeta);
-        tarjetasDiarias = new HBox(14);
-        tarjetasVentasDetalle = new HBox(14);
-        tarjetasClientes = new HBox(14);
-        cuerpoHoras = new HBox(14);
-        VBox tabVentas = new VBox(14, tarjetasKpi, tarjetaMeta, tarjetasDiarias, tarjetasVentasDetalle,
-                tarjetasClientes, cuerpoHoras);
-
-        tarjetasKilos = new HBox(14);
-        notaKilos = Ui.texto("La meta de kilos solo aplica dentro de un mismo mes. Cambia el filtro a \"Mes\" para verla.",
-                "texto-ayuda");
-        tablaMarcas = Ui.tabla("Sin ventas en el periodo.");
-        tablaMarcas.getColumns().setAll(
-                Ui.texto("Marca", 220, IndicadoresRepository.MarcaKilos::marca),
-                Ui.texto("Kilos vendidos", 160, m -> Masa.formatear(m.gramos())));
-        tablaMarcas.setPrefHeight(220);
-        VBox tabKilos = new VBox(14, tarjetasKilos, notaKilos, Ui.tarjeta("Kilos por marca", tablaMarcas));
-
-        tablaKpis = Ui.tabla("Sin datos para este periodo.");
-        tablaKpis.getColumns().setAll(
-                Ui.texto("KPI", 180, IndicadoresService.Kpi::nombre),
-                Ui.texto("Logrado", 130, IndicadoresService.Kpi::logrado),
-                Ui.texto("Meta", 130, IndicadoresService.Kpi::meta),
-                Ui.texto("% avance", 110, k -> k.avancePct().map(IndicadoresVista::formatearPorcentaje).orElse("—")),
-                Ui.texto("Ponderación", 110, k -> k.ponderacion() + "%"),
-                Ui.texto("% ponderado", 120, k -> k.avancePonderado().map(IndicadoresVista::formatearPorcentaje).orElse("—")));
-        tablaKpis.setPrefHeight(220);
-        tarjetaAvanceTotal = new HBox(14);
-        VBox tabKpis = new VBox(14, tablaKpis, tarjetaAvanceTotal);
-
-        boolean esAdmin = usuario.rol() == Rol.ADMINISTRADOR;
-
-        Node contenidoUtilidad;
-        if (esAdmin) {
-            tarjetasUtilidad = new HBox(14);
-            contenidoUtilidad = new VBox(14, tarjetasUtilidad);
-        } else {
-            // Gastos y nómina son exclusivos del administrador: la utilidad neta se le queda oculta al supervisor.
-            contenidoUtilidad = placeholder("Solo el administrador puede ver la utilidad neta.");
-        }
-
-        tarjetasInventario = new HBox(14);
-        VBox tabInventario = new VBox(14, tarjetasInventario);
-
-        Tab tabVentasT = pestana("Ventas", tabVentas);
-        Tab tabKilosT = pestana("Kilos", tabKilos);
-        Tab tabKpisT = pestana("KPIs", tabKpis);
-        Tab tabUtilidadT = pestana("Utilidad", contenidoUtilidad);
-        Tab tabInventarioT = pestana("Inventario", tabInventario);
-
-        TabPane pestanas = new TabPane(tabVentasT, tabKilosT, tabKpisT, tabUtilidadT, tabInventarioT);
-        if (esAdmin) {
-            tablaConsolidado = Ui.tabla("Sin datos para este periodo.");
-            tablaConsolidado.getColumns().setAll(
-                    Ui.texto("Sucursal", 170, f -> f.sucursal().nombre()),
-                    Ui.dinero("Venta", 110, IndicadoresService.ConsolidadoFila::ventaNeta),
-                    Ui.dinero("Costo", 110, IndicadoresService.ConsolidadoFila::costoVenta),
-                    Ui.dinero("Utilidad bruta", 120, IndicadoresService.ConsolidadoFila::utilidadBruta),
-                    Ui.dinero("Gastos", 110, IndicadoresService.ConsolidadoFila::gastosCentavos),
-                    Ui.dinero("Utilidad neta", 120, IndicadoresService.ConsolidadoFila::utilidadNeta),
-                    Ui.texto("% cumplimiento", 120,
-                            f -> f.cumplimientoPct().map(IndicadoresVista::formatearPorcentaje).orElse("—")),
-                    Ui.texto("Avance ponderado", 130,
-                            f -> f.avanceTotalPonderado().map(IndicadoresVista::formatearPorcentaje).orElse("—")));
-            tablaConsolidado.setPrefHeight(320);
-            pestanas.getTabs().add(pestana("Consolidado", new VBox(14, tablaConsolidado)));
-        }
-        pestanas.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
-        return pestanas;
-    }
-
-    private static Tab pestana(String titulo, Node contenido) {
-        Tab tab = new Tab(titulo, contenido);
-        tab.setClosable(false);
-        return tab;
-    }
-
-    private static Node placeholder(String texto) {
-        VBox caja = new VBox(Ui.texto(texto, "texto-ayuda"));
-        caja.setPadding(new Insets(24));
-        return caja;
-    }
-
-    private HBox construirFiltros() {
-        LocalDate hoy = LocalDate.now();
-
-        botonAnio = new ToggleButton("Año");
-        botonMes = new ToggleButton("Mes");
-        botonRango = new ToggleButton("Rango personalizado");
-        grupoModo = new ToggleGroup();
-        botonAnio.setToggleGroup(grupoModo);
-        botonMes.setToggleGroup(grupoModo);
-        botonRango.setToggleGroup(grupoModo);
-        botonMes.setSelected(true);
-        HBox filaModo = new HBox(6, botonAnio, botonMes, botonRango);
-        filaModo.getStyleClass().add("indicadores-modo");
-        grupoModo.selectedToggleProperty().addListener((o, antes, ahora) -> {
-            if (ahora == null) {
-                if (antes != null) {
-                    antes.setSelected(true);
+            Cargador.ejecutar(sucursalesSeleccionables::get, lista -> {
+                Sucursal actual = comboSucursal.getValue();
+                comboSucursal.setItems(FXCollections.observableArrayList(lista));
+                Sucursal elegida = actual == null ? (lista.isEmpty() ? null : lista.getFirst())
+                        : lista.stream().filter(s -> s.id().equals(actual.id())).findFirst().orElse(null);
+                if (comboSucursal.getValue() == elegida) {
+                    cargar();
+                } else {
+                    comboSucursal.setValue(elegida);
                 }
-                return;
-            }
-            modo = ahora == botonAnio ? Modo.ANIO : ahora == botonMes ? Modo.MES : Modo.RANGO;
-            actualizarVisibilidadFiltros();
+            }, e -> mostrarError(Errores.mensaje(e)));
+        } else {
             cargar();
-        });
+        }
+    }
 
+    // ------------------------------------------------------------------ construcción
+
+    private ScrollPane construir() {
+        EncabezadoPagina encabezado = new EncabezadoPagina("Indicadores", sucursalesSeleccionables != null
+                ? "Venta, utilidad y avance de meta de cada sucursal, calculados de las ventas registradas."
+                : nombreSucursal.apply(usuario.sucursalId()) + " · calculados de las ventas registradas.");
+        VBox pagina = new VBox(Diseno.ESPACIO_L, encabezado, construirFiltros());
+        pagina.getStyleClass().add("pagina");
+
+        contenido = new VBox(Diseno.ESPACIO_L, construirTarjetas(), construirEvolucion(), construirDetalle());
+        if (esAdmin && sucursalesSeleccionables != null) {
+            contenido.getChildren().add(construirComparacion());
+        }
+        estadoCarga = EstadoVacio.cargando("Calculando indicadores…");
+        estadoCarga.setMinHeight(320);
+        zonaContenido = new StackPane(estadoCarga);
+        pagina.getChildren().add(zonaContenido);
+
+        ScrollPane scroll = new ScrollPane(pagina);
+        scroll.setFitToWidth(true);
+        scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scroll.getStyleClass().add("pagina-desplazable");
+        return scroll;
+    }
+
+    private Node construirFiltros() {
+        LocalDate hoy = LocalDate.now();
+        modo = new Segmentado<Modo>().opcion(Modo.MES, "Mes").opcion(Modo.ANIO, "Año").opcion(Modo.RANGO, "Rango");
         comboAnio = new ComboBox<>(FXCollections.observableArrayList(
-                IntStream.rangeClosed(hoy.getYear() - 4, hoy.getYear()).boxed()
-                        .sorted(Comparator.reverseOrder()).toList()));
+                IntStream.rangeClosed(hoy.getYear() - 4, hoy.getYear()).boxed().sorted(Comparator.reverseOrder()).toList()));
         comboAnio.setValue(hoy.getYear());
+        comboAnio.setAccessibleText("Año");
         comboMes = new ComboBox<>(FXCollections.observableArrayList(MESES));
         comboMes.getSelectionModel().select(hoy.getMonthValue() - 1);
-        comboAnio.valueProperty().addListener((o, x, y) -> cargar());
-        comboMes.valueProperty().addListener((o, x, y) -> cargar());
-        campoMes = Ui.campo("Mes", comboMes);
-        filaAnioMes = new HBox(10, Ui.campo("Año", comboAnio), campoMes);
-
+        comboMes.setAccessibleText("Mes");
         campoDesde = new DatePicker(hoy.withDayOfMonth(1));
         campoHasta = new DatePicker(hoy);
-        campoDesde.setEditable(false);
-        campoHasta.setEditable(false);
-        campoDesde.valueProperty().addListener((o, x, y) -> cargar());
-        campoHasta.valueProperty().addListener((o, x, y) -> cargar());
-        filaRango = new HBox(10, Ui.campo("Desde", campoDesde), Ui.campo("Hasta", campoHasta));
+        for (DatePicker p : List.of(campoDesde, campoHasta)) {
+            p.setEditable(false);
+            p.setPrefWidth(150);
+        }
+        Label al = new Label("al");
+        al.getStyleClass().add("etiqueta-filtro");
+        HBox rango = new HBox(8, campoDesde, al, campoHasta);
+        rango.setAlignment(Pos.CENTER_LEFT);
+        comboMes.managedProperty().bind(comboMes.visibleProperty());
+        comboAnio.managedProperty().bind(comboAnio.visibleProperty());
+        rango.managedProperty().bind(rango.visibleProperty());
 
-        Button accesoHoy = accesoRapido("Hoy", () -> fijarRango(Modo.RANGO, hoy, hoy));
-        Button accesoSemana = accesoRapido("Esta semana",
-                () -> fijarRango(Modo.RANGO, hoy.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)), hoy));
-        Button accesoMes = accesoRapido("Este mes", () -> fijarMes(hoy.getYear(), hoy.getMonthValue()));
-        Button accesoMesAnterior = accesoRapido("Mes anterior", () -> {
-            YearMonth anterior = YearMonth.from(hoy).minusMonths(1);
-            fijarMes(anterior.getYear(), anterior.getMonthValue());
+        Button hoyBtn = acceso("Hoy", () -> fijarRango(hoy, hoy));
+        Button semana = acceso("Esta semana", () -> fijarRango(hoy.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)), hoy));
+        Button anterior = acceso("Mes anterior", () -> {
+            YearMonth m = YearMonth.from(hoy).minusMonths(1);
+            fijarMes(m.getYear(), m.getMonthValue());
         });
-        Button accesoAnio = accesoRapido("Año actual", () -> fijarRango(Modo.ANIO, null, null));
-        HBox filaAccesos = new HBox(8, accesoHoy, accesoSemana, accesoMes, accesoMesAnterior, accesoAnio);
-        filaAccesos.setAlignment(Pos.CENTER_LEFT);
+        Button esteMes = acceso("Este mes", () -> fijarMes(hoy.getYear(), hoy.getMonthValue()));
 
-        VBox columnaFiltros = new VBox(12, filaModo, filaAnioMes, filaRango, filaAccesos);
-
-        HBox filtros = new HBox(20, columnaFiltros);
-        filtros.getStyleClass().add("indicadores-filtros");
-        filtros.setAlignment(Pos.CENTER_LEFT);
+        HBox fila = new HBox(8, modo, comboMes, comboAnio, rango, new Region(), hoyBtn, semana, esteMes, anterior);
+        HBox.setHgrow(fila.getChildren().get(4), Priority.ALWAYS);
+        fila.setAlignment(Pos.CENTER_LEFT);
 
         if (sucursalesSeleccionables != null) {
             comboSucursal = new ComboBox<>();
             comboSucursal.setPromptText("Elige la sucursal");
+            comboSucursal.setAccessibleText("Sucursal");
+            comboSucursal.setConverter(new StringConverter<>() {
+                @Override
+                public String toString(Sucursal s) {
+                    return s == null ? "" : s.nombre() + (s.codigo() == null || s.codigo().isBlank() ? "" : " (" + s.codigo() + ")");
+                }
+
+                @Override
+                public Sucursal fromString(String t) {
+                    return comboSucursal.getValue();
+                }
+            });
+            comboSucursal.setPrefWidth(250);
             comboSucursal.valueProperty().addListener((o, x, y) -> cargar());
-            HBox.setHgrow(columnaFiltros, Priority.ALWAYS);
-            filtros.getChildren().addFirst(Ui.campo("Sucursal", comboSucursal));
-        } else {
-            Label fija = new Label(nombreSucursal.apply(usuario.sucursalId()));
-            fija.getStyleClass().add("indicadores-sucursal-fija");
-            HBox.setHgrow(columnaFiltros, Priority.ALWAYS);
-            filtros.getChildren().addFirst(Ui.campo("Sucursal", fija));
+            fila.getChildren().addFirst(comboSucursal);
         }
 
-        actualizarVisibilidadFiltros();
+        periodoTexto = new Label();
+        periodoTexto.getStyleClass().add("nota-periodo");
+        periodoTexto.setGraphic(new FontIcon("mdi2c-calendar-range"));
+        periodoTexto.setWrapText(true);
+        actualizando = new Label("Actualizando…");
+        actualizando.getStyleClass().add("nota-periodo");
+        actualizando.setVisible(false);
+        HBox nota = new HBox(12, periodoTexto, actualizando);
+        nota.setAlignment(Pos.CENTER_LEFT);
+
+        modo.valorProperty().addListener((o, x, y) -> {
+            actualizarControles();
+            cargar();
+        });
+        comboAnio.valueProperty().addListener((o, x, y) -> cargar());
+        comboMes.valueProperty().addListener((o, x, y) -> cargar());
+        campoDesde.valueProperty().addListener((o, x, y) -> cargar());
+        campoHasta.valueProperty().addListener((o, x, y) -> cargar());
+        actualizarControles();
+
+        VBox filtros = new VBox(10, fila, nota);
+        filtros.getStyleClass().add("panel");
+        filtros.setPadding(new Insets(12, 16, 12, 16));
         return filtros;
     }
 
-    private Button accesoRapido(String texto, Runnable accion) {
+    private Button acceso(String texto, Runnable accion) {
         Button b = new Button(texto);
-        b.getStyleClass().add("chip-rapido");
-        b.setFocusTraversable(false);
+        b.getStyleClass().addAll("flat", "small");
         b.setOnAction(e -> accion.run());
         return b;
     }
 
-    private void actualizarVisibilidadFiltros() {
-        filaAnioMes.setVisible(modo != Modo.RANGO);
-        filaAnioMes.setManaged(modo != Modo.RANGO);
-        campoMes.setVisible(modo == Modo.MES);
-        campoMes.setManaged(modo == Modo.MES);
-        filaRango.setVisible(modo == Modo.RANGO);
-        filaRango.setManaged(modo == Modo.RANGO);
+    private void actualizarControles() {
+        Modo m = modo.getValor();
+        comboMes.setVisible(m == Modo.MES);
+        comboAnio.setVisible(m != Modo.RANGO);
+        campoDesde.getParent().setVisible(m == Modo.RANGO);
     }
 
-    /** Usado por los accesos rápidos de mes (Este mes / Mes anterior). */
     private void fijarMes(int anio, int mes) {
-        botonMes.setSelected(true);
-        modo = Modo.MES;
         comboAnio.setValue(anio);
         comboMes.getSelectionModel().select(mes - 1);
-        actualizarVisibilidadFiltros();
+        modo.setValor(Modo.MES);
         cargar();
     }
 
-    /** Usado por Hoy/Esta semana (rango) y Año actual (sin fechas: se calculan en {@link #calcularRango()}). */
-    private void fijarRango(Modo nuevoModo, LocalDate desde, LocalDate hasta) {
-        modo = nuevoModo;
-        (nuevoModo == Modo.ANIO ? botonAnio : botonRango).setSelected(true);
-        if (nuevoModo == Modo.ANIO) {
-            comboAnio.setValue(LocalDate.now().getYear());
-        } else {
-            campoDesde.setValue(desde);
-            campoHasta.setValue(hasta);
-        }
-        actualizarVisibilidadFiltros();
+    private void fijarRango(LocalDate desde, LocalDate hasta) {
+        campoDesde.setValue(desde);
+        campoHasta.setValue(hasta);
+        modo.setValor(Modo.RANGO);
         cargar();
     }
+
+    private Node construirTarjetas() {
+        tarjetaVenta = new Tarjeta("Venta neta").principal();
+        tarjetaUtilidad = new Tarjeta("Utilidad bruta");
+        tarjetaMargen = new Tarjeta("Margen bruto");
+        tarjetaMeta = new Tarjeta("Avance de la meta del mes");
+        tarjetaMeta.conBarra();
+        HBox fila = new HBox(Diseno.ESPACIO_L, tarjetaVenta, tarjetaUtilidad, tarjetaMargen, tarjetaMeta);
+        for (Node n : fila.getChildren()) {
+            HBox.setHgrow(n, Priority.ALWAYS);
+        }
+        return fila;
+    }
+
+    private Node construirEvolucion() {
+        CategoryAxis x = new CategoryAxis();
+        NumberAxis y = new NumberAxis();
+        y.setTickLabelFormatter(new StringConverter<>() {
+            @Override
+            public String toString(Number n) {
+                return dineroCorto(n.longValue());
+            }
+
+            @Override
+            public Number fromString(String s) {
+                return 0;
+            }
+        });
+        grafica = new GraficaVentas(x, y);
+        grafica.setPrefHeight(300);
+        grafica.setMinHeight(240);
+        tituloGrafica = new Label("Venta por día");
+        tituloGrafica.getStyleClass().add("panel-titulo");
+        Region muestraVenta = new Region();
+        muestraVenta.getStyleClass().addAll("leyenda-muestra", "serie-venta");
+        Region muestraMeta = new Region();
+        muestraMeta.getStyleClass().addAll("leyenda-muestra", "serie-meta");
+        Label etiquetaVenta = new Label("Venta");
+        Label etiquetaMeta = new Label("Meta diaria");
+        etiquetaVenta.getStyleClass().add("texto-secundario");
+        etiquetaMeta.getStyleClass().add("texto-secundario");
+        HBox leyendaMeta = new HBox(6, muestraMeta, etiquetaMeta);
+        leyendaMeta.setAlignment(Pos.CENTER_LEFT);
+        leyendaMeta.visibleProperty().bind(grafica.conMetaProperty());
+        leyendaMeta.managedProperty().bind(leyendaMeta.visibleProperty());
+        HBox leyenda = new HBox(16, new HBox(6, muestraVenta, etiquetaVenta), leyendaMeta);
+        leyenda.getStyleClass().add("leyenda-grafica");
+        HBox encabezado = new HBox(12, tituloGrafica, new Region(), leyenda);
+        HBox.setHgrow(encabezado.getChildren().get(1), Priority.ALWAYS);
+        encabezado.setAlignment(Pos.CENTER_LEFT);
+        encabezado.getStyleClass().add("panel-encabezado");
+        zonaGrafica = new StackPane(grafica);
+        zonaGrafica.setPadding(new Insets(0, 12, 8, 4));
+        VBox panelGrafica = new VBox(encabezado, zonaGrafica);
+        panelGrafica.getStyleClass().add("panel");
+        HBox.setHgrow(panelGrafica, Priority.ALWAYS);
+        panelGrafica.setMinWidth(0);
+
+        cuerpoMeta = new VBox(10);
+        VBox panelMeta = new VBox(cabeceraPanel("Meta del mes"), cuerpoMeta);
+        cuerpoMeta.setPadding(new Insets(0, 16, 16, 16));
+        panelMeta.getStyleClass().add("panel");
+        panelMeta.setPrefWidth(320);
+        panelMeta.setMinWidth(280);
+        panelMeta.setMaxWidth(340);
+        return new HBox(Diseno.ESPACIO_L, panelGrafica, panelMeta);
+    }
+
+    private static HBox cabeceraPanel(String titulo) {
+        Label t = new Label(titulo);
+        t.getStyleClass().add("panel-titulo");
+        HBox h = new HBox(t);
+        h.getStyleClass().add("panel-encabezado");
+        return h;
+    }
+
+    private Node construirDetalle() {
+        grupoVentas = new Grupo("Tickets y clientes");
+        grupoVentas.agregar("tickets", "Número de tickets");
+        grupoVentas.agregar("ticket", "Ticket promedio");
+        grupoVentas.agregar("articulos", "Artículos por ticket");
+        grupoVentas.agregar("articulo", "Valor promedio del artículo");
+        grupoVentas.agregar("clientes", "Clientes por día");
+        grupoVentas.agregar("empleado", "Clientes por empleado al día");
+        grupoVentas.agregar("mayor", "Horas de mayor venta");
+        grupoVentas.agregar("menor", "Horas de menor venta");
+
+        grupoKilos = new Grupo("Kilos vendidos");
+        grupoKilos.agregar("kilos", "Kilos vendidos (gramaje neto)");
+        grupoKilos.agregar("meta", "Meta de kilos del mes");
+        grupoKilos.agregar("diferencia", "Diferencia contra la meta");
+        marcas = new VBox(6);
+        grupoKilos.extra(marcas);
+
+        grupoInventario = new Grupo("Inventario y crédito");
+        grupoInventario.agregar("inicial", "Inventario inicial (al costo)");
+        grupoInventario.agregar("final", "Inventario final (al costo)");
+        grupoInventario.agregar("promedio", "Inventario promedio");
+        grupoInventario.agregar("dias", "Días de inventario");
+        grupoInventario.agregar("credito", "Saldo de crédito con el almacén");
+
+        tablaKpis = new TablaDatos<>(Diseno.Densidad.COMPACTA);
+        tablaKpis.texto("KPI", IndicadoresService.Kpi::nombre).flexible(160);
+        tablaKpis.texto("Logrado", IndicadoresService.Kpi::logrado).ancho(130).numero();
+        tablaKpis.texto("Meta", IndicadoresService.Kpi::meta).ancho(130).numero();
+        tablaKpis.formato("Avance", k -> k.avancePct().orElse(-1.0), (k, v) -> v < 0 ? "Sin meta" : porcentaje(v)).numero().ancho(110);
+        tablaKpis.numero("Peso", IndicadoresService.Kpi::ponderacion, v -> v + "%").ancho(80);
+        tablaKpis.formato("Aporta", k -> k.avancePonderado().orElse(-1.0), (k, v) -> v < 0 ? "—" : porcentaje(v)).numero().ancho(100);
+        tablaKpis.tabla().setPrefHeight(40 + 4 * 44 + 2);
+        tablaKpis.tabla().setMinHeight(40 + 4 * 44 + 2);
+        tablaKpis.setVacio(new EstadoVacio("mdi2c-chart-donut", "Sin KPIs para este periodo.", null).compacto());
+        avanceTotal = new Label();
+        avanceTotal.getStyleClass().add("panel-descripcion");
+        VBox panelTabla = new VBox(tablaKpis.tabla());
+        panelTabla.getStyleClass().add("panel-tabla");
+        Diseno.recortarRedondeado(panelTabla, Diseno.RADIO_PANEL);
+        VBox panelKpis = new VBox(Diseno.ESPACIO_S, cabeceraKpis(), panelTabla);
+
+        GridPane grid = new GridPane(Diseno.ESPACIO_L, Diseno.ESPACIO_L);
+        ColumnConstraints mitad = new ColumnConstraints();
+        mitad.setPercentWidth(50);
+        mitad.setHgrow(Priority.ALWAYS);
+        grid.getColumnConstraints().addAll(mitad, mitad);
+        grid.add(grupoVentas, 0, 0);
+        grid.add(grupoKilos, 1, 0);
+        if (esAdmin) {
+            grupoUtilidad = new Grupo("Utilidad neta");
+            grupoUtilidad.agregar("bruta", "Utilidad bruta");
+            grupoUtilidad.agregar("gastos", "Gastos del periodo");
+            grupoUtilidad.agregar("nomina", "Nómina del periodo");
+            grupoUtilidad.agregar("mermas", "Mermas (al costo)");
+            grupoUtilidad.agregar("neta", "Utilidad neta");
+            grupoUtilidad.agregar("margen", "Margen neto");
+            grid.add(grupoUtilidad, 0, 1);
+            grid.add(grupoInventario, 1, 1);
+        } else {
+            grid.add(grupoInventario, 0, 1, 2, 1);
+        }
+        grid.add(panelKpis, 0, 2, 2, 1);
+        return grid;
+    }
+
+    private Node cabeceraKpis() {
+        Label t = new Label("KPIs ponderados");
+        t.getStyleClass().add("grupo-metricas-titulo");
+        HBox h = new HBox(12, t, new Region(), avanceTotal);
+        HBox.setHgrow(h.getChildren().get(1), Priority.ALWAYS);
+        h.setAlignment(Pos.CENTER_LEFT);
+        return h;
+    }
+
+    private Node construirComparacion() {
+        NumberAxis x = new NumberAxis();
+        x.setTickLabelFormatter(new StringConverter<>() {
+            @Override
+            public String toString(Number n) {
+                return dineroCorto(n.longValue());
+            }
+
+            @Override
+            public Number fromString(String s) {
+                return 0;
+            }
+        });
+        CategoryAxis y = new CategoryAxis();
+        graficaSucursales = new BarChart<>(x, y);
+        graficaSucursales.setAnimated(false);
+        graficaSucursales.setLegendVisible(false);
+        graficaSucursales.getStyleClass().addAll("grafica", "barras-horizontales");
+        graficaSucursales.setPrefHeight(220);
+        graficaSucursales.setCategoryGap(14);
+
+        tablaConsolidado = new TablaDatos<>(Diseno.Densidad.COMPACTA);
+        tablaConsolidado.setClave(f -> f.sucursal().id());
+        tablaConsolidado.dosLineas("Sucursal", f -> f.sucursal().nombre(), f -> f.sucursal().codigo()).flexible(170);
+        tablaConsolidado.dinero("Venta", IndicadoresService.ConsolidadoFila::ventaNeta).ancho(120);
+        tablaConsolidado.dinero("Costo", IndicadoresService.ConsolidadoFila::costoVenta).ancho(120);
+        tablaConsolidado.dinero("Utilidad bruta", IndicadoresService.ConsolidadoFila::utilidadBruta).ancho(130);
+        tablaConsolidado.dinero("Gastos", IndicadoresService.ConsolidadoFila::gastosCentavos).ancho(120);
+        tablaConsolidado.dinero("Utilidad neta", IndicadoresService.ConsolidadoFila::utilidadNeta).ancho(130);
+        tablaConsolidado.formato("Meta", f -> f.cumplimientoPct().orElse(-1.0), (f, v) -> v < 0 ? "—" : porcentaje(v))
+                .numero().ancho(90).ayuda("Avance de la meta de venta del mes (solo si el periodo es un mes).");
+        tablaConsolidado.formato("KPIs", f -> f.avanceTotalPonderado().orElse(-1.0), (f, v) -> v < 0 ? "—" : porcentaje(v))
+                .numero().ancho(90).ayuda("Avance total ponderado de los KPIs.");
+        tablaConsolidado.tabla().setPrefHeight(40 + 5 * 44 + 2);
+        tablaConsolidado.setVacio(new EstadoVacio("mdi2s-storefront-outline", "No hay sucursales activas.", null).compacto());
+        VBox panelTabla = new VBox(tablaConsolidado.tabla());
+        panelTabla.getStyleClass().add("panel-tabla");
+        Diseno.recortarRedondeado(panelTabla, Diseno.RADIO_PANEL);
+
+        zonaComparacion = new StackPane(graficaSucursales);
+        VBox panelGrafica = new VBox(cabeceraPanel("Venta neta por sucursal"), zonaComparacion);
+        panelGrafica.getStyleClass().add("panel");
+        zonaComparacion.setPadding(new Insets(0, 16, 8, 4));
+        Label titulo = new Label("Comparación por sucursal");
+        titulo.getStyleClass().add("seccion-titulo");
+        Label nota = new Label("Mismo periodo para todas las sucursales activas; cada una con sus propias ventas, gastos y metas.");
+        nota.getStyleClass().add("seccion-descripcion");
+        return new VBox(Diseno.ESPACIO_S, new VBox(2, titulo, nota), panelGrafica, panelTabla);
+    }
+
+    // ------------------------------------------------------------------ carga
 
     private LocalDate[] calcularRango() {
         LocalDate hoy = LocalDate.now();
-        return switch (modo) {
+        return switch (modo.getValor()) {
             case ANIO -> {
                 int anio = comboAnio.getValue();
-                LocalDate primero = LocalDate.of(anio, 1, 1);
-                LocalDate ultimo = anio == hoy.getYear() ? hoy : LocalDate.of(anio, 12, 31);
-                yield new LocalDate[]{primero, ultimo};
+                yield new LocalDate[]{LocalDate.of(anio, 1, 1), anio == hoy.getYear() ? hoy : LocalDate.of(anio, 12, 31)};
             }
             case MES -> {
                 int anio = comboAnio.getValue();
@@ -374,235 +527,319 @@ public class IndicadoresVista {
     }
 
     private void cargar() {
-        if (raiz == null) {
+        if (raiz == null || comboAnio.getValue() == null) {
             return;
         }
         String sucursalId = sucursalActual();
         LocalDate[] rango = calcularRango();
-        if (sucursalId == null || rango[0] == null || rango[1] == null || rango[0].isAfter(rango[1])) {
+        if (sucursalId == null || rango[0] == null || rango[1] == null) {
             return;
         }
-        desdeActual = rango[0];
-        hastaActual = rango[1];
-        try {
-            IndicadoresService.Resumen r = servicio.calcular(usuario, sucursalId, desdeActual, hastaActual);
-            pintar(r);
-            IndicadoresService.VentasDetalle vd =
-                    servicio.calcularVentasDetalle(usuario, sucursalId, desdeActual, hastaActual);
-            pintarVentasDetalle(vd);
-            IndicadoresService.KilosResumen kr = servicio.calcularKilos(usuario, sucursalId, desdeActual, hastaActual);
-            pintarKilos(kr);
-            IndicadoresService.KpisResumen kpis = servicio.calcularKpis(usuario, sucursalId, desdeActual, hastaActual);
-            pintarKpis(kpis);
-            IndicadoresService.InventarioResumen ir =
-                    servicio.calcularInventario(usuario, sucursalId, desdeActual, hastaActual);
-            pintarInventario(ir);
-            if (usuario.rol() == Rol.ADMINISTRADOR) {
-                IndicadoresService.UtilidadResumen ur =
-                        servicio.calcularUtilidad(usuario, sucursalId, desdeActual, hastaActual);
-                pintarUtilidad(ur, r);
-                List<Sucursal> todas = sucursalesSeleccionables != null ? sucursalesSeleccionables.get() : List.of();
-                List<IndicadoresService.ConsolidadoFila> consolidado =
-                        servicio.calcularConsolidado(usuario, todas, desdeActual, hastaActual);
-                pintarConsolidado(consolidado);
-            }
-        } catch (RuntimeException e) {
-            avisos.error(AdminContexto.mensaje(e));
+        if (rango[0].isAfter(rango[1])) {
+            periodoTexto.setText("El periodo no es válido: la fecha inicial es después de la final.");
+            return;
         }
-    }
-
-    private void pintar(IndicadoresService.Resumen r) {
-        String margen = formatearPorcentaje(r.margenPct());
-        tarjetasKpi.getChildren().setAll(
-                Ui.indicador("Venta total", Dinero.formatear(r.ventaNeta()), "mdi2c-cash-multiple"),
-                Ui.indicador("Costo de mercancía vendida", Dinero.formatear(r.costoVenta()), "mdi2p-package-variant-closed"),
-                Ui.indicador("Utilidad bruta", Dinero.formatear(r.utilidadBruta()), "mdi2t-trending-up"),
-                Ui.indicador("Margen de utilidad", margen, "mdi2p-percent"));
-
-        cuerpoMeta.getChildren().clear();
-        boolean periodoEsUnMes = desdeActual.getYear() == hastaActual.getYear()
-                && desdeActual.getMonthValue() == hastaActual.getMonthValue();
-        if (!periodoEsUnMes) {
-            cuerpoMeta.getChildren().add(Ui.texto(
-                    "La meta mensual solo aplica dentro de un mismo mes. Cambia el filtro a \"Mes\" para verla.",
-                    "texto-ayuda"));
-        } else {
-            int anio = desdeActual.getYear();
-            int mes = desdeActual.getMonthValue();
-            if (r.metaMensual().isEmpty()) {
-                VBox sinMeta = new VBox(10, Ui.texto(
-                        "Aún no se ha capturado la meta de " + MESES[mes - 1] + " " + anio + ".", "texto-ayuda"));
-                if (usuario.rol() == Rol.ADMINISTRADOR) {
-                    Button capturar = Ui.principal("Capturar meta", "mdi2t-target");
-                    capturar.setOnAction(e -> capturarMeta(anio, mes));
-                    sinMeta.getChildren().add(capturar);
-                }
-                cuerpoMeta.getChildren().add(sinMeta);
+        LocalDate desde = rango[0];
+        LocalDate hasta = rango[1];
+        actualizando.setVisible(cargado);
+        carga.cargar(() -> new Datos(sucursalId, desde, hasta,
+                servicio.calcular(usuario, sucursalId, desde, hasta),
+                servicio.calcularVentasDetalle(usuario, sucursalId, desde, hasta),
+                servicio.calcularKilos(usuario, sucursalId, desde, hasta),
+                servicio.calcularKpis(usuario, sucursalId, desde, hasta),
+                servicio.calcularInventario(usuario, sucursalId, desde, hasta),
+                esAdmin ? servicio.calcularUtilidad(usuario, sucursalId, desde, hasta) : null,
+                servicio.ventaPorDia(usuario, sucursalId, desde, hasta)), d -> {
+            actualizando.setVisible(false);
+            cargado = true;
+            zonaContenido.getChildren().setAll(contenido);
+            pintar(d);
+        }, e -> {
+            actualizando.setVisible(false);
+            if (cargado) {
+                avisos.errorConAccion("No se pudieron actualizar los indicadores: " + Errores.mensaje(e), "Reintentar",
+                        this::cargar);
             } else {
-                cuerpoMeta.getChildren().add(pintarMeta(r, anio, mes));
+                mostrarError(Errores.mensaje(e));
+            }
+        });
+        if (esAdmin && sucursalesSeleccionables != null) {
+            cargarConsolidado(desde, hasta);
+        }
+    }
+
+    private void mostrarError(String mensaje) {
+        zonaContenido.getChildren().setAll(EstadoVacio.error("No se pudieron calcular los indicadores.", mensaje,
+                this::cargar));
+    }
+
+    private void cargarConsolidado(LocalDate desde, LocalDate hasta) {
+        tablaConsolidado.cargando("Calculando la comparación…");
+        cargaConsolidado.cargar(() -> servicio.calcularConsolidado(usuario, sucursalesSeleccionables.get(), desde, hasta),
+                filas -> {
+                    tablaConsolidado.setDatos(filas);
+                    boolean hayVentas = filas.stream().anyMatch(f -> f.ventaNeta() != 0);
+                    if (!hayVentas) {
+                        zonaComparacion.getChildren().setAll(new EstadoVacio("mdi2c-chart-bar",
+                                "Sin ventas en ninguna sucursal en este periodo.", null).compacto());
+                        return;
+                    }
+                    XYChart.Series<Number, String> serie = new XYChart.Series<>();
+                    List<IndicadoresService.ConsolidadoFila> ordenadas = new ArrayList<>(filas);
+                    ordenadas.sort(Comparator.comparingLong(IndicadoresService.ConsolidadoFila::ventaNeta));
+                    for (IndicadoresService.ConsolidadoFila f : ordenadas) {
+                        XYChart.Data<Number, String> dato = new XYChart.Data<>(f.ventaNeta() / 100.0, f.sucursal().nombre());
+                        dato.nodeProperty().addListener((o, x, nodo) -> {
+                            if (nodo != null) {
+                                Tooltip.install(nodo, new Tooltip(f.sucursal().nombre() + ": " + Dinero.formatear(f.ventaNeta())));
+                            }
+                        });
+                        serie.getData().add(dato);
+                    }
+                    graficaSucursales.getData().setAll(List.of(serie));
+                    graficaSucursales.setPrefHeight(Math.max(160, 48 * filas.size() + 60));
+                    zonaComparacion.getChildren().setAll(graficaSucursales);
+                },
+                e -> tablaConsolidado.error("No se pudo calcular la comparación.", Errores.mensaje(e), () -> cargarConsolidado(desde, hasta)));
+    }
+
+    // ------------------------------------------------------------------ pintar
+
+    private void pintar(Datos d) {
+        IndicadoresService.Resumen r = d.resumen();
+        boolean sinVentas = d.ventas().tickets() == 0;
+        periodoTexto.setText(textoPeriodo(d.desde(), d.hasta(), r.diasEnPeriodo())
+                + ". Cuentan solo las ventas completadas; el costo es el real de cada lote vendido.");
+
+        tarjetaVenta.valor(Dinero.formatear(r.ventaNeta()), sinVentas ? "Sin ventas registradas en el periodo"
+                : Texto.plural(d.ventas().tickets(), "ticket", "tickets") + " · promedio diario " + Dinero.formatear(r.promedioDiario()));
+        tarjetaUtilidad.valor(Dinero.formatear(r.utilidadBruta()), "Costo de lo vendido " + Dinero.formatear(r.costoVenta()));
+        tarjetaMargen.valor(sinVentas ? "—" : porcentaje(r.margenPct()),
+                sinVentas ? "Sin ventas: no hay margen que calcular" : "Utilidad bruta entre la venta neta");
+        tarjetaMargen.sinDato(sinVentas);
+        pintarMeta(d);
+        pintarGrafica(d);
+
+        IndicadoresService.VentasDetalle v = d.ventas();
+        grupoVentas.valor("tickets", String.valueOf(v.tickets()));
+        grupoVentas.valor("ticket", sinVentas ? "—" : Dinero.formatear(v.ticketPromedioCentavos()));
+        grupoVentas.valor("articulos", sinVentas ? "—" : uno(v.articulosPorTicket()));
+        grupoVentas.valor("articulo", sinVentas ? "—" : Dinero.formatear(v.valorPromedioArticuloCentavos()));
+        grupoVentas.valor("clientes", uno(v.clientesPorDia()));
+        grupoVentas.valor("empleado", v.clientesPorEmpleadoDiario().map(IndicadoresVista::uno).orElse("Sin empleados activos"));
+        grupoVentas.valor("mayor", horas(v.horasMayores()));
+        grupoVentas.valor("menor", horas(v.horasMenores()));
+
+        IndicadoresService.KilosResumen k = d.kilos();
+        grupoKilos.valor("kilos", Masa.formatear(k.kilosVendidosGramos()));
+        grupoKilos.valor("meta", k.metaKilosGramos().map(Masa::formatear).orElse(mismoMes(d) ? "Sin capturar" : "Solo por mes"));
+        grupoKilos.valor("diferencia", k.diferenciaGramos().map(g -> (g.signum() > 0 ? "+" : "") + Masa.formatear(g)).orElse("—"));
+        marcas.getChildren().clear();
+        if (!k.porMarca().isEmpty()) {
+            Label t = new Label("Por marca");
+            t.getStyleClass().add("detalle-seccion-titulo");
+            List<Node> filas = new ArrayList<>();
+            for (IndicadoresRepository.MarcaKilos m : k.porMarca().stream().limit(5).toList()) {
+                filas.add(PanelDetalle.filaLista(m.marca() == null || m.marca().isBlank() ? "Sin marca" : m.marca(), null,
+                        Masa.formatear(m.gramos()), null));
+            }
+            marcas.getChildren().addAll(t, PanelDetalle.lista(filas));
+            if (k.porMarca().size() > 5) {
+                marcas.getChildren().add(Etiqueta.simple("y " + (k.porMarca().size() - 5) + " marcas más", Etiqueta.Tono.NEUTRO));
             }
         }
 
-        tarjetasDiarias.getChildren().setAll(
-                Ui.indicador("Promedio diario de venta", Dinero.formatear(r.promedioDiario()), "mdi2c-calendar-month"),
-                Ui.indicador("Meta diaria", r.metaDiaria().map(Dinero::formatear).orElse("—"), "mdi2c-calendar-range"),
-                Ui.indicador("Diferencia contra meta", r.diferenciaVsMeta().map(Dinero::formatear).orElse("—"),
-                        "mdi2f-flag-checkered"));
-    }
-
-    private void pintarVentasDetalle(IndicadoresService.VentasDetalle vd) {
-        tarjetasVentasDetalle.getChildren().setAll(
-                Ui.indicador("Número de tickets", String.valueOf(vd.tickets()), "mdi2r-receipt"),
-                Ui.indicador("Ticket promedio", Dinero.formatear(vd.ticketPromedioCentavos()), "mdi2c-cash"),
-                Ui.indicador("Artículos por ticket", formatearUno(vd.articulosPorTicket()), "mdi2b-basket-outline"),
-                Ui.indicador("Valor promedio del artículo", Dinero.formatear(vd.valorPromedioArticuloCentavos()),
-                        "mdi2t-tag-outline"));
-
-        tarjetasClientes.getChildren().setAll(
-                Ui.indicador("Clientes por día", formatearUno(vd.clientesPorDia()), "mdi2a-account-multiple-outline"),
-                Ui.indicador("Clientes por empleado diario",
-                        vd.clientesPorEmpleadoDiario().map(IndicadoresVista::formatearUno).orElse("—"),
-                        "mdi2a-account-group-outline"));
-
-        VBox mayores = new VBox(6, Ui.texto("Horas de mayor venta", "indicador-titulo"));
-        if (vd.horasMayores().isEmpty()) {
-            mayores.getChildren().add(Ui.texto("Sin ventas en el periodo.", "texto-ayuda"));
-        } else {
-            vd.horasMayores().forEach(h -> mayores.getChildren().add(horaTexto(h)));
+        if (grupoUtilidad != null && d.utilidad() != null) {
+            IndicadoresService.UtilidadResumen u = d.utilidad();
+            grupoUtilidad.valor("bruta", Dinero.formatear(r.utilidadBruta()));
+            grupoUtilidad.valor("gastos", "−" + Dinero.formatear(u.gastosCentavos()));
+            grupoUtilidad.valor("nomina", "−" + Dinero.formatear(u.nominaCentavos()));
+            grupoUtilidad.valor("mermas", "−" + Dinero.formatear(u.mermasCentavos()));
+            grupoUtilidad.valor("neta", Dinero.formatear(u.utilidadNeta()));
+            grupoUtilidad.valor("margen", sinVentas ? "—" : porcentaje(u.margenNetoPct()));
+            grupoUtilidad.resaltar("neta", u.utilidadNeta() < 0);
         }
-        VBox menores = new VBox(6, Ui.texto("Horas de menor venta", "indicador-titulo"));
-        if (vd.horasMenores().isEmpty()) {
-            menores.getChildren().add(Ui.texto("Sin ventas en el periodo.", "texto-ayuda"));
-        } else {
-            vd.horasMenores().forEach(h -> menores.getChildren().add(horaTexto(h)));
-        }
-        cuerpoHoras.getChildren().setAll(Ui.tarjeta(null, mayores), Ui.tarjeta(null, menores));
+
+        IndicadoresService.InventarioResumen inv = d.inventario();
+        grupoInventario.valor("inicial", Dinero.formatear(inv.inventarioInicialCentavos()));
+        grupoInventario.valor("final", Dinero.formatear(inv.inventarioFinalCentavos()));
+        grupoInventario.valor("promedio", Dinero.formatear(inv.inventarioPromedioCentavos()));
+        grupoInventario.valor("dias", inv.diasInventario().map(x -> uno(x) + " días").orElse("Sin ventas al costo"));
+        grupoInventario.valor("credito", Dinero.formatear(inv.saldoCreditoCentavos()));
+
+        tablaKpis.setDatos(d.kpis().kpis());
+        avanceTotal.setText(d.kpis().avanceTotalPonderado()
+                .map(a -> "Avance total ponderado: " + porcentaje(a))
+                .orElse(mismoMes(d) ? "Sin metas de KPI capturadas para este mes" : "Las metas de KPI son mensuales"));
     }
 
-    private static Label horaTexto(IndicadoresService.HoraVenta h) {
-        return new Label(String.format("%02d:00–%02d:00 · %s", h.hora(), h.hora() + 1, Dinero.formatear(h.totalCentavos())));
-    }
-
-    private void pintarKilos(IndicadoresService.KilosResumen kr) {
-        tarjetasKilos.getChildren().setAll(
-                Ui.indicador("Kilos vendidos", Masa.formatear(kr.kilosVendidosGramos()), "mdi2s-scale-balance"),
-                Ui.indicador("Meta de kilos", kr.metaKilosGramos().map(Masa::formatear).orElse("—"), "mdi2t-target"),
-                Ui.indicador("Diferencia", kr.diferenciaGramos().map(Masa::formatear).orElse("—"),
-                        "mdi2f-flag-checkered"));
-
-        boolean periodoEsUnMes = desdeActual.getYear() == hastaActual.getYear()
-                && desdeActual.getMonthValue() == hastaActual.getMonthValue();
-        notaKilos.setVisible(!periodoEsUnMes);
-        notaKilos.setManaged(!periodoEsUnMes);
-
-        tablaMarcas.setItems(FXCollections.observableArrayList(kr.porMarca()));
-    }
-
-    private void pintarKpis(IndicadoresService.KpisResumen kpis) {
-        tablaKpis.setItems(FXCollections.observableArrayList(kpis.kpis()));
-        tarjetaAvanceTotal.getChildren().setAll(
-                Ui.indicador("Avance total ponderado",
-                        kpis.avanceTotalPonderado().map(IndicadoresVista::formatearPorcentaje).orElse("—"),
-                        "mdi2c-chart-donut"));
-    }
-
-    private void pintarUtilidad(IndicadoresService.UtilidadResumen u, IndicadoresService.Resumen r) {
-        if (tarjetasUtilidad == null) {
+    private void pintarMeta(Datos d) {
+        IndicadoresService.Resumen r = d.resumen();
+        cuerpoMeta.getChildren().clear();
+        if (!mismoMes(d)) {
+            tarjetaMeta.valor("—", "La meta es mensual: elige un solo mes");
+            tarjetaMeta.sinDato(true);
+            tarjetaMeta.barra(-1, null);
+            cuerpoMeta.getChildren().add(Ui.texto("La meta se captura por mes. Con un periodo de varios meses no se "
+                    + "calcula el avance para no mezclar metas.", "campo-ayuda"));
             return;
         }
-        tarjetasUtilidad.getChildren().setAll(
-                Ui.indicador("Utilidad bruta", Dinero.formatear(r.utilidadBruta()), "mdi2t-trending-up"),
-                Ui.indicador("Gastos del periodo", Dinero.formatear(u.gastosCentavos()), "mdi2c-cash-minus"),
-                Ui.indicador("Nómina del periodo", Dinero.formatear(u.nominaCentavos()), "mdi2a-account-cash-outline"),
-                Ui.indicador("Mermas (al costo)", Dinero.formatear(u.mermasCentavos()), "mdi2a-alert-outline"),
-                Ui.indicador("Utilidad neta", Dinero.formatear(u.utilidadNeta()), "mdi2c-cash-multiple"),
-                Ui.indicador("Margen neto", formatearPorcentaje(u.margenNetoPct()), "mdi2p-percent"));
-    }
-
-    private void pintarInventario(IndicadoresService.InventarioResumen ir) {
-        tarjetasInventario.getChildren().setAll(
-                Ui.indicador("Inventario inicial (costo)", Dinero.formatear(ir.inventarioInicialCentavos()),
-                        "mdi2p-package-variant-closed"),
-                Ui.indicador("Inventario final (costo)", Dinero.formatear(ir.inventarioFinalCentavos()),
-                        "mdi2p-package-variant-closed"),
-                Ui.indicador("Inventario promedio", Dinero.formatear(ir.inventarioPromedioCentavos()), "mdi2s-scale-balance"),
-                Ui.indicador("Días de inventario", ir.diasInventario().map(IndicadoresVista::formatearUno).orElse("—"),
-                        "mdi2c-calendar-range"),
-                Ui.indicador("Saldo de crédito con el almacén", Dinero.formatear(ir.saldoCreditoCentavos()),
-                        "mdi2c-credit-card-clock-outline"));
-    }
-
-    private void pintarConsolidado(List<IndicadoresService.ConsolidadoFila> filas) {
-        if (tablaConsolidado == null) {
+        int anio = d.desde().getYear();
+        int mes = d.desde().getMonthValue();
+        if (r.metaMensual().isEmpty()) {
+            tarjetaMeta.valor("Sin meta", "No se ha capturado la meta de " + MESES[mes - 1].toLowerCase(ES));
+            tarjetaMeta.sinDato(true);
+            tarjetaMeta.barra(-1, null);
+            cuerpoMeta.getChildren().add(Ui.texto("Aún no se ha capturado la meta de " + MESES[mes - 1] + " " + anio + ".",
+                    "campo-ayuda"));
+            if (esAdmin) {
+                Button capturar = Ui.boton("Capturar meta", "mdi2t-target", "accent");
+                capturar.setOnAction(e -> capturarMeta(d.sucursalId(), anio, mes));
+                cuerpoMeta.getChildren().add(capturar);
+            }
             return;
         }
-        tablaConsolidado.setItems(FXCollections.observableArrayList(filas));
-    }
-
-    private Node pintarMeta(IndicadoresService.Resumen r, int anio, int mes) {
         double cumplimiento = r.cumplimientoPct().orElse(0.0);
         String estado = cumplimiento >= 100 ? "exito" : cumplimiento >= 80 ? "advertencia" : "peligro";
-        String textoEstado = cumplimiento >= 100 ? "Meta alcanzada"
-                : cumplimiento >= 80 ? "Cerca de la meta" : "Debajo de la meta";
+        String textoEstado = cumplimiento >= 100 ? "Meta alcanzada" : cumplimiento >= 80 ? "Cerca de la meta" : "Debajo de la meta";
+        tarjetaMeta.sinDato(false);
+        tarjetaMeta.valor(porcentaje(cumplimiento), textoEstado + " · faltan " + Dinero.formatear(r.faltanteMeta()));
+        tarjetaMeta.barra(Math.max(0, Math.min(1.0, cumplimiento / 100.0)), estado);
 
-        HBox montos = new HBox(24,
-                montoMeta("Venta actual", Dinero.formatear(r.ventaNeta())),
-                montoMeta("Meta", Dinero.formatear(r.metaMensual().orElse(0L))),
-                montoMeta("Alcanzado", formatearPorcentaje(cumplimiento)),
-                montoMeta("Faltante", Dinero.formatear(r.faltanteMeta())));
-
-        ProgressBar barra = new ProgressBar(Math.max(0, Math.min(1.0, cumplimiento / 100.0)));
-        barra.getStyleClass().addAll("barra-meta", estado);
-        barra.setMaxWidth(Double.MAX_VALUE);
-        Label etiquetaEstado = new Label(formatearPorcentaje(cumplimiento) + " de la meta mensual · " + textoEstado);
-        etiquetaEstado.getStyleClass().addAll("indicadores-meta-estado", estado);
-
-        VBox contenido = new VBox(10, montos, barra, etiquetaEstado);
-        if (usuario.rol() == Rol.ADMINISTRADOR) {
-            Button editar = Ui.secundario("Editar meta", "mdi2p-pencil-outline");
-            editar.setOnAction(e -> capturarMeta(anio, mes));
-            HBox pie = new HBox(editar);
-            contenido.getChildren().add(pie);
+        Label estadoTexto = new Label(textoEstado);
+        estadoTexto.getStyleClass().addAll("indicadores-meta-estado", estado);
+        cuerpoMeta.getChildren().addAll(
+                PanelDetalle.dato("Meta de " + MESES[mes - 1].toLowerCase(ES), Dinero.formatear(r.metaMensual().get())),
+                PanelDetalle.dato("Vendido", Dinero.formatear(r.ventaNeta())),
+                PanelDetalle.dato(r.faltanteMeta() > 0 ? "Falta" : "Arriba de la meta",
+                        Dinero.formatear(r.faltanteMeta() > 0 ? r.faltanteMeta() : r.diferenciaVsMeta().orElse(0L))),
+                estadoTexto,
+                new javafx.scene.control.Separator(),
+                PanelDetalle.dato("Meta diaria", r.metaDiaria().map(Dinero::formatear).orElse("—")),
+                PanelDetalle.dato("Promedio diario vendido", Dinero.formatear(r.promedioDiario())),
+                PanelDetalle.dato("Días del mes", r.diasDelMes().map(String::valueOf).orElse("—")));
+        if (esAdmin) {
+            Button editar = Ui.boton("Editar meta", "mdi2p-pencil-outline", "small");
+            editar.setOnAction(e -> capturarMeta(d.sucursalId(), anio, mes));
+            cuerpoMeta.getChildren().add(editar);
         }
-        return contenido;
     }
 
-    private VBox montoMeta(String titulo, String valor) {
-        Label t = Ui.texto(titulo, "indicador-titulo");
-        Label v = new Label(valor);
-        v.getStyleClass().add("indicador-valor");
-        return new VBox(4, t, v);
+    private void pintarGrafica(Datos d) {
+        List<IndicadoresService.VentaDia> dias = d.dias();
+        boolean hayVentas = dias.stream().anyMatch(x -> x.totalCentavos() != 0);
+        if (!hayVentas) {
+            zonaGrafica.getChildren().setAll(new EstadoVacio("mdi2c-chart-bar", "Sin ventas en el periodo.",
+                    "Cuando haya ventas completadas aparecerá aquí su evolución.").compacto());
+            return;
+        }
+        boolean porMes = dias.size() > DIAS_POR_DIA;
+        Map<String, Long> puntos = new LinkedHashMap<>();
+        Map<String, String> ayudas = new LinkedHashMap<>();
+        boolean mismoMesCalendario = YearMonth.from(d.desde()).equals(YearMonth.from(d.hasta()));
+        if (porMes) {
+            tituloGrafica.setText("Venta por mes");
+            for (IndicadoresService.VentaDia v : dias) {
+                YearMonth m = YearMonth.from(v.dia());
+                String clave = m.getMonth().getDisplayName(TextStyle.SHORT, ES) + (d.desde().getYear() != d.hasta().getYear()
+                        ? " " + (m.getYear() % 100) : "");
+                puntos.merge(clave, v.totalCentavos(), Long::sum);
+                ayudas.put(clave, Texto.capitalizar(m.getMonth().getDisplayName(TextStyle.FULL, ES)) + " " + m.getYear());
+            }
+        } else {
+            tituloGrafica.setText("Venta por día");
+            for (IndicadoresService.VentaDia v : dias) {
+                String clave = mismoMesCalendario ? String.valueOf(v.dia().getDayOfMonth())
+                        : v.dia().getDayOfMonth() + "/" + v.dia().getMonthValue();
+                puntos.put(clave, v.totalCentavos());
+                ayudas.put(clave, Texto.capitalizar(DIA_LARGO.format(v.dia())));
+            }
+        }
+        XYChart.Series<String, Number> serie = new XYChart.Series<>();
+        long maximo = 0;
+        for (Map.Entry<String, Long> e : puntos.entrySet()) {
+            XYChart.Data<String, Number> dato = new XYChart.Data<>(e.getKey(), e.getValue() / 100.0);
+            String texto = ayudas.get(e.getKey()) + ": " + Dinero.formatear(e.getValue());
+            dato.nodeProperty().addListener((o, x, nodo) -> {
+                if (nodo != null) {
+                    Tooltip.install(nodo, new Tooltip(texto));
+                }
+            });
+            serie.getData().add(dato);
+            maximo = Math.max(maximo, e.getValue());
+        }
+        Double metaDiaria = !porMes && d.resumen().metaDiaria().isPresent() ? d.resumen().metaDiaria().get() / 100.0 : null;
+        grafica.getData().setAll(List.of(serie));
+        grafica.setMeta(metaDiaria, Math.max(maximo / 100.0, metaDiaria == null ? 0 : metaDiaria));
+        grafica.setCategoryGap(puntos.size() > 20 ? 3 : 10);
+        zonaGrafica.getChildren().setAll(grafica);
     }
 
-    private static String formatearUno(double valor) {
+    private static boolean mismoMes(Datos d) {
+        return d.desde().getYear() == d.hasta().getYear() && d.desde().getMonthValue() == d.hasta().getMonthValue();
+    }
+
+    private static String textoPeriodo(LocalDate desde, LocalDate hasta, int diasTranscurridos) {
+        long diasTotales = ChronoUnit.DAYS.between(desde, hasta) + 1;
+        String rango = desde.equals(hasta) ? "El " + FECHA.format(desde) : "Del " + FECHA.format(desde) + " al " + FECHA.format(hasta);
+        return rango + " · " + Texto.plural(diasTranscurridos, "día transcurrido", "días transcurridos")
+                + (diasTotales != diasTranscurridos ? " de " + diasTotales : "");
+    }
+
+    private static String horas(List<IndicadoresService.HoraVenta> horas) {
+        if (horas.isEmpty()) {
+            return "Sin ventas";
+        }
+        return String.join(", ", horas.stream().map(h -> String.format("%02d:00–%02d:00", h.hora(), h.hora() + 1)).toList());
+    }
+
+    private static String uno(double valor) {
         return String.format(Locale.US, "%.1f", valor);
     }
 
-    private static String formatearPorcentaje(double valor) {
+    private static String porcentaje(double valor) {
         return String.format(Locale.US, "%.1f%%", valor);
     }
 
-    private void capturarMeta(int anio, int mes) {
-        String sucursalId = sucursalActual();
-        if (sucursalId == null) {
+    /** "$12.5k", "$1.2M" para los ejes de las gráficas. */
+    private static String dineroCorto(long pesos) {
+        double v = Math.abs(pesos);
+        String signo = pesos < 0 ? "−" : "";
+        if (v >= 1_000_000) {
+            return signo + "$" + String.format(Locale.US, "%.1fM", v / 1_000_000);
+        }
+        if (v >= 1_000) {
+            return signo + "$" + String.format(Locale.US, v >= 10_000 ? "%.0fk" : "%.1fk", v / 1_000);
+        }
+        return signo + "$" + (long) v;
+    }
+
+    // ------------------------------------------------------------------ meta
+
+    private void capturarMeta(String sucursalId, int anio, int mes) {
+        Optional<IndicadoresService.MetaCapturada> actual;
+        try {
+            actual = servicio.metaCapturada(usuario, sucursalId, anio, mes);
+        } catch (RuntimeException e) {
+            avisos.error(Errores.mensaje(e));
             return;
         }
-        Optional<IndicadoresService.MetaCapturada> actual = servicio.metaCapturada(usuario, sucursalId, anio, mes);
-
-        Dialogo d = new Dialogo("Meta de " + MESES[mes - 1] + " " + anio,
-                sucursalesSeleccionables != null && comboSucursal.getValue() != null
-                        ? comboSucursal.getValue().nombre() : nombreSucursal.apply(sucursalId),
-                "mdi2t-target", Dialogo.Tono.ACENTO);
-
-        CampoDinero campoVenta = new CampoDinero();
+        String nombre = sucursalesSeleccionables != null && comboSucursal.getValue() != null
+                ? comboSucursal.getValue().nombre() : nombreSucursal.apply(sucursalId);
+        Dialogo d = new Dialogo("Meta de " + MESES[mes - 1].toLowerCase(ES) + " " + anio, nombre, "mdi2t-target",
+                Dialogo.Tono.ACENTO);
+        d.setPrefWidth(560);
+        CampoDinero campoVenta = new CampoDinero().normal();
+        campoVenta.setPromptText("0.00");
         CampoMasa campoKilos = new CampoMasa();
         TextField campoArticulos = new TextField();
         Campos.soloNumeros(campoArticulos, 1);
         campoArticulos.setPromptText("0.0");
+        campoArticulos.setAlignment(Pos.CENTER_RIGHT);
         TextField campoUtilidad = new TextField();
         Campos.soloNumeros(campoUtilidad, 1);
         campoUtilidad.setPromptText("0.0");
-
+        campoUtilidad.setAlignment(Pos.CENTER_RIGHT);
         actual.ifPresent(m -> {
             if (m.ventaCentavos() > 0) {
                 campoVenta.setCentavos(m.ventaCentavos());
@@ -611,39 +848,233 @@ public class IndicadoresVista {
             m.articulosTicket().ifPresent(v -> campoArticulos.setText(v.stripTrailingZeros().toPlainString()));
             m.utilidadPct().ifPresent(v -> campoUtilidad.setText(String.valueOf(v)));
         });
-
         d.setContenido(
-                Ui.campo("Meta mensual de venta", campoVenta),
-                Ui.campo("Meta de kilos vendidos", campoKilos),
-                Ui.campo("Meta de artículos por ticket", campoArticulos),
-                Ui.campo("Meta de utilidad (%)", campoUtilidad));
-
+                Formulario.campo("Meta mensual de venta", campoVenta)
+                        .ayuda("Con ella se calculan el avance, la meta diaria y lo que falta."),
+                Formulario.seccionSeparada("Metas de los KPIs", "Opcionales; si se dejan vacías, ese KPI no cuenta en el avance ponderado.",
+                        Formulario.fila(Formulario.opcional("Kilos vendidos", campoKilos),
+                                Formulario.opcional("Artículos por ticket", campoArticulos)),
+                        Formulario.opcional("Utilidad (%)", Formulario.conUnidad(campoUtilidad, "%"))));
         Runnable guardar = () -> {
-            try {
-                servicio.guardarMeta(usuario, sucursalId, anio, mes, campoVenta.centavosOCero(),
-                        campoKilos.gramos().orElse(null), aBigDecimal(campoArticulos), aDouble(campoUtilidad));
+            long venta = campoVenta.centavosOCero();
+            BigDecimal kilos = campoKilos.gramos().orElse(null);
+            BigDecimal articulos = decimal(campoArticulos);
+            Double utilidad = decimal(campoUtilidad) == null ? null : decimal(campoUtilidad).doubleValue();
+            d.enviar(() -> servicio.guardarMeta(usuario, sucursalId, anio, mes, venta, kilos, articulos, utilidad), folio -> {
                 d.cerrar();
-                avisos.exito("Meta actualizada.");
+                avisos.exito("Meta de " + MESES[mes - 1].toLowerCase(ES) + " guardada · Folio " + folio);
                 cargar();
-            } catch (RuntimeException ex) {
-                avisos.error(AdminContexto.mensaje(ex));
-            }
+            });
         };
-        d.agregarBoton("Cancelar", null, d::cerrar, "flat");
-        d.agregarBoton("Guardar meta", "mdi2c-check", guardar, "success");
+        d.agregarBoton("Cancelar", null, d::cancelar, "flat");
+        d.agregarBoton("Guardar meta", "mdi2c-check", guardar, "accent");
         d.setAlCancelar(d::cerrar);
         d.setAlConfirmar(guardar);
         d.setFocoInicial(campoVenta);
+        d.vigilarCambios(campoVenta, campoKilos, campoArticulos, campoUtilidad);
         dialogos.mostrar(d);
     }
 
-    private static BigDecimal aBigDecimal(TextField campo) {
+    private static BigDecimal decimal(TextField campo) {
         String t = campo.getText();
         return (t == null || t.isBlank() || t.equals(".")) ? null : new BigDecimal(t);
     }
 
-    private static Double aDouble(TextField campo) {
-        BigDecimal v = aBigDecimal(campo);
-        return v == null ? null : v.doubleValue();
+    // ------------------------------------------------------------------ piezas visuales
+
+    /** Indicador principal: etiqueta, cifra y contexto; opcionalmente una barra de avance. */
+    private static final class Tarjeta extends VBox {
+        private final Label valor = new Label("—");
+        private final Label contexto = new Label();
+        private ProgressBar barra;
+
+        Tarjeta(String titulo) {
+            super(4);
+            getStyleClass().add("kpi");
+            Label etiqueta = new Label(titulo);
+            etiqueta.getStyleClass().add("kpi-etiqueta");
+            valor.getStyleClass().add("kpi-valor");
+            valor.setMinWidth(Region.USE_PREF_SIZE);
+            contexto.getStyleClass().add("kpi-contexto");
+            contexto.setWrapText(true);
+            setMinWidth(0);
+            setMaxWidth(Double.MAX_VALUE);
+            getChildren().addAll(etiqueta, valor, contexto);
+        }
+
+        Tarjeta principal() {
+            getStyleClass().add("principal");
+            return this;
+        }
+
+        void conBarra() {
+            barra = new ProgressBar(0);
+            barra.getStyleClass().add("barra-meta");
+            barra.setMaxWidth(Double.MAX_VALUE);
+            barra.managedProperty().bind(barra.visibleProperty());
+            getChildren().add(2, barra);
+        }
+
+        void valor(String cifra, String texto) {
+            valor.setText(cifra);
+            contexto.setText(texto);
+        }
+
+        void sinDato(boolean sinDato) {
+            getStyleClass().remove("sin-dato");
+            if (sinDato) {
+                getStyleClass().add("sin-dato");
+            }
+        }
+
+        void barra(double avance, String estado) {
+            if (barra == null) {
+                return;
+            }
+            barra.setVisible(avance >= 0);
+            barra.setProgress(Math.max(0, avance));
+            barra.getStyleClass().removeAll("exito", "advertencia", "peligro");
+            if (estado != null) {
+                barra.getStyleClass().add(estado);
+            }
+        }
+    }
+
+    /** Grupo compacto de métricas secundarias en dos columnas. */
+    private static final class Grupo extends VBox {
+        private final GridPane rejilla = new GridPane(Diseno.ESPACIO_XL, Diseno.ESPACIO_M);
+        private final Map<String, Label> valores = new LinkedHashMap<>();
+        private int indice;
+
+        Grupo(String titulo) {
+            super(Diseno.ESPACIO_M);
+            getStyleClass().add("panel");
+            setPadding(new Insets(14, 16, 16, 16));
+            Label t = new Label(titulo);
+            t.getStyleClass().add("grupo-metricas-titulo");
+            ColumnConstraints c = new ColumnConstraints();
+            c.setPercentWidth(50);
+            rejilla.getColumnConstraints().addAll(c, c);
+            getChildren().addAll(t, rejilla);
+            setMaxWidth(Double.MAX_VALUE);
+            setMaxHeight(Double.MAX_VALUE);
+        }
+
+        void agregar(String clave, String etiqueta) {
+            Label e = new Label(etiqueta);
+            e.getStyleClass().add("mini-metrica-etiqueta");
+            e.setWrapText(true);
+            Label v = new Label("—");
+            v.getStyleClass().add("mini-metrica-valor");
+            v.setWrapText(true);
+            VBox caja = new VBox(2, e, v);
+            caja.getStyleClass().add("mini-metrica");
+            rejilla.add(caja, indice % 2, indice / 2);
+            indice++;
+            valores.put(clave, v);
+        }
+
+        void extra(Node nodo) {
+            getChildren().add(nodo);
+        }
+
+        void valor(String clave, String texto) {
+            valores.get(clave).setText(texto);
+        }
+
+        void resaltar(String clave, boolean negativo) {
+            Label l = valores.get(clave);
+            l.getStyleClass().remove("celda-peligro");
+            if (negativo) {
+                l.getStyleClass().add("celda-peligro");
+            }
+        }
+    }
+
+    /**
+     * Barras de venta con una línea de referencia para la meta diaria. La línea se acomoda en
+     * {@link #layoutPlotChildren()}, que es parte de la API pública para extender gráficas.
+     */
+    private static final class GraficaVentas extends BarChart<String, Number> {
+        private final Line lineaMeta = new Line();
+        private final javafx.beans.property.BooleanProperty conMeta = new javafx.beans.property.SimpleBooleanProperty(false);
+        private Double meta;
+
+        GraficaVentas(CategoryAxis x, NumberAxis y) {
+            super(x, y);
+            setAnimated(false);
+            setLegendVisible(false);
+            setBarGap(0);
+            getStyleClass().add("grafica");
+            lineaMeta.getStyleClass().add("linea-meta");
+            lineaMeta.setManaged(false);
+            y.setAutoRanging(false);
+            y.setLowerBound(0);
+            y.setMinorTickVisible(false);
+            x.setTickLabelGap(6);
+        }
+
+        javafx.beans.property.BooleanProperty conMetaProperty() {
+            return conMeta;
+        }
+
+        /** @param maximo valor más alto a mostrar (ventas o meta), para que la línea quepa en la escala */
+        void setMeta(Double meta, double maximo) {
+            this.meta = meta;
+            conMeta.set(meta != null);
+            NumberAxis y = (NumberAxis) getYAxis();
+            double tope = escala(maximo * 1.08);
+            y.setUpperBound(tope);
+            y.setTickUnit(tope / 4);
+            if (meta == null) {
+                getPlotChildren().remove(lineaMeta);
+            } else if (!getPlotChildren().contains(lineaMeta)) {
+                getPlotChildren().add(lineaMeta);
+            }
+            requestChartLayout();
+        }
+
+        /** Tope "redondo" para el eje (1, 2, 2.5 o 5 por potencia de 10). */
+        private static double escala(double valor) {
+            if (valor <= 0) {
+                return 100;
+            }
+            double potencia = Math.pow(10, Math.floor(Math.log10(valor)));
+            for (double paso : new double[]{1, 2, 2.5, 5, 10}) {
+                if (paso * potencia >= valor) {
+                    return paso * potencia;
+                }
+            }
+            return 10 * potencia;
+        }
+
+        @Override
+        protected void layoutPlotChildren() {
+            super.layoutPlotChildren();
+            if (meta != null) {
+                double y = getYAxis().getDisplayPosition(meta);
+                lineaMeta.setStartX(0);
+                lineaMeta.setEndX(getXAxis().getWidth());
+                lineaMeta.setStartY(y);
+                lineaMeta.setEndY(y);
+                lineaMeta.toFront();
+            }
+        }
+    }
+
+    /** Atajo para textos con estilo (evita depender del paquete de administración). */
+    private static final class Ui {
+        static Label texto(String contenido, String clase) {
+            Label l = new Label(contenido);
+            l.getStyleClass().add(clase);
+            l.setWrapText(true);
+            return l;
+        }
+
+        static Button boton(String texto, String icono, String... clases) {
+            Button b = new Button(texto, icono == null ? null : new FontIcon(icono));
+            b.getStyleClass().addAll(clases);
+            return b;
+        }
     }
 }

@@ -39,7 +39,7 @@ final class DialogoHorario {
         String[] encabezados = {"Día", "Entrada", "Salida", "Descanso", "Inicio", "Fin"};
         for (int i = 0; i < encabezados.length; i++) {
             Label l = new Label(encabezados[i]);
-            l.getStyleClass().add("campo-etiqueta");
+            l.getStyleClass().add("grid-surtido-encabezado");
             grid.add(l, i, 0);
         }
         List<FilaDia> filas = new ArrayList<>();
@@ -82,7 +82,7 @@ final class DialogoHorario {
             }
         });
         Label ayuda = Ui.texto("Horas en formato de 24 h (ej. 09:00, 18:30). Los días sin marcar son de descanso: "
-                + "si entra ese día, su acceso se bloquea.", "texto-ayuda");
+                + "si entra ese día, su acceso se bloquea.", "campo-ayuda");
         d.setContenido(grid, copiar, ayuda);
 
         Runnable guardar = () -> {
@@ -98,15 +98,14 @@ final class DialogoHorario {
                             conDescanso ? leer(f.inicio()) : null, conDescanso ? leer(f.fin()) : null));
                 }
             } catch (DateTimeParseException ex) {
-                a.avisos().error("Revisa las horas: usa el formato 24 h, por ejemplo 09:00.");
+                d.mostrarError("Revisa las horas: usa el formato de 24 h, por ejemplo 09:00 o 18:30.");
                 return;
             }
-            if (a.ejecutar("Horario guardado", () -> a.ctx().auth().accesos().guardarHorario(empleado, semana, a.usuario()))) {
-                d.cerrar();
-                alGuardar.run();
-            }
+            a.guardar(d, "Horario guardado: " + empleado.nombreCompleto(),
+                    () -> a.ctx().auth().accesos().guardarHorario(empleado, semana, a.usuario()), alGuardar);
         };
-        d.agregarBoton("Cancelar", null, d::cerrar, "flat");
+        d.vigilarCambios(grid);
+        d.agregarBoton("Cancelar", null, d::cancelar, "flat");
         d.agregarBoton("Guardar horario", "mdi2c-check", guardar, "accent");
         d.setAlCancelar(d::cerrar);
         a.dialogos().mostrar(d);

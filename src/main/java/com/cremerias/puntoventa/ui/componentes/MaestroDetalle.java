@@ -26,8 +26,10 @@ public class MaestroDetalle extends StackPane {
     private final StackPane flotante = new StackPane();
     private final ReadOnlyBooleanWrapper abierto = new ReadOnlyBooleanWrapper(false);
     private final ReadOnlyBooleanWrapper acopladoAbierto = new ReadOnlyBooleanWrapper(false);
+    private final ReadOnlyBooleanWrapper tablaReducida = new ReadOnlyBooleanWrapper(false);
     private Runnable alCerrar = () -> { };
     private boolean modoAcoplado = true;
+    private double anchoCompleto = Double.MAX_VALUE;
 
     /**
      * @param anchoMinimoMaestro ancho por debajo del cual la tabla ya no se lee bien junto al panel
@@ -81,6 +83,33 @@ public class MaestroDetalle extends StackPane {
         return acopladoAbierto.getReadOnlyProperty();
     }
 
+    /**
+     * Ancho que necesita la tabla para mostrar todas sus columnas (ver {@link TablaDatos#anchoNecesario()}).
+     * Sin indicarlo, la tabla se considera reducida siempre que el detalle está acoplado.
+     */
+    public void setAnchoCompleto(double ancho) {
+        this.anchoCompleto = ancho;
+        actualizarReducida();
+    }
+
+    /**
+     * El detalle está acoplado y a la tabla ya no le caben todas sus columnas: las páginas ocultan
+     * entonces las que el panel ya muestra (acciones, estado), para que lo importante siga a la vista.
+     * En pantallas amplias la tabla conserva todo aunque el detalle esté abierto.
+     */
+    public ReadOnlyBooleanProperty tablaReducidaProperty() {
+        return tablaReducida.getReadOnlyProperty();
+    }
+
+    public boolean tablaReducida() {
+        return tablaReducida.get();
+    }
+
+    private void actualizarReducida() {
+        double maestro = getWidth() - anchoDetalle() - Diseno.ESPACIO_L;
+        tablaReducida.set(acopladoAbierto.get() && maestro < anchoCompleto);
+    }
+
     public void abrir() {
         if (abierto.get()) {
             return;
@@ -100,6 +129,7 @@ public class MaestroDetalle extends StackPane {
         flotante.getChildren().clear();
         detalle.getStyleClass().remove("flotante");
         acopladoAbierto.set(false);
+        actualizarReducida();
         alCerrar.run();
     }
 
@@ -120,6 +150,7 @@ public class MaestroDetalle extends StackPane {
         boolean acoplar = cabeAcoplado();
         if (!abierto.get()) {
             modoAcoplado = acoplar;
+            actualizarReducida();
             return;
         }
         if (acoplar) {
@@ -144,6 +175,7 @@ public class MaestroDetalle extends StackPane {
         }
         modoAcoplado = acoplar;
         acopladoAbierto.set(acoplar);
+        actualizarReducida();
     }
 
     public boolean acoplado() {

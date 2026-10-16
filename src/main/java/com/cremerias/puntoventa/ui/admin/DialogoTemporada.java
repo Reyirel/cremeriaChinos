@@ -5,6 +5,7 @@ import com.cremerias.puntoventa.model.ProductoCatalogo;
 import com.cremerias.puntoventa.model.Temporada;
 import com.cremerias.puntoventa.ui.componentes.Campos;
 import com.cremerias.puntoventa.ui.componentes.Dialogo;
+import com.cremerias.puntoventa.ui.componentes.Formulario;
 import javafx.collections.FXCollections;
 import javafx.geometry.Pos;
 import javafx.scene.control.ComboBox;
@@ -24,7 +25,8 @@ final class DialogoTemporada {
     static void mostrarRenovar(AdminContexto a, ProductoCatalogo p, Runnable alGuardar) {
         Temporada anterior = p.temporada();
         Dialogo d = new Dialogo("Nueva temporada",
-                "La temporada de " + p.nombre() + " terminó el " + anterior.fin() + ". Elige la siguiente.",
+                "La temporada de " + p.nombre() + " terminó el " + Formatos.FECHA_CORTA.format(anterior.fin())
+                        + ". Elige la siguiente para volver a venderlo.",
                 "mdi2c-calendar-range", Dialogo.Tono.ACENTO);
         d.setPrefWidth(480);
 
@@ -52,25 +54,39 @@ final class DialogoTemporada {
         }
         HBox campoRepetir = new HBox(8, plazo, unidad);
         campoRepetir.setAlignment(Pos.CENTER_LEFT);
-        campoRepetir.visibleProperty().bind(repetir.selectedProperty());
-        campoRepetir.managedProperty().bind(campoRepetir.visibleProperty());
+        Formulario.Campo cada = Formulario.campo("Cada", campoRepetir);
+        cada.visibleProperty().bind(repetir.selectedProperty());
+        cada.managedProperty().bind(cada.visibleProperty());
 
-        VBox formulario = new VBox(16,
-                Ui.fila(Ui.campo("Desde", desde), Ui.campo("Hasta", hasta)),
-                Ui.tarjeta("Repetición", repetir, Ui.campo("Se repite", campoRepetir),
-                        Ui.texto("Si se repite, la próxima vez el sistema la vuelve a habilitar solo.", "texto-ayuda")));
+        Formulario.Campo campoDesde = Formulario.campo("Desde", desde);
+        Formulario.Campo campoHasta = Formulario.campo("Hasta", hasta);
+        VBox formulario = new VBox(16, Formulario.fila(campoDesde, campoHasta),
+                Formulario.seccionSeparada("Repetición", "Si se repite, la próxima vez el sistema la vuelve a habilitar solo.",
+                        repetir, cada));
         d.setContenido(formulario);
 
         Runnable guardar = () -> {
+            boolean valido = true;
+            if (desde.getValue() == null) {
+                campoDesde.setError("Elige cuándo empieza.");
+                valido = false;
+            }
+            if (hasta.getValue() == null) {
+                campoHasta.setError("Elige cuándo termina.");
+                valido = false;
+            }
+            if (!valido) {
+                return;
+            }
             Temporada nueva = new Temporada(desde.getValue(), hasta.getValue(),
                     repetir.isSelected() ? entero(plazo.getText()) : null, repetir.isSelected() ? unidad.getValue() : null);
-            if (a.ejecutar("Producto habilitado",
-                    () -> a.admin().productos().renovarTemporada(p, nueva, a.usuario()))) {
-                d.cerrar();
-                alGuardar.run();
-            }
+            a.guardar(d, "Producto habilitado: " + p.nombre(),
+                    () -> a.admin().productos().renovarTemporada(p, nueva, a.usuario()), alGuardar);
         };
-        d.agregarBoton("Cancelar", null, d::cerrar, "flat");
+        desde.valueProperty().addListener((o, x, y) -> campoDesde.setError(null));
+        hasta.valueProperty().addListener((o, x, y) -> campoHasta.setError(null));
+        d.vigilarCambios(desde, hasta, repetir, plazo, unidad);
+        d.agregarBoton("Cancelar", null, d::cancelar, "flat");
         d.agregarBoton("Habilitar", "mdi2c-check", guardar, "accent");
         d.setAlCancelar(d::cerrar);
         d.setFocoInicial(desde);

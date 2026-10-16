@@ -12,6 +12,7 @@ import com.cremerias.puntoventa.service.admin.ProductoAdminService;
 import com.cremerias.puntoventa.ui.componentes.CampoMasa;
 import com.cremerias.puntoventa.ui.componentes.Campos;
 import com.cremerias.puntoventa.ui.componentes.Dialogo;
+import com.cremerias.puntoventa.ui.componentes.Formulario;
 import com.cremerias.puntoventa.util.Cantidades;
 import com.cremerias.puntoventa.util.Masa;
 import javafx.beans.binding.Bindings;
@@ -23,11 +24,12 @@ import javafx.scene.control.ComboBox;
 import javafx.scene.control.DatePicker;
 import javafx.scene.control.Label;
 import javafx.scene.control.RadioButton;
-import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleGroup;
+import javafx.scene.control.Tooltip;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import org.kordamp.ikonli.javafx.FontIcon;
 
@@ -59,10 +61,11 @@ final class DialogoProducto {
         Dialogo d = new Dialogo(nuevo ? "Nuevo producto" : "Editar producto",
                 nuevo ? "Captura sus datos y las presentaciones en que se vende." : p.nombre(),
                 "mdi2p-package-variant-closed", Dialogo.Tono.ACENTO);
-        d.setPrefWidth(900);
+        d.setPrefWidth(880);
 
         TextField nombre = new TextField(nuevo ? "" : p.nombre());
         nombre.setPromptText("Ej. Queso Oaxaca");
+        Formulario.Campo campoNombre = Formulario.campo("Nombre", nombre);
         ComboBox<String> categoria = new ComboBox<>(FXCollections.observableArrayList(
                 a.admin().productos().categorias().stream().map(ProductoRepository.Categoria::nombre).toList()));
         categoria.setEditable(true);
@@ -71,25 +74,19 @@ final class DialogoProducto {
             categoria.setValue(p.categoria());
         }
         TextField marca = new TextField(nuevo || p.marca() == null ? "" : p.marca());
-        marca.setPromptText("Ej. Lala (opcional)");
+        marca.setPromptText("Ej. Lala");
         TextField clave = new TextField(nuevo || p.clave() == null ? "" : p.clave());
-        clave.setPromptText("PLU de báscula (opcional)");
+        clave.setPromptText("Opcional · PLU de báscula");
         TextField codigoInventario = new TextField(nuevo || p.codigoInventario() == null ? "" : p.codigoInventario());
-        codigoInventario.setPromptText("Control interno del almacén (opcional)");
+        codigoInventario.setPromptText("Opcional · control interno");
         ComboBox<Unidad> unidad = new ComboBox<>(FXCollections.observableArrayList(Unidad.PZA, Unidad.KG));
-        unidad.setConverter(new javafx.util.StringConverter<>() {
-            @Override
-            public String toString(Unidad u) {
-                return u == null ? "" : u == Unidad.KG ? "Por kilo (se maneja en gramos)" : "Por pieza";
-            }
-
-            @Override
-            public Unidad fromString(String s) {
-                return null;
-            }
-        });
+        unidad.setConverter(Combos.de(u -> u == Unidad.KG ? "Por kilo (en gramos)" : "Por pieza"));
         unidad.setValue(nuevo ? Unidad.PZA : p.unidad());
         unidad.setDisable(!nuevo); // cambiarla alteraría las existencias ya registradas
+        Formulario.Campo campoUnidad = Formulario.campo("Se vende", unidad);
+        if (!nuevo) {
+            campoUnidad.ayuda("No se puede cambiar: alteraría las existencias registradas.");
+        }
         ComboBox<Disponibilidad> disponibilidad = new ComboBox<>(FXCollections.observableArrayList(Disponibilidad.values()));
         disponibilidad.setValue(nuevo ? Disponibilidad.REGULAR : p.disponibilidad());
         ToggleSwitch merma = new ToggleSwitch("Sujeto a merma (ej. jamón, queso)");
@@ -104,22 +101,23 @@ final class DialogoProducto {
                 cantidadMerma.setGramos(p.mermaGramos());
             }
         }
-        Label ayudaGramaje = Ui.texto("", "texto-ayuda");
+        Formulario.Campo campoGramaje = Formulario.campo("Gramaje", gramaje);
+        Formulario.Campo campoMerma = Formulario.campo("Merma (se resta del gramaje)", cantidadMerma);
+        campoMerma.visibleProperty().bind(merma.selectedProperty());
+        campoMerma.managedProperty().bind(campoMerma.visibleProperty());
         Label neto = Ui.texto("", "gramaje-neto");
-        VBox bloqueMerma = new VBox(6, Ui.campo("Merma (se resta del gramaje)", cantidadMerma));
-        bloqueMerma.visibleProperty().bind(merma.selectedProperty());
-        bloqueMerma.managedProperty().bind(bloqueMerma.visibleProperty());
+        neto.managedProperty().bind(neto.visibleProperty());
         Runnable actualizarGramaje = () -> {
             boolean porKilo = unidad.getValue() == Unidad.KG;
-            ayudaGramaje.setText(porKilo
-                    ? "Peso de referencia por kilo vendido (normalmente 1000 g = 1 kg); ajústalo si lo necesitas. "
-                    + "La merma se resta de este valor."
-                    : "Lo que pesa una pieza. Todos los productos lo llevan (sirve para comisiones por gramaje).");
+            campoGramaje.ayuda(porKilo
+                    ? "Peso de referencia por kilo vendido (normalmente 1000 g = 1 kg)."
+                    : "Lo que pesa una pieza. Sirve para las comisiones por gramaje.");
             BigDecimal g = gramaje.gramos().orElse(null);
             BigDecimal m = merma.isSelected() ? cantidadMerma.gramos().orElse(BigDecimal.ZERO) : BigDecimal.ZERO;
             neto.setText(g == null ? "" : "Gramaje neto: " + Masa.formatear(g.subtract(m).max(BigDecimal.ZERO))
                     + (porKilo ? " por kilo" : " por pieza")
                     + (m.signum() > 0 ? "  (" + Masa.formatear(g) + " − " + Masa.formatear(m) + " de merma)" : ""));
+            neto.setVisible(g != null);
         };
         for (var control : List.of(gramaje.campo().textProperty(), cantidadMerma.campo().textProperty())) {
             control.addListener((o, x, y) -> actualizarGramaje.run());
@@ -127,8 +125,8 @@ final class DialogoProducto {
         gramaje.selectorUnidad().valueProperty().addListener((o, x, y) -> actualizarGramaje.run());
         cantidadMerma.selectorUnidad().valueProperty().addListener((o, x, y) -> actualizarGramaje.run());
         merma.selectedProperty().addListener((o, x, y) -> actualizarGramaje.run());
-        VBox bloqueGramaje = Ui.tarjeta("Gramaje", merma, Ui.fila(Ui.campo("Gramaje", gramaje), bloqueMerma),
-                ayudaGramaje, neto);
+        VBox seccionGramaje = Formulario.seccionSeparada("Gramaje", null, merma,
+                Formulario.fila(campoGramaje, campoMerma), neto);
 
         // Aviso opcional si el producto no se vende en cierto tiempo (para ofertarlo)
         AvisoSinVenta avisoActual = nuevo ? null : p.avisoSinVenta();
@@ -154,16 +152,17 @@ final class DialogoProducto {
         HBox destinatarios = new HBox(18, avisarAdmin, avisarSupervisor, avisarCaja);
         destinatarios.setAlignment(Pos.CENTER_LEFT);
         destinatarios.setMinHeight(36);
-        VBox bloquePlazo = new VBox(10, Ui.fila(Ui.campo("Sin venderse en", campoPlazo), Ui.campo("Avisar a", destinatarios)),
+        VBox bloquePlazo = new VBox(10, Formulario.fila(Formulario.campo("Sin venderse en", campoPlazo),
+                Formulario.campo("Avisar a", destinatarios)),
                 Ui.texto("Cada sucursal lo mide con sus propias ventas, desde la última vez que se vendió ahí. "
-                        + "El aviso se quita solo en cuanto se vende.", "texto-ayuda"));
+                        + "El aviso se quita solo en cuanto se vende.", "campo-ayuda"));
         bloquePlazo.visibleProperty().bind(avisar.selectedProperty());
         bloquePlazo.managedProperty().bind(bloquePlazo.visibleProperty());
         Label sinAvisoPropio = Ui.texto("Sin aviso propio: se usa el plazo en días de la sucursal y solo lo ve el "
-                + "administrador (Avisos).", "texto-ayuda");
+                + "administrador (en Avisos).", "campo-ayuda");
         sinAvisoPropio.visibleProperty().bind(avisar.selectedProperty().not());
         sinAvisoPropio.managedProperty().bind(sinAvisoPropio.visibleProperty());
-        VBox bloqueAviso = Ui.tarjeta("Aviso si no se vende", avisar, bloquePlazo, sinAvisoPropio);
+        VBox seccionAviso = Formulario.seccionSeparada("Aviso si no se vende", null, avisar, bloquePlazo, sinAvisoPropio);
 
         // Temporada: ventana de fechas en que se vende y, opcional, cada cuánto se repite
         Temporada temporadaActual = nuevo ? null : p.temporada();
@@ -192,16 +191,16 @@ final class DialogoProducto {
         }
         HBox campoRepetirTemporada = new HBox(8, plazoTemporada, unidadTemporada);
         campoRepetirTemporada.setAlignment(Pos.CENTER_LEFT);
-        campoRepetirTemporada.visibleProperty().bind(repetirTemporada.selectedProperty());
-        campoRepetirTemporada.managedProperty().bind(campoRepetirTemporada.visibleProperty());
-        VBox bloqueTemporada = Ui.tarjeta("Temporada",
-                Ui.fila(Ui.campo("Desde", desdeTemporada), Ui.campo("Hasta", hastaTemporada)),
-                repetirTemporada, Ui.campo("Se repite", campoRepetirTemporada),
-                Ui.texto("Al terminar la temporada el producto se deshabilita solo (sin borrarse). Si se repite, "
-                        + "el sistema lo vuelve a habilitar solo en el siguiente ciclo; si no, tú eliges cuándo y "
-                        + "con qué fechas.", "texto-ayuda"));
-        bloqueTemporada.visibleProperty().bind(Bindings.equal(disponibilidad.valueProperty(), Disponibilidad.TEMPORADA));
-        bloqueTemporada.managedProperty().bind(bloqueTemporada.visibleProperty());
+        Formulario.Campo campoRepetir = Formulario.campo("Cada", campoRepetirTemporada);
+        campoRepetir.visibleProperty().bind(repetirTemporada.selectedProperty());
+        campoRepetir.managedProperty().bind(campoRepetir.visibleProperty());
+        VBox seccionTemporada = Formulario.seccionSeparada("Temporada",
+                "Al terminar la temporada el producto se deshabilita solo (sin borrarse). Si se repite, el sistema "
+                        + "lo vuelve a habilitar en el siguiente ciclo; si no, tú eliges cuándo y con qué fechas.",
+                Formulario.fila(Formulario.campo("Desde", desdeTemporada), Formulario.campo("Hasta", hastaTemporada)),
+                repetirTemporada, campoRepetir);
+        seccionTemporada.visibleProperty().bind(Bindings.equal(disponibilidad.valueProperty(), Disponibilidad.TEMPORADA));
+        seccionTemporada.managedProperty().bind(seccionTemporada.visibleProperty());
 
         // Presentaciones
         ToggleGroup principales = new ToggleGroup();
@@ -226,6 +225,7 @@ final class DialogoProducto {
                 if (f.principal.isSelected() && !filas.isEmpty()) {
                     filas.getFirst().principal.setSelected(true);
                 }
+                d.marcarCambios();
                 redibujar[0].run();
             });
             filas.add(f);
@@ -236,8 +236,8 @@ final class DialogoProducto {
             String[] titulos = {"Principal", "Nombre", "Se vende", "Contenido", "", "Código de barras", "Activa", ""};
             for (int i = 0; i < titulos.length; i++) {
                 Label l = new Label(titulos[i]);
-                l.getStyleClass().add("campo-etiqueta");
-                l.setMinWidth(javafx.scene.layout.Region.USE_PREF_SIZE);
+                l.getStyleClass().add("grid-surtido-encabezado");
+                l.setMinWidth(Region.USE_PREF_SIZE);
                 grid.add(l, i, 0);
             }
             int r = 1;
@@ -263,6 +263,7 @@ final class DialogoProducto {
                     if (f.principal.isSelected() && !filas.isEmpty()) {
                         filas.getFirst().principal.setSelected(true);
                     }
+                    d.marcarCambios();
                     redibujar[0].run();
                 });
                 filas.add(f);
@@ -284,30 +285,31 @@ final class DialogoProducto {
             actualizarGramaje.run();
         });
         actualizarGramaje.run();
-        Button masPresentacion = Ui.secundario("Agregar presentación", "mdi2p-plus");
-        masPresentacion.setOnAction(e -> agregar.run());
-
-        Label ayuda = Ui.texto("«Contenido» es cuánto trae cada presentación en la unidad del producto: piezas "
-                + "(ej. Caja = 12) o gramos (ej. Pieza de queso = 400). A granel siempre es 1000 g = 1 kg.", "texto-ayuda");
-        VBox presentaciones = Ui.tarjeta("Presentaciones", grid, masPresentacion, ayuda);
-
-        VBox formulario = new VBox(16,
-                Ui.fila(Ui.campo("Nombre", nombre), Ui.campo("Categoría", categoria), Ui.campo("Marca", marca)),
-                Ui.fila(Ui.campo("Se maneja", unidad), Ui.campo("Clave / PLU", clave),
-                        Ui.campo("Código de inventario", codigoInventario), Ui.campo("Disponibilidad", disponibilidad)),
-                bloqueGramaje, bloqueTemporada, bloqueAviso, presentaciones);
-        // El formulario es alto: en pantallas chicas se desplaza en lugar de salirse de la ventana.
-        ScrollPane desplazable = new ScrollPane(formulario);
-        desplazable.setFitToWidth(true);
-        desplazable.getStyleClass().addAll("edge-to-edge", "scroll-surtido");
-        desplazable.sceneProperty().addListener((o, x, escena) -> {
-            if (escena != null) {
-                desplazable.maxHeightProperty().bind(escena.heightProperty().subtract(230));
-            }
+        Button masPresentacion = Ui.boton("Agregar presentación", "mdi2p-plus", "small");
+        masPresentacion.setOnAction(e -> {
+            agregar.run();
+            d.marcarCambios();
         });
-        d.setContenido(desplazable);
+        VBox seccionPresentaciones = Formulario.seccionSeparada("Presentaciones",
+                "«Contenido» es cuánto trae cada presentación en la unidad del producto: piezas (ej. Caja = 12) o "
+                        + "gramos (ej. Pieza de queso = 400). A granel siempre es 1000 g = 1 kg.",
+                grid, masPresentacion);
+
+        VBox generales = Formulario.seccion(null, null,
+                Formulario.fila(campoNombre, Formulario.campo("Categoría", categoria), Formulario.opcional("Marca", marca)));
+        VBox venta = Formulario.seccionSeparada("Venta y control", null,
+                Formulario.fila(campoUnidad, Formulario.campo("Clave / PLU", clave),
+                        Formulario.campo("Código de inventario", codigoInventario),
+                        Formulario.campo("Disponibilidad", disponibilidad)));
+        d.setContenido(generales, venta, seccionPresentaciones, seccionGramaje, seccionTemporada, seccionAviso);
+        nombre.textProperty().addListener((o, x, y) -> campoNombre.setError(null));
 
         Runnable guardar = () -> {
+            if (nombre.getText() == null || nombre.getText().isBlank()) {
+                campoNombre.setError("Escribe el nombre del producto.");
+                nombre.requestFocus();
+                return;
+            }
             List<Presentacion> lista = new ArrayList<>();
             for (Fila f : filas) {
                 boolean granel = "A granel".equals(f.tipo.getValue());
@@ -326,18 +328,18 @@ final class DialogoProducto {
                     : null;
             var datos = new ProductoAdminService.Datos(nuevo ? null : p.id(), nombre.getText(),
                     categoria.getEditor().getText(), marca.getText(), clave.getText(), codigoInventario.getText(),
-                    unidad.getValue(), merma.isSelected(), disponibilidad.getValue(), temporada, lista, eliminadas,
+                    unidad.getValue(), merma.isSelected(), disponibilidad.getValue(), temporada, lista, List.copyOf(eliminadas),
                     gramaje.gramos().orElse(null), merma.isSelected() ? cantidadMerma.gramos().orElse(null) : null, aviso);
-            if (a.ejecutar(nuevo ? "Producto creado" : "Producto actualizado",
-                    () -> a.admin().productos().guardar(datos, a.usuario()))) {
-                d.cerrar();
-                alGuardar.run();
-            }
+            a.guardar(d, (nuevo ? "Producto creado: " : "Producto actualizado: ") + nombre.getText().strip(),
+                    () -> a.admin().productos().guardar(datos, a.usuario()), alGuardar);
         };
-        d.agregarBoton("Cancelar", null, d::cerrar, "flat");
-        d.agregarBoton("Guardar producto", "mdi2c-check", guardar, "accent");
+        d.agregarBoton("Cancelar", null, d::cancelar, "flat");
+        d.agregarBoton(nuevo ? "Crear producto" : "Guardar cambios", "mdi2c-check", guardar, "accent");
         d.setAlCancelar(d::cerrar);
         d.setFocoInicial(nombre);
+        d.vigilarCambios(nombre, categoria, marca, clave, codigoInventario, unidad, disponibilidad, merma, gramaje,
+                cantidadMerma, avisar, plazo, unidadPlazo, avisarAdmin, avisarSupervisor, avisarCaja, desdeTemporada,
+                hastaTemporada, repetirTemporada, plazoTemporada, unidadTemporada, grid);
         a.dialogos().mostrar(d);
     }
 
@@ -356,18 +358,23 @@ final class DialogoProducto {
     private static Fila nuevaFila(ToggleGroup principales, Unidad unidad) {
         Fila f = new Fila();
         f.principal.setToggleGroup(principales);
+        f.principal.setAccessibleText("Presentación principal");
         f.nombre.setPromptText("Ej. Caja 12 pzas");
         f.nombre.setPrefColumnCount(12);
         f.contenido.setPrefColumnCount(6);
         f.contenido.setAlignment(Pos.CENTER_RIGHT);
         Campos.soloNumeros(f.contenido, 0);
         f.codigo.setPromptText("Opcional");
-        f.tipo.setPrefWidth(150);
-        f.tipo.setMinWidth(150);
-        f.unidadContenido.setMinWidth(javafx.scene.layout.Region.USE_PREF_SIZE);
+        f.tipo.setPrefWidth(140);
+        f.tipo.setMinWidth(140);
+        f.unidadContenido.setMinWidth(Region.USE_PREF_SIZE);
+        f.unidadContenido.getStyleClass().add("unidad-campo");
         f.codigo.setPrefColumnCount(13);
         f.activa.setSelected(true);
-        f.quitar.getStyleClass().addAll("button-icon", "flat", "danger");
+        f.activa.setAccessibleText("Presentación activa");
+        f.quitar.getStyleClass().addAll("flat", "boton-icono", "danger");
+        f.quitar.setAccessibleText("Quitar presentación");
+        f.quitar.setTooltip(new Tooltip("Quitar presentación"));
         f.tipo.valueProperty().addListener((o, x, t) -> {
             boolean granel = "A granel".equals(t);
             f.contenido.setDisable(granel);

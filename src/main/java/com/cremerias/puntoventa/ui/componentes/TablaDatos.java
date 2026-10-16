@@ -104,6 +104,7 @@ public class TablaDatos<T> {
     private Consumer<T> alActivar;
     private TableColumn<T, ?> flexible;
     private double minimoFlexible = 180;
+    private boolean recreacionPendiente;
     private ScrollBar barraVertical;
     private Estado estado = Estado.CARGANDO;
     private Node nodoCargando = EstadoVacio.cargando("Cargando…");
@@ -309,9 +310,11 @@ public class TablaDatos<T> {
         }
         double disponible = tabla.getWidth() - tabla.snappedLeftInset() - tabla.snappedRightInset()
                 - (barraVertical != null && barraVertical.isVisible() ? barraVertical.getWidth() : 0) - 1;
+        // Las columnas propias, no getVisibleLeafColumns(): esa lista se actualiza después de que
+        // avisa el cambio de visibilidad y contaría la columna recién mostrada como oculta.
         double otras = 0;
-        for (TableColumn<T, ?> c : tabla.getVisibleLeafColumns()) {
-            if (c != flexible) {
+        for (TableColumn<T, ?> c : tabla.getColumns()) {
+            if (c != flexible && c.isVisible()) {
                 otras += c.getWidth();
             }
         }
@@ -319,6 +322,36 @@ public class TablaDatos<T> {
         if (Math.abs(flexible.getPrefWidth() - ancho) > 0.5) {
             flexible.setPrefWidth(ancho);
         }
+    }
+
+    /**
+     * El flujo virtual recuerda el ancho máximo que llegaron a tener las filas; al ocultar columnas
+     * quedaría una barra horizontal sin nada que desplazar. Se recrean las filas una vez, después
+     * de todos los cambios de visibilidad del mismo momento.
+     */
+    private void recrearFilasLuego() {
+        if (recreacionPendiente) {
+            return;
+        }
+        recreacionPendiente = true;
+        Platform.runLater(() -> {
+            recreacionPendiente = false;
+            tabla.refresh();
+        });
+    }
+
+    /**
+     * Ancho que piden las columnas visibles (la flexible con su mínimo), más el lugar de la barra
+     * vertical: debajo de esto la tabla se desplaza de lado.
+     */
+    public double anchoNecesario() {
+        double total = 16;
+        for (TableColumn<T, ?> c : tabla.getColumns()) {
+            if (c.isVisible()) {
+                total += c == flexible ? minimoFlexible : c.getPrefWidth();
+            }
+        }
+        return total;
     }
 
     private void instalarAyudasEncabezado() {
@@ -353,7 +386,10 @@ public class TablaDatos<T> {
                     ajustarFlexible();
                 }
             });
-            columna.visibleProperty().addListener((o, a, b) -> ajustarFlexible());
+            columna.visibleProperty().addListener((o, a, b) -> {
+                ajustarFlexible();
+                recrearFilasLuego();
+            });
             tabla.getColumns().add(columna);
         }
 
@@ -392,6 +428,7 @@ public class TablaDatos<T> {
 
         public Columna<V> orden(Comparator<V> comparador) {
             columna.setComparator(comparador);
+            columna.setSortable(true);
             return this;
         }
 
@@ -475,6 +512,14 @@ public class TablaDatos<T> {
         return new Columna<>(c).numero().ancho(120);
     }
 
+    /** Cantidad con una línea secundaria debajo (ej. la existencia y su mínimo); ordena por la cantidad. */
+    public Columna<Cantidad> cantidad(String titulo, Function<T, BigDecimal> cantidad, Function<T, Unidad> unidad,
+                                      Function<T, String> secundaria) {
+        Columna<Cantidad> columna = cantidad(titulo, cantidad, unidad);
+        columna.columna().setCellFactory(col -> new CeldaTexto<>(Cantidad::toString, secundaria, false));
+        return columna;
+    }
+
     /**
      * Valor que se ordena por sí mismo y se muestra con ayuda de la fila (ej. costo "$98.90 / kg",
      * que ordena por centavos y toma la unidad del producto).
@@ -513,6 +558,16 @@ public class TablaDatos<T> {
         c.setCellFactory(col -> new CeldaFormato<>(v -> v == null ? "—" : fmt.format(v.atZone(ZoneId.systemDefault()))));
         c.setComparator(Comparator.nullsFirst(Comparator.naturalOrder()));
         return new Columna<>(c).ancho(140);
+    }
+
+    /** Fecha con una línea secundaria debajo (ej. el día y, abajo, la hora); ordena cronológicamente. */
+    public Columna<Instant> fecha(String titulo, Function<T, Instant> valor, DateTimeFormatter formato,
+                                  Function<T, String> secundaria) {
+        Columna<Instant> columna = fecha(titulo, valor, formato);
+        DateTimeFormatter fmt = formato == null ? FECHA_HORA : formato;
+        columna.columna().setCellFactory(col -> new CeldaTexto<>(v -> fmt.format(v.atZone(ZoneId.systemDefault())),
+                secundaria, false));
+        return columna;
     }
 
     /** Etiqueta de estado; ordena por el valor (enumeración, texto) que la produce. */
@@ -626,6 +681,7 @@ public class TablaDatos<T> {
                 principal.setText(t);
                 segunda.setText(s == null ? "" : s);
                 segunda.setVisible(s != null && !s.isBlank());
+                caja.setAlignment(getStyleClass().contains("columna-numero") ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
                 setText(null);
                 setGraphic(caja);
                 t = s == null || s.isBlank() ? t : t + "\n" + s;

@@ -12,7 +12,9 @@ import com.cremerias.puntoventa.util.Cantidades;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
 import javafx.application.Platform;
+import javafx.collections.ListChangeListener;
 import javafx.fxml.FXML;
+import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.layout.StackPane;
 import javafx.util.Duration;
@@ -66,6 +68,10 @@ public class SupervisorController implements ConMenuLateral {
         menu.opcion("accesos", "Accesos", "mdi2a-account-lock-outline", this::onAccesos);
         menu.setDetalle("accesos", "Bloqueados por horario", false);
 
+        // En la caja los avisos quedan arriba del botón de cobrar; en las demás vistas, en la esquina.
+        contenido.getChildren().addListener((ListChangeListener<Node>) c ->
+                navegador.avisos().setMargenInferior(vistaCaja != null && contenido.getChildren().contains(vistaCaja)
+                        ? 160 : 24));
         // Al cobrar en la caja se revisa enseguida si algún producto llegó a su mínimo.
         contenido.addEventHandler(CajaController.VENTA_REGISTRADA, e -> actualizarContador());
         // El aviso de mínimos espera a que el panel esté en pantalla (al mostrarlo se limpian los avisos).

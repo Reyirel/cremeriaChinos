@@ -4,19 +4,21 @@ import com.cremerias.puntoventa.AppContext;
 import com.cremerias.puntoventa.model.Usuario;
 import com.cremerias.puntoventa.service.AccesoService;
 import com.cremerias.puntoventa.ui.Navegador;
-import com.cremerias.puntoventa.ui.admin.AdminContexto;
 import com.cremerias.puntoventa.ui.admin.Ui;
 import com.cremerias.puntoventa.ui.componentes.Avisos;
-import com.cremerias.puntoventa.ui.componentes.Dialogos;
+import com.cremerias.puntoventa.ui.componentes.Cargador;
 import com.cremerias.puntoventa.ui.componentes.DialogoConfirmacion;
-import javafx.collections.FXCollections;
+import com.cremerias.puntoventa.ui.componentes.Dialogos;
+import com.cremerias.puntoventa.ui.componentes.Diseno;
+import com.cremerias.puntoventa.ui.componentes.Errores;
+import com.cremerias.puntoventa.ui.componentes.EstadoVacio;
+import com.cremerias.puntoventa.ui.componentes.TablaDatos;
+import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
-import javafx.scene.control.TableView;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 
-import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
@@ -33,9 +35,9 @@ public class AccesosVista {
     private final Dialogos dialogos;
     private final Avisos avisos;
     private final String sucursalId;
-    private final VBox pagina;
-    private final HBox indicadores = new HBox(14);
-    private final TableView<AccesoService.Bloqueo> tabla;
+    private final Cargador carga = new Cargador();
+    private final Node raiz;
+    private final TablaDatos<AccesoService.Bloqueo> tabla = new TablaDatos<>(Diseno.Densidad.AMPLIA);
 
     public AccesosVista(Navegador navegador) {
         this.ctx = navegador.contexto();
@@ -44,45 +46,48 @@ public class AccesosVista {
         this.avisos = navegador.avisos();
         this.sucursalId = supervisor.sucursalId();
 
-        pagina = Ui.pagina("Accesos", sucursalId == null ? "Tu usuario no tiene una sucursal asignada."
-                : "Empleados de tu sucursal que intentaron entrar fuera de su horario.");
-        tabla = Ui.tabla("Nadie tiene el acceso bloqueado.");
-        tabla.getColumns().setAll(List.of(
-                Ui.texto("Folio", 150, AccesoService.Bloqueo::folio),
-                Ui.texto("Empleado", 200, AccesoService.Bloqueo::usuario),
-                Ui.nodo("Motivo", 320, b -> Ui.dosLineas(b.motivo().descripcion(), b.detalle())),
-                Ui.texto("Fecha", 150, b -> FECHA.format(b.fecha().atZone(ZoneId.systemDefault()))),
-                Ui.nodo("", 150, b -> {
-                    Button dar = Ui.boton("Dar acceso", "mdi2a-account-check-outline", "accent", "small");
-                    dar.setOnAction(e -> darAcceso(b));
-                    return dar;
-                })));
-        pagina.getChildren().addAll(indicadores, tabla);
+        VBox pagina = Ui.pagina("Accesos", sucursalId == null ? "Tu usuario no tiene una sucursal asignada."
+                : "Empleados de tu sucursal que intentaron entrar fuera de su horario. Puedes darles acceso una vez.");
+        tabla.setClave(AccesoService.Bloqueo::id);
+        tabla.fecha("Fecha", AccesoService.Bloqueo::fecha, FECHA).ancho(150);
+        tabla.dosLineas("Empleado", AccesoService.Bloqueo::usuario, AccesoService.Bloqueo::folio).ancho(240);
+        tabla.dosLineas("Motivo", b -> b.motivo().descripcion(), AccesoService.Bloqueo::detalle).flexible(280);
+        tabla.nodo("", b -> {
+            Button dar = Ui.boton("Dar acceso", "mdi2a-account-check-outline", "accent", "small");
+            dar.setOnAction(e -> darAcceso(b));
+            HBox h = new HBox(dar);
+            h.setAlignment(Pos.CENTER_RIGHT);
+            return h;
+        }).ancho(150).minimo(150);
+        tabla.setVacio(new EstadoVacio("mdi2a-account-check-outline", "Nadie tiene el acceso bloqueado.",
+                "Aquí aparecerán los empleados que intenten entrar fuera de su horario.").tono("exito"));
+        VBox panel = Ui.panelTabla(null, tabla);
+        pagina.getChildren().add(panel);
+        raiz = Ui.ajustable(pagina, panel, 260);
     }
 
     public Node nodo() {
-        return pagina;
+        return raiz;
     }
 
     public void actualizar() {
-        List<AccesoService.Bloqueo> pendientes = sucursalId == null ? List.of()
-                : ctx.auth().accesos().pendientesDeSucursal(sucursalId);
-        tabla.setItems(FXCollections.observableArrayList(pendientes));
-        indicadores.getChildren().setAll(
-                Ui.indicador("Accesos bloqueados", String.valueOf(pendientes.size()), "mdi2a-account-lock-outline"));
+        if (sucursalId == null) {
+            tabla.setDatos(List.of());
+            return;
+        }
+        tabla.cargando("Revisando accesos…");
+        carga.cargar(() -> ctx.auth().accesos().pendientesDeSucursal(sucursalId), tabla::setDatos,
+                e -> tabla.error("No se pudieron revisar los accesos.", Errores.mensaje(e), this::actualizar));
     }
 
     private void darAcceso(AccesoService.Bloqueo b) {
         DialogoConfirmacion.mostrar(dialogos, "¿Dar acceso a " + b.usuario() + "?",
                 b.motivo().descripcion() + " (" + b.detalle() + "). Podrá iniciar sesión una vez.",
-                "Dar acceso", false, () -> {
-                    try {
-                        String folio = ctx.auth().accesos().autorizar(b.id(), supervisor);
-                        avisos.exito("Acceso autorizado (folio " + folio + ").");
-                    } catch (RuntimeException e) {
-                        avisos.error(AdminContexto.mensaje(e));
-                    }
-                    actualizar();
-                });
+                "Dar acceso", false, () -> Cargador.ejecutar(() -> ctx.auth().accesos().autorizar(b.id(), supervisor),
+                        folio -> {
+                            avisos.exito("Acceso autorizado para " + b.usuario() + " · Folio " + folio);
+                            actualizar();
+                        },
+                        e -> avisos.error(Errores.mensaje(e))));
     }
 }
