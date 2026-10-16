@@ -109,6 +109,31 @@ class IndicadoresServiceTest {
     }
 
     @Test
+    void laVentaPorDiaSumaLaVentaNetaYRespetaElAlcance() {
+        Turno turno = caja.abrir(sesionCajero, 0);
+        Producto bolillo = catalogo.buscar("bolillo", 1).getFirst();
+        ventas.registrar(List.of(new VentaService.Renglon(bolillo, new BigDecimal("10"))),
+                List.of(new Pago(MetodoPago.EFECTIVO, 3000, null)), sesionCajero, turno);
+        Ticket cancelada = ventas.registrar(List.of(new VentaService.Renglon(bolillo, new BigDecimal("5"))),
+                List.of(new Pago(MetodoPago.EFECTIVO, 1500, null)), sesionCajero, turno);
+        Usuario autorizador = ((ResultadoAutorizacion.Autorizado) auth.autorizar("supervisor", "super123".toCharArray(),
+                EnumSet.of(Rol.SUPERVISOR, Rol.ADMINISTRADOR), "prueba")).autorizador();
+        ventas.cancelar(cancelada.ventaId(), turno, sesionCajero.usuario(), autorizador, "Prueba");
+
+        LocalDate hoy = LocalDate.now();
+        LocalDate desde = hoy.minusDays(2);
+        List<IndicadoresService.VentaDia> dias = indicadores.ventaPorDia(admin, matriz, desde, hoy);
+
+        assertEquals(3, dias.size(), "un renglón por día, también los días sin ventas");
+        assertEquals(desde, dias.getFirst().dia());
+        assertEquals(0, dias.getFirst().totalCentavos());
+        assertEquals(3000, dias.getLast().totalCentavos(), "la venta cancelada no cuenta");
+        assertEquals(indicadores.calcular(admin, matriz, desde, hoy).ventaNeta(),
+                dias.stream().mapToLong(IndicadoresService.VentaDia::totalCentavos).sum());
+        assertThrows(IllegalStateException.class, () -> indicadores.ventaPorDia(supervisor, admin.sucursalId(), hoy, hoy));
+    }
+
+    @Test
     void laVentaCanceladaNoCuentaEnVentaNiCosto() {
         Turno turno = caja.abrir(sesionCajero, 0);
         Producto bolillo = catalogo.buscar("bolillo", 1).getFirst();

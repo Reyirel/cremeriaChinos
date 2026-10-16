@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 
 /**
  * Indicadores de desempeño por sucursal (venta, costo, utilidad, kilos, KPIs y avance de meta
@@ -66,6 +67,10 @@ public class IndicadoresService {
 
     /** Hora del día (0–23) y lo que se vendió en esa hora, sumado en todo el periodo. */
     public record HoraVenta(int hora, long totalCentavos) {
+    }
+
+    /** Venta de un día (ventas completadas), para la gráfica de evolución. */
+    public record VentaDia(LocalDate dia, long totalCentavos) {
     }
 
     /** Ventas, artículos y clientes del periodo, calculados de las ventas COMPLETADAS. */
@@ -211,6 +216,27 @@ public class IndicadoresService {
 
         return new VentasDetalle(tickets, ticketPromedio, articulosPorTicket, valorPromedioArticulo, clientesPorDia,
                 clientesPorEmpleado, horasMayores, horasMenores);
+    }
+
+    /**
+     * Venta de cada día del periodo, con las mismas ventas que {@link #calcular} (completadas, sin
+     * canceladas): la suma de los días es la venta neta. Los días sin ventas van en cero.
+     */
+    public List<VentaDia> ventaPorDia(Usuario quien, String sucursalId, LocalDate desde, LocalDate hasta) {
+        validarAlcance(quien, sucursalId);
+        validarRango(desde, hasta);
+        ZoneId zona = ZoneId.systemDefault();
+        Rango periodo = rango(desde, hasta, zona);
+        List<IndicadoresRepository.VentaFila> ventas =
+                database.con(c -> indicadores.ventasDelPeriodo(c, sucursalId, periodo.inicio(), periodo.fin()));
+        Map<LocalDate, Long> porDia = new TreeMap<>();
+        for (LocalDate d = desde; !d.isAfter(hasta); d = d.plusDays(1)) {
+            porDia.put(d, 0L);
+        }
+        for (IndicadoresRepository.VentaFila v : ventas) {
+            porDia.merge(v.fecha().atZone(zona).toLocalDate(), v.totalCentavos(), Long::sum);
+        }
+        return porDia.entrySet().stream().map(e -> new VentaDia(e.getKey(), e.getValue())).toList();
     }
 
     /** Kilos vendidos del periodo (gramaje neto) contra la meta de kilos, si el periodo es un solo mes. */
