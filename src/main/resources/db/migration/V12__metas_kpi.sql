@@ -16,7 +16,9 @@ ALTER TABLE metas_sucursal ADD COLUMN meta_kilos REAL CHECK (meta_kilos IS NULL 
 ALTER TABLE metas_sucursal ADD COLUMN meta_articulos_ticket REAL CHECK (meta_articulos_ticket IS NULL OR meta_articulos_ticket >= 0);
 ALTER TABLE metas_sucursal ADD COLUMN meta_utilidad_pct REAL CHECK (meta_utilidad_pct IS NULL OR meta_utilidad_pct BETWEEN 0 AND 100);
 
-INSERT INTO configuracion_general (clave, valor, actualizado_en) VALUES
+-- OR IGNORE: en una caja de la nube la clave puede haber bajado ya de Supabase
+-- (la subió otra caja con esta versión) antes de que aquí corriera la migración.
+INSERT OR IGNORE INTO configuracion_general (clave, valor, actualizado_en) VALUES
     ('kpi.ponderacion.venta', '30', strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     ('kpi.ponderacion.kilos', '34', strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     ('kpi.ponderacion.articulos_ticket', '20', strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),

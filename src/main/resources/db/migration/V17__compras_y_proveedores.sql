@@ -96,7 +96,9 @@ CREATE TABLE devolucion_proveedor_detalle (
 
 CREATE INDEX idx_devolucion_proveedor_detalle ON devolucion_proveedor_detalle (devolucion_id);
 
-INSERT INTO configuracion_general (clave, valor, actualizado_en)
+-- OR IGNORE: en una caja de la nube la clave puede haber bajado ya de Supabase
+-- (la subió otra caja con esta versión) antes de que aquí corriera la migración.
+INSERT OR IGNORE INTO configuracion_general (clave, valor, actualizado_en)
 VALUES ('compras.bonificacion', 'PRORRATEAR', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
 
 CREATE TRIGGER trg_proveedores_ins AFTER INSERT ON proveedores

@@ -17,6 +17,8 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Aplica los cambios de esquema versionados que están en {@code /db/migration}.
@@ -51,6 +53,15 @@ public class Migraciones {
             "V19__devoluciones.sql",
             "V20__recepcion_y_cancelacion_de_surtidos.sql"
     );
+
+    /**
+     * Checksums de versiones anteriores de una migración que se corrigió sin cambiar su efecto en
+     * las bases donde ya se aplicó (p. ej. un {@code INSERT} que pasó a {@code INSERT OR IGNORE}).
+     * Las bases con el checksum viejo se dan por buenas en lugar de rechazarse.
+     */
+    private static final Map<Integer, Set<String>> CHECKSUMS_ANTERIORES = Map.of(
+            12, Set.of("03ea8b80f32b8512c89540f45c11a0c7e3aad357ab30e3b4520e5d6bfeabf2ee"),
+            17, Set.of("5520bcd09a079120b2941ca625f7e2bbc92727e642a4425c7399fa180b3be328"));
 
     private final Database database;
 
@@ -97,7 +108,9 @@ public class Migraciones {
             ps.setInt(1, version);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    if (!rs.getString(1).equals(checksum)) {
+                    String aplicado = rs.getString(1);
+                    if (!aplicado.equals(checksum)
+                            && !CHECKSUMS_ANTERIORES.getOrDefault(version, Set.of()).contains(aplicado)) {
                         throw new IllegalStateException("La migración " + archivo
                                 + " cambió después de aplicarse. Crea una migración nueva en lugar de editarla.");
                     }
