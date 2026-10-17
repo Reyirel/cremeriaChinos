@@ -3,11 +3,13 @@ package com.cremerias.puntoventa;
 import com.cremerias.puntoventa.config.AppPaths;
 import com.cremerias.puntoventa.db.Database;
 import com.cremerias.puntoventa.db.Migraciones;
+import com.cremerias.puntoventa.model.ModoConexion;
 import com.cremerias.puntoventa.repository.ConfigLocalRepository;
 import com.cremerias.puntoventa.repository.DispositivoRepository;
 import com.cremerias.puntoventa.security.PasswordHasher;
 import com.cremerias.puntoventa.service.DatosDemo;
 import com.cremerias.puntoventa.service.DatosIniciales;
+import com.cremerias.puntoventa.service.ResultadoLogin;
 import com.cremerias.puntoventa.sync.ConfigNube;
 import com.cremerias.puntoventa.sync.EstadoNube;
 import org.junit.jupiter.api.AfterEach;
@@ -53,6 +55,24 @@ class AppContextTest {
             assertTrue(contexto.porConectarALaNube());
             assertEquals(0, contar(contexto.database(), "SELECT COUNT(*) FROM usuarios"));
             assertEquals(0, contar(contexto.database(), "SELECT COUNT(*) FROM productos"));
+        }
+    }
+
+    @Test
+    void laCajaDePruebaArrancaLimpiaConSoloElAdministradorYSinNube() throws Exception {
+        // Aunque tenga la conexión guardada, la caja de prueba no la usa.
+        cuentaHechaAMano().guardar(AppPaths.configNube());
+        System.setProperty("cremerias.soloLocal", "true");
+        try (AppContext contexto = AppContext.iniciar()) {
+            assertFalse(contexto.porConectarALaNube());
+            assertEquals(EstadoNube.SOLO_LOCAL, contexto.sincronizador().estadoProperty().get());
+            assertEquals(1, contar(contexto.database(), "SELECT COUNT(*) FROM usuarios"));
+            assertEquals(0, contar(contexto.database(), "SELECT COUNT(*) FROM productos"));
+            assertEquals(0, contar(contexto.database(), "SELECT COUNT(*) FROM sucursales WHERE es_almacen = 0"));
+            assertTrue(contexto.auth().iniciarSesion("admin", "admin123".toCharArray(), ModoConexion.OFFLINE)
+                    instanceof ResultadoLogin.Exitoso);
+        } finally {
+            System.clearProperty("cremerias.soloLocal");
         }
     }
 

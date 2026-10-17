@@ -104,9 +104,13 @@ public final class AppContext implements AutoCloseable {
         }
         new Migraciones(database).aplicar();
 
-        ClienteSupabase nube = ConfigNube.cargar(AppPaths.configNube()).map(ClienteSupabase::new).orElse(null);
+        boolean soloLocal = AppPaths.soloLocal();
+        ClienteSupabase nube = soloLocal ? null
+                : ConfigNube.cargar(AppPaths.configNube()).map(ClienteSupabase::new).orElse(null);
         ProyectoNube porConectar = null;
-        if (nube == null) {
+        if (soloLocal) {
+            log.info("Caja de prueba solo local: no se conecta a la nube");
+        } else if (nube == null) {
             porConectar = ProyectoNube.incluido().orElse(null);
             log.info(porConectar == null
                     ? "Sin conexión con la nube configurada ({}): la caja trabaja solo en local"
@@ -144,7 +148,9 @@ public final class AppContext implements AutoCloseable {
         // nube se subirían (usuarios con contraseñas conocidas y productos que no existen). Una caja
         // que se puede conectar espera a que entre un administrador de la nube, que trae los de verdad.
         // Devuelve la sucursal creada solo si la base es nueva (no tenía usuarios).
-        String sucursalNueva = nube == null && porConectar == null
+        // La caja de prueba arranca limpia: solo el administrador, sin sucursales ni catálogo de ejemplo.
+        String sucursalNueva = soloLocal ? new DatosIniciales(database, hasher).sembrarSoloAdministrador()
+                : nube == null && porConectar == null
                 ? new DatosIniciales(database, hasher).sembrarSiVacia()
                 : null;
 

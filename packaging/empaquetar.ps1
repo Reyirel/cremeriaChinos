@@ -4,13 +4,18 @@ Genera un ejecutable de Windows autocontenido (no requiere Java instalado en la 
 Uso:
     powershell -ExecutionPolicy Bypass -File packaging\empaquetar.ps1
     powershell -ExecutionPolicy Bypass -File packaging\empaquetar.ps1 -Instalador   # ademas genera un instalador .exe (requiere WiX Toolset)
+    powershell -ExecutionPolicy Bypass -File packaging\empaquetar.ps1 -Prueba       # version de prueba: solo local, base limpia con admin / admin123
+
+Version de prueba (-Prueba): no se conecta a la nube y guarda sus datos en %USERPROFILE%\.cremerias-pos-prueba,
+aparte de una caja de verdad. Se llama PuntoVentaCremerias-Prueba.
 
 Resultado:
     target\dist\image\PuntoVentaCremerias\   -> carpeta portable, copiar/zipear y correr PuntoVentaCremerias.exe
     target\dist\installer\                   -> instalador .exe (solo con -Instalador)
 #>
 param(
-    [switch]$Instalador
+    [switch]$Instalador,
+    [switch]$Prueba
 )
 
 $ErrorActionPreference = "Stop"
@@ -27,6 +32,8 @@ function Find-Jpackage {
 }
 
 $jpackage = Find-Jpackage
+$nombre = if ($Prueba) { "PuntoVentaCremerias-Prueba" } else { "PuntoVentaCremerias" }
+$opcionesJava = if ($Prueba) { @("--java-options", "-Dcremerias.soloLocal=true") } else { @() }
 Write-Host "Usando jpackage: $jpackage"
 
 Write-Host "`n== Compilando (sin pruebas) =="
@@ -48,7 +55,8 @@ Remove-Item -Recurse -Force "target\dist\image" -ErrorAction SilentlyContinue
     --type app-image `
     --input "target\app-input" `
     --dest "target\dist\image" `
-    --name "PuntoVentaCremerias" `
+    --name $nombre `
+    @opcionesJava `
     --main-jar $appJar.Name `
     --main-class "com.cremerias.puntoventa.Launcher" `
     --icon "packaging\icon.ico" `
@@ -57,7 +65,8 @@ Remove-Item -Recurse -Force "target\dist\image" -ErrorAction SilentlyContinue
     --description "Punto de venta Cremerias Chinos"
 if ($LASTEXITCODE -ne 0) { throw "Fallo jpackage (app-image)" }
 
-Write-Host "`nListo: target\dist\image\PuntoVentaCremerias\PuntoVentaCremerias.exe"
+Write-Host "`nListo: target\dist\image\$nombre\$nombre.exe"
+if ($Prueba) { Write-Host "Usuario: admin   Contrasena: admin123" }
 
 if ($Instalador) {
     Write-Host "`n== Generando instalador .exe (requiere WiX Toolset) =="
@@ -66,7 +75,8 @@ if ($Instalador) {
         --type exe `
         --input "target\app-input" `
         --dest "target\dist\installer" `
-        --name "PuntoVentaCremerias" `
+        --name $nombre `
+        @opcionesJava `
         --main-jar $appJar.Name `
         --main-class "com.cremerias.puntoventa.Launcher" `
         --icon "packaging\icon.ico" `

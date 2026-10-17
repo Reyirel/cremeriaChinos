@@ -50,6 +50,30 @@ public class DatosIniciales {
         });
     }
 
+    /**
+     * Base limpia para la caja de prueba: solo el administrador (admin / admin123, sin pedir cambio de
+     * contraseña) en el almacén central. Las sucursales, productos y usuarios los da de alta él.
+     *
+     * @return siempre {@code null}: no crea sucursal, así que no se carga el catálogo de ejemplo
+     */
+    public String sembrarSoloAdministrador() {
+        return database.enTransaccion(c -> {
+            if (usuarios.contar(c) > 0) {
+                return null;
+            }
+            String almacenId;
+            try (var ps = c.prepareStatement("SELECT id FROM sucursales WHERE es_almacen = 1 LIMIT 1");
+                 var rs = ps.executeQuery()) {
+                rs.next();
+                almacenId = rs.getString(1);
+            }
+            usuarios.insertar(c, new Usuario(Ids.nuevo(), almacenId, "Administrador General", "admin",
+                    hasher.hash("admin123".toCharArray()), Rol.ADMINISTRADOR, true, false, 0, null, null));
+            log.info("Base de prueba creada: solo el usuario admin");
+            return null;
+        });
+    }
+
     private void crear(java.sql.Connection c, String sucursalId, String nombre, String usuario, String password,
                        Rol rol) throws java.sql.SQLException {
         usuarios.insertar(c, new Usuario(Ids.nuevo(), sucursalId, nombre, usuario,
