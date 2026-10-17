@@ -47,7 +47,11 @@ public final class DialogoCorte {
                 titulo("Efectivo"),
                 fila("Ventas en efectivo", r.ventasEfectivo(), false),
                 fila("Entradas", r.entradas(), false),
-                fila("Retiros", -r.retiros(), false),
+                fila("Retiros", -r.retiros(), false));
+        if (r.reembolsosEfectivo() > 0) {
+            resumen.getChildren().add(fila("Devoluciones en efectivo", -r.reembolsosEfectivo(), false));
+        }
+        resumen.getChildren().addAll(
                 new Separator(),
                 fila("Efectivo esperado", r.efectivoEsperado(), true),
                 new Spacer(8),
@@ -57,6 +61,11 @@ public final class DialogoCorte {
                 fila("Total vendido", r.totalVentas(), true),
                 texto("Ventas realizadas", String.valueOf(r.numeroVentas())),
                 texto("Ventas canceladas", r.numeroCanceladas() + "  (" + Dinero.formatear(r.totalCancelado()) + ")"));
+        if (r.numeroDevoluciones() > 0) {
+            resumen.getChildren().addAll(
+                    texto("Devoluciones", r.numeroDevoluciones() + "  (" + Dinero.formatear(r.totalDevuelto()) + ")"),
+                    fila("Venta neta", r.ventaNeta(), true));
+        }
         resumen.setPrefWidth(360);
         resumen.setMinWidth(320);
 

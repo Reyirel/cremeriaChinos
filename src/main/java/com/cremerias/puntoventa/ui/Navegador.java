@@ -6,6 +6,7 @@ import com.cremerias.puntoventa.model.Rol;
 import com.cremerias.puntoventa.ui.componentes.Avisos;
 import com.cremerias.puntoventa.ui.componentes.Dialogos;
 import com.cremerias.puntoventa.ui.componentes.Diseno;
+import com.cremerias.puntoventa.ui.componentes.Impresion;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
@@ -40,6 +41,8 @@ public class Navegador {
         temaOscuro = contexto.preferencias().temaOscuro();
         Temas.aplicar(scene, temaOscuro);
         Diseno.movimientoReducidoProperty().set(Diseno.movimientoReducido() || contexto.preferencias().movimientoReducido());
+        Impresion.configurar(contexto.preferencias().ticketEnNegritas(),
+                negritas -> this.contexto.preferencias().guardarTicketEnNegritas(negritas));
     }
 
     public AppContext contexto() {

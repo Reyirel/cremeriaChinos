@@ -1,5 +1,6 @@
 package com.cremerias.puntoventa.ui.admin;
 
+import com.cremerias.puntoventa.model.ReglaPrecio;
 import com.cremerias.puntoventa.model.Rol;
 import com.cremerias.puntoventa.model.Sucursal;
 import com.cremerias.puntoventa.service.admin.UsuarioService;
@@ -13,6 +14,7 @@ import com.cremerias.puntoventa.ui.componentes.Etiqueta;
 import com.cremerias.puntoventa.ui.componentes.Formulario;
 import com.cremerias.puntoventa.ui.componentes.MaestroDetalle;
 import com.cremerias.puntoventa.ui.componentes.PanelDetalle;
+import com.cremerias.puntoventa.ui.componentes.Segmentado;
 import com.cremerias.puntoventa.ui.componentes.TablaDatos;
 import com.cremerias.puntoventa.ui.componentes.TablaDatos.Accion;
 import com.cremerias.puntoventa.ui.componentes.Texto;
@@ -29,7 +31,7 @@ import java.util.List;
 public class SucursalesPagina extends Pagina {
 
     /** Contexto real de una sucursal para decidir antes de deshabilitarla o eliminarla. */
-    private record Contexto(long saldoCredito, List<UsuarioService.Fila> empleados) {
+    private record Contexto(long saldoCredito, List<UsuarioService.Fila> empleados, ReglaPrecio.Canal canal) {
     }
 
     private final Cargador carga = new Cargador();
@@ -75,6 +77,8 @@ public class SucursalesPagina extends Pagina {
                 v -> v == 0 ? Etiqueta.Tono.EXITO : Etiqueta.Tono.NEUTRO).ancho(150);
         var columnaAcciones = tabla.acciones(
                 Accion.<Sucursal>boton("mdi2p-pencil-outline", "Editar", this::formulario),
+                Accion.<Sucursal>menu("mdi2p-percent-outline", s -> "Canal de precios…", this::canal)
+                        .si(s -> !s.esAlmacen()),
                 Accion.<Sucursal>menu("mdi2e-eye-off-outline", s -> s.activo() ? "Deshabilitar…" : "Habilitar…",
                         this::cambiarActivo),
                 Accion.<Sucursal>menu("mdi2t-trash-can-outline", s -> "Eliminar…", this::eliminar).peligrosa());
@@ -152,13 +156,20 @@ public class SucursalesPagina extends Pagina {
         activar.setOnAction(e -> cambiarActivo(s));
         Button eliminar = Ui.boton("Eliminar", "mdi2t-trash-can-outline", "flat", "danger");
         eliminar.setOnAction(e -> eliminar(s));
-        detalle.setAcciones(editar, activar, eliminar);
+        if (s.esAlmacen()) {
+            detalle.setAcciones(editar, activar, eliminar);
+        } else {
+            Button canal = Ui.secundario("Canal de precios", "mdi2p-percent-outline");
+            canal.setOnAction(e -> canal(s));
+            detalle.setAcciones(editar, canal, activar, eliminar);
+        }
 
         cargaDetalle.cargar(() -> contexto(s), c -> {
             long supervisores = c.empleados().stream().filter(f -> f.usuario().rol() == Rol.SUPERVISOR).count();
             operacion.getChildren().setAll(operacion.getChildren().getFirst(),
                     PanelDetalle.dato("Saldo de crédito con el almacén",
                             c.saldoCredito() > 0 ? Dinero.formatear(c.saldoCredito()) : "Sin adeudo"),
+                    PanelDetalle.dato("Canal de precios", s.esAlmacen() ? "—" : c.canal().nombre()),
                     PanelDetalle.dato("Empleados activos", c.empleados().size() + (supervisores > 0
                             ? " (" + supervisores + (supervisores == 1 ? " supervisor)" : " supervisores)") : "")));
         }, e -> operacion.getChildren().set(1, Ui.texto("No se pudo cargar: " + AdminContexto.mensaje(e), "texto-error")));
@@ -168,7 +179,40 @@ public class SucursalesPagina extends Pagina {
         long saldo = a.admin().credito().saldo(s.id());
         List<UsuarioService.Fila> empleados = a.admin().usuarios().listar().stream()
                 .filter(f -> s.id().equals(f.usuario().sucursalId()) && f.usuario().activo()).toList();
-        return new Contexto(saldo, empleados);
+        return new Contexto(saldo, empleados, s.esAlmacen() ? null : a.admin().sucursales().canal(s.id()));
+    }
+
+    /** Con qué margen se le cobra lo surtido: como cremería o como ruta de la Sierra. */
+    private void canal(Sucursal s) {
+        Cargador.ejecutar(() -> a.admin().sucursales().canal(s.id()), actual -> {
+            Dialogo d = new Dialogo("Canal de precios", s.nombre() + " · ahora: " + actual.nombre(),
+                    "mdi2p-percent-outline", Dialogo.Tono.ACENTO);
+            d.setPrefWidth(560);
+            Segmentado<ReglaPrecio.Canal> canal = new Segmentado<ReglaPrecio.Canal>()
+                    .opcion(ReglaPrecio.Canal.BODEGA_SUCURSAL, ReglaPrecio.Canal.BODEGA_SUCURSAL.nombre())
+                    .opcion(ReglaPrecio.Canal.RUTA_SIERRA, ReglaPrecio.Canal.RUTA_SIERRA.nombre());
+            canal.setValor(actual);
+            Label ayuda = Ui.texto(actual.descripcion() + ".", "campo-ayuda");
+            canal.valorProperty().addListener((o, x, c) -> ayuda.setText(c.descripcion() + "."));
+            d.setContenido(Formulario.campo("Se le surte como", new VBox(6, canal, ayuda)),
+                    Formulario.nota("mdi2i-information-outline", "Los surtidos siguientes se cobran con las reglas de "
+                            + "margen de ese canal (Precios y márgenes). Los surtidos ya registrados no cambian.", null));
+            Runnable guardar = () -> {
+                ReglaPrecio.Canal elegido = canal.getValor();
+                if (elegido == actual) {
+                    d.cerrar();
+                    return;
+                }
+                a.guardar(d, "Canal de precios de " + s.nombre() + ": " + elegido.nombre(),
+                        () -> a.admin().sucursales().cambiarCanal(s, elegido, a.usuario()), this::cargar);
+            };
+            d.agregarBoton("Cancelar", null, d::cancelar, "flat");
+            d.agregarBoton("Guardar", "mdi2c-check", guardar, "accent");
+            d.setAlCancelar(d::cerrar);
+            d.setAlConfirmar(guardar);
+            d.vigilarCambios(canal);
+            a.dialogos().mostrar(d);
+        }, e -> a.avisos().error(AdminContexto.mensaje(e)));
     }
 
     private void formulario(Sucursal s) {

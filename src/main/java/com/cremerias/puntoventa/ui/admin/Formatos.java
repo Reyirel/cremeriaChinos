@@ -81,8 +81,44 @@ final class Formatos {
             case "MERMA" -> "Merma";
             case "SURTIDO_SALIDA" -> "Surtido a sucursal";
             case "SURTIDO_ENTRADA" -> "Llegó por surtido";
+            case "COMPRA" -> "Compra a proveedor";
+            case "DEVOLUCION_CLIENTE" -> "Devolución de cliente";
+            case "DEVOLUCION_SUCURSAL_SALIDA" -> "Devuelto a la bodega";
+            case "DEVOLUCION_SUCURSAL_ENTRADA" -> "Regresó de sucursal";
+            case "DEVOLUCION_PROVEEDOR" -> "Devuelto al proveedor";
+            case "TRANSFORMACION_SALIDA" -> "Se usó en transformación";
+            case "TRANSFORMACION_ENTRADA" -> "Producido por transformación";
+            case "DIFERENCIA_SURTIDO" -> "No llegó del surtido";
+            case "CANCELACION_SURTIDO" -> "Surtido cancelado";
             default -> tipo;
         };
+    }
+
+    /**
+     * Origen de un lote en palabras. Los lotes de compras, transformaciones, devoluciones de
+     * sucursal y aclaraciones entran como «ENTRADA»; su folio dice de qué documento vienen.
+     */
+    static String origenLote(String origen, String folio) {
+        if ("ENTRADA".equals(origen) && folio != null) {
+            String prefijo = folio.contains("-") ? folio.substring(0, folio.indexOf('-')) : folio;
+            switch (prefijo) {
+                case "CMP" -> {
+                    return "Compra";
+                }
+                case "TRA" -> {
+                    return "Transformación";
+                }
+                case "DVS" -> {
+                    return "Devolución de sucursal";
+                }
+                case "ACL" -> {
+                    return "Regresó por diferencia de surtido";
+                }
+                default -> {
+                }
+            }
+        }
+        return origenLote(origen);
     }
 
     /** Origen de un lote en palabras. */

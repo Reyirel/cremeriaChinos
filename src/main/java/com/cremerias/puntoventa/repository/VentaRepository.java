@@ -1,5 +1,6 @@
 package com.cremerias.puntoventa.repository;
 
+import com.cremerias.puntoventa.model.Escala;
 import com.cremerias.puntoventa.model.MetodoPago;
 import com.cremerias.puntoventa.model.Ticket;
 import com.cremerias.puntoventa.model.Unidad;
@@ -42,13 +43,20 @@ public class VentaRepository {
         }
     }
 
+    /**
+     * @param precioLista precio por unidad antes del mayoreo
+     * @param nivel       MENUDEO, MAYOREO o SUPER_MAYOREO
+     * @param escalaId    escala de mayoreo aplicada (nula en menudeo)
+     */
     public void insertarDetalle(Connection c, String ventaId, int renglon, String productoId, String presentacionId,
                                 String descripcion, Unidad unidad, BigDecimal cantidad, BigDecimal cantidadBase,
-                                long precio, long importe) throws SQLException {
+                                long precio, long importe, long precioLista, String nivel, String escalaId)
+            throws SQLException {
         try (PreparedStatement ps = c.prepareStatement("""
                 INSERT INTO venta_detalle (id, venta_id, renglon, producto_id, presentacion_id, descripcion, unidad,
-                                           cantidad, cantidad_base, precio_unitario_centavos, importe_centavos)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""")) {
+                                           cantidad, cantidad_base, precio_unitario_centavos, importe_centavos,
+                                           precio_lista_centavos, nivel_precio, escala_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""")) {
             ps.setString(1, Ids.nuevo());
             ps.setString(2, ventaId);
             ps.setInt(3, renglon);
@@ -60,6 +68,9 @@ public class VentaRepository {
             ps.setBigDecimal(9, cantidadBase);
             ps.setLong(10, precio);
             ps.setLong(11, importe);
+            ps.setLong(12, precioLista);
+            ps.setString(13, nivel);
+            ps.setString(14, escalaId);
             ps.executeUpdate();
         }
     }
@@ -143,6 +154,16 @@ public class VentaRepository {
         }
     }
 
+    /** Si a la venta ya se le registró alguna devolución (entonces ya no se cancela completa). */
+    public boolean tieneDevoluciones(Connection c, String ventaId) throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement("SELECT 1 FROM devoluciones_venta WHERE venta_id = ? LIMIT 1")) {
+            ps.setString(1, ventaId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
+        }
+    }
+
     /** Lo que salió de cada lote en una venta, para regresarlo si se cancela. */
     public record SalidaLote(String productoId, String loteId, BigDecimal cantidad) {
     }
@@ -196,14 +217,16 @@ public class VentaRepository {
 
         List<Ticket.Renglon> renglones = new ArrayList<>();
         try (PreparedStatement ps = c.prepareStatement("""
-                SELECT descripcion, unidad, cantidad, precio_unitario_centavos, importe_centavos
+                SELECT descripcion, unidad, cantidad, precio_unitario_centavos, importe_centavos, nivel_precio
                 FROM venta_detalle WHERE venta_id = ? ORDER BY renglon""")) {
             ps.setString(1, ventaId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     Unidad unidad = Unidad.valueOf(rs.getString(2));
+                    String nivel = rs.getString(6);
                     renglones.add(new Ticket.Renglon(rs.getString(1), unidad,
-                            unidad.normalizar(ProductoRepository.decimal(rs, "cantidad")), rs.getLong(4), rs.getLong(5)));
+                            unidad.normalizar(ProductoRepository.decimal(rs, "cantidad")), rs.getLong(4), rs.getLong(5),
+                            nivel == null || "MENUDEO".equals(nivel) ? null : Escala.Nivel.valueOf(nivel)));
                 }
             }
         }

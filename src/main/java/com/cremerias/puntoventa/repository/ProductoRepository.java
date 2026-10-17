@@ -72,7 +72,7 @@ public class ProductoRepository {
 
     private Map<String, List<Presentacion>> presentaciones(Connection c, String productoId) throws SQLException {
         try (PreparedStatement ps = c.prepareStatement("""
-                SELECT id, producto_id, nombre, tipo, factor, codigo_barras, es_principal, activo
+                SELECT id, producto_id, nombre, tipo, factor, codigo_barras, es_principal, activo, merma_pct
                 FROM presentaciones
                 WHERE eliminado_en IS NULL AND (? IS NULL OR producto_id = ?)
                 ORDER BY es_principal DESC, factor, nombre""")) {
@@ -84,7 +84,8 @@ public class ProductoRepository {
                     mapa.computeIfAbsent(rs.getString("producto_id"), k -> new ArrayList<>()).add(new Presentacion(
                             rs.getString("id"), rs.getString("producto_id"), rs.getString("nombre"),
                             "GRANEL".equals(rs.getString("tipo")), decimal(rs, "factor"),
-                            rs.getString("codigo_barras"), rs.getBoolean("es_principal"), rs.getBoolean("activo")));
+                            rs.getString("codigo_barras"), rs.getBoolean("es_principal"), rs.getBoolean("activo"),
+                            porcentaje(rs.getDouble("merma_pct"))));
                 }
                 return mapa;
             }
@@ -219,8 +220,8 @@ public class ProductoRepository {
         String ahora = Tiempo.ahora();
         try (PreparedStatement ps = c.prepareStatement("""
                 INSERT INTO presentaciones (id, producto_id, nombre, tipo, factor, codigo_barras, es_principal, activo,
-                                            creado_en, actualizado_en)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""")) {
+                                            creado_en, actualizado_en, merma_pct)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""")) {
             ps.setString(1, p.id());
             ps.setString(2, p.productoId());
             ps.setString(3, p.nombre());
@@ -231,6 +232,7 @@ public class ProductoRepository {
             ps.setBoolean(8, p.activo());
             ps.setString(9, ahora);
             ps.setString(10, ahora);
+            ps.setBigDecimal(11, p.mermaPct());
             ps.executeUpdate();
         }
     }
@@ -238,7 +240,7 @@ public class ProductoRepository {
     public void actualizarPresentacion(Connection c, Presentacion p) throws SQLException {
         try (PreparedStatement ps = c.prepareStatement("""
                 UPDATE presentaciones SET nombre = ?, tipo = ?, factor = ?, codigo_barras = ?, es_principal = ?,
-                                          activo = ?, actualizado_en = ?
+                                          activo = ?, actualizado_en = ?, merma_pct = ?
                 WHERE id = ?""")) {
             ps.setString(1, p.nombre());
             ps.setString(2, p.granel() ? "GRANEL" : "UNIDAD");
@@ -247,7 +249,8 @@ public class ProductoRepository {
             ps.setBoolean(5, p.principal());
             ps.setBoolean(6, p.activo());
             ps.setString(7, Tiempo.ahora());
-            ps.setString(8, p.id());
+            ps.setBigDecimal(8, p.mermaPct());
+            ps.setString(9, p.id());
             ps.executeUpdate();
         }
     }
@@ -397,6 +400,12 @@ public class ProductoRepository {
 
     private static String vacioANull(String texto) {
         return texto == null || texto.isBlank() ? null : texto.strip();
+    }
+
+    /** Porcentaje sin ceros de más (5.0 → 5). */
+    static BigDecimal porcentaje(double valor) {
+        BigDecimal limpio = BigDecimal.valueOf(valor).stripTrailingZeros();
+        return limpio.scale() < 0 ? limpio.setScale(0) : limpio;
     }
 
     static BigDecimal decimal(ResultSet rs, String columna) throws SQLException {

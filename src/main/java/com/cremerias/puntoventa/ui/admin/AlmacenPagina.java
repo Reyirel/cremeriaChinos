@@ -389,7 +389,7 @@ public class AlmacenPagina extends Pagina {
         TablaDatos<LoteRepository.Lote> lista = new TablaDatos<>(Diseno.Densidad.COMPACTA);
         lista.setClave(LoteRepository.Lote::id);
         lista.dosLineas("Lote", l -> l.folio() == null ? Formatos.origenLote(l.origen()) : l.folio(),
-                l -> Formatos.origenLote(l.origen())).flexible(170);
+                l -> Formatos.origenLote(l.origen(), l.folio())).flexible(170);
         lista.fecha("Ingreso", LoteRepository.Lote::fechaIngreso, Formatos.FECHA_HORA).ancho(150);
         lista.cantidad("Cantidad inicial", LoteRepository.Lote::cantidadInicial, l -> producto.unidad()).ancho(140);
         lista.cantidad("Existencia", LoteRepository.Lote::existencia, l -> producto.unidad()).ancho(130);

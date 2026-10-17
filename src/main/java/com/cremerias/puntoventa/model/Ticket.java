@@ -19,8 +19,13 @@ public record Ticket(
         boolean cancelada
 ) {
 
+    /** @param nivel precio de mayoreo aplicado; {@code null} = menudeo */
     public record Renglon(String descripcion, Unidad unidad, BigDecimal cantidad, long precioCentavos,
-                          long importeCentavos) {
+                          long importeCentavos, Escala.Nivel nivel) {
+
+        public Renglon(String descripcion, Unidad unidad, BigDecimal cantidad, long precioCentavos, long importeCentavos) {
+            this(descripcion, unidad, cantidad, precioCentavos, importeCentavos, null);
+        }
     }
 
     public record PagoTicket(MetodoPago metodo, long recibidoCentavos, String referencia) {

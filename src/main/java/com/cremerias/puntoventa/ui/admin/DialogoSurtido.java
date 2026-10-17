@@ -39,6 +39,7 @@ import org.kordamp.ikonli.javafx.FontIcon;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -47,7 +48,8 @@ import java.util.stream.Collectors;
 
 /**
  * Surtido del almacén a una sucursal. Muestra claramente cuánto dinero se envía: costo de la
- * mercancía (lo que sale del almacén, por lotes) y su valor a precio de venta en la sucursal.
+ * mercancía (lo que sale del almacén, por lotes), lo que se le carga a la sucursal (precio interno,
+ * con el margen del canal) y su valor a precio de venta en la sucursal.
  */
 final class DialogoSurtido {
 
@@ -63,6 +65,8 @@ final class DialogoSurtido {
         /** Precio promedio de los lotes que ya tiene la sucursal, en lugar de precio fijo. */
         boolean promedio;
         SurtidoService.Costeo costeo;
+        /** Lo que se le carga a la sucursal por esta línea (precio interno); nulo hasta calcularlo. */
+        Long interno;
         final Label existencia = new Label();
         final Label costo = new Label();
         final Label detalleCosto = new Label();
@@ -83,8 +87,8 @@ final class DialogoSurtido {
         }
     }
 
-    /** Costeo por lotes de cada línea y saldo de crédito (se calculan fuera del hilo de la interfaz). */
-    private record Calculo(Map<Linea, SurtidoService.Costeo> costeos, Long saldo) {
+    /** Costeo por lotes, precio interno de cada línea y saldo de crédito (fuera del hilo de la interfaz). */
+    private record Calculo(Map<Linea, SurtidoService.Costeo> costeos, Map<Linea, Long> internos, Long saldo) {
     }
 
     private DialogoSurtido() {
@@ -177,6 +181,7 @@ final class DialogoSurtido {
 
         // Resumen del dinero
         Label totalCosto = Ui.texto("$0.00", "surtido-total");
+        Label totalInterno = Ui.texto("", "surtido-detalle");
         Label totalVenta = Ui.texto("$0.00", "surtido-valor");
         Label numProductos = Ui.texto("Sin productos", "surtido-detalle");
         Label saldoActual = Ui.texto("", "surtido-detalle");
@@ -185,7 +190,7 @@ final class DialogoSurtido {
         bloqueCredito.visibleProperty().bind(pago.valorProperty().isEqualTo(Pago.CREDITO));
         bloqueCredito.managedProperty().bind(bloqueCredito.visibleProperty());
         VBox resumen = new VBox(8,
-                Ui.texto("Se envía (al costo)", "surtido-etiqueta"), totalCosto,
+                Ui.texto("Se envía (al costo)", "surtido-etiqueta"), totalCosto, totalInterno,
                 new Separator(),
                 Ui.texto("Valor a precio de venta", "surtido-etiqueta"), totalVenta, numProductos, bloqueCredito);
         resumen.getStyleClass().add("surtido-resumen");
@@ -217,13 +222,20 @@ final class DialogoSurtido {
             Sucursal s = sucursal.getValue();
             calculos.cargar(() -> {
                 Map<Linea, SurtidoService.Costeo> costeos = new HashMap<>();
+                Map<Linea, Long> internos = new HashMap<>();
                 for (Linea l : copia) {
-                    costeos.put(l, a.admin().surtidos().costear(l.producto, cantidades.get(l)));
+                    SurtidoService.Costeo costeo = a.admin().surtidos().costear(l.producto, cantidades.get(l));
+                    costeos.put(l, costeo);
+                    if (s != null) {
+                        internos.put(l, a.admin().surtidos().precioInterno(s, l.producto, costeo.costoCentavos())
+                                .importeCentavos());
+                    }
                 }
                 Long saldo = s == null ? null : a.admin().credito().saldos(List.of(s)).getFirst().saldo();
-                return new Calculo(costeos, saldo);
+                return new Calculo(costeos, internos, saldo);
             }, c -> {
                 long costo = 0;
+                long interno = 0;
                 for (Linea l : copia) {
                     l.costeo = c.costeos().get(l);
                     if (l.costeo == null) {
@@ -234,13 +246,19 @@ final class DialogoSurtido {
                     l.cantidad.pseudoClassStateChanged(ERROR, insuficiente || l.base().signum() <= 0);
                     l.existencia.setText("En almacén: " + Cantidades.formatear(l.producto.unidad(), l.costeo.disponible()));
                     l.existencia.pseudoClassStateChanged(ERROR, insuficiente);
-                    l.detalleCosto.setText(detalleLotes(l));
+                    l.interno = c.internos().get(l);
+                    l.detalleCosto.setText(detalleLotes(l) + (l.interno == null || l.interno == l.costeo.costoCentavos()
+                            ? "" : " · Cargo " + Dinero.formatear(l.interno)));
                     costo += l.costeo.costoCentavos();
+                    interno += l.interno == null ? l.costeo.costoCentavos() : l.interno;
                 }
                 totalCosto.setText(Dinero.formatear(costo));
+                totalInterno.setText(s == null ? "" : interno == costo ? "Se le carga a la sucursal al costo"
+                        : "Se le carga a la sucursal " + Dinero.formatear(interno) + " (precio interno)");
                 if (c.saldo() != null) {
                     saldoActual.setText("Hoy: " + Dinero.formatear(c.saldo()));
-                    saldoNuevo.setText("Después del surtido: " + Dinero.formatear(c.saldo() + costo));
+                    // El crédito se carga a precio interno (costo más el margen del canal), no al costo.
+                    saldoNuevo.setText("Después del surtido: " + Dinero.formatear(c.saldo() + interno));
                 } else {
                     saldoActual.setText("Elige la sucursal");
                     saldoNuevo.setText("");
@@ -476,7 +494,7 @@ final class DialogoSurtido {
                 (sucursal == null ? "Precios de venta" : "Precio de venta en " + sucursal.nombre())
                         + ". Se aplican cuando se termine el lote que tiene ahora.",
                 "mdi2t-tag-outline", Dialogo.Tono.ACENTO);
-        d.setPrefWidth(780);
+        d.setPrefWidth(900);
         Map<String, Long> sugeridos = sucursal == null ? Map.of()
                 : a.admin().surtidos().preciosSugeridos(sucursal.id(), l.producto.id());
         SurtidoService.PreciosPromedio promedio = sucursal == null ? null
@@ -497,8 +515,12 @@ final class DialogoSurtido {
         Label ayudaModo = Ui.texto("", "campo-ayuda");
         long costoBase = l.costeo == null || l.base().signum() == 0 ? 0
                 : BigDecimal.valueOf(l.costeo.costoCentavos()).divide(l.base(), 0, RoundingMode.HALF_UP).longValue();
+        // Precio al público que da la regla de margen del canal público (solo si hay una que aplique).
+        Map<String, Long> conMargen = sucursal == null || costoBase == 0 ? Map.of()
+                : a.admin().precios().preciosPublicosSugeridos(l.producto, costoBase, sucursal.id(), LocalDate.now());
         GridPane grid = new GridPane(14, 10);
-        String[] titulos = {"Presentación", "Contiene", "Costo aprox.", "Precio anterior", "Promedio", "Precio de venta"};
+        String[] titulos = {"Presentación", "Contiene", "Costo aprox.", "Precio anterior", "Promedio", "Con margen",
+                "Precio de venta"};
         for (int i = 0; i < titulos.length; i++) {
             Label t = new Label(titulos[i]);
             t.getStyleClass().add("grid-surtido-encabezado");
@@ -529,11 +551,12 @@ final class DialogoSurtido {
                     new Label(p.granel() ? "A granel (por kg)" : Cantidades.formatear(l.producto.unidad(), p.factor())),
                     new Label(costoBase == 0 ? "—" : Dinero.formatear(costoPresentacion)),
                     new Label(sugeridos.containsKey(p.id()) ? Dinero.formatear(sugeridos.get(p.id())) : "Nuevo"),
-                    new Label(precioPromedio == null ? "—" : Dinero.formatear(precioPromedio))};
+                    new Label(precioPromedio == null ? "—" : Dinero.formatear(precioPromedio)),
+                    new Label(conMargen.containsKey(p.id()) ? Dinero.formatear(conMargen.get(p.id())) : "—")};
             for (Label c : celdas) {
                 c.setMinWidth(Region.USE_PREF_SIZE);
             }
-            grid.addRow(r++, celdas[0], celdas[1], celdas[2], celdas[3], celdas[4], campo);
+            grid.addRow(r++, celdas[0], celdas[1], celdas[2], celdas[3], celdas[4], celdas[5], campo);
         }
 
         // Lo que se había escrito a mano, para regresarlo al volver a precio fijo.
@@ -605,6 +628,18 @@ final class DialogoSurtido {
             alGuardar.run();
         };
         d.agregarBoton("Cancelar", null, d::cerrar, "flat");
+        if (!conMargen.isEmpty()) {
+            d.separarBotones();
+            d.agregarBoton("Usar precio con margen", "mdi2p-percent-outline", () -> {
+                fijo.setSelected(true);
+                conMargen.forEach((id, precio) -> {
+                    CampoDinero campo = campos.get(id);
+                    if (campo != null) {
+                        campo.setCentavos(precio);
+                    }
+                });
+            }, "");
+        }
         d.agregarBoton("Aplicar precios", "mdi2c-check", guardar, "accent");
         d.setAlCancelar(d::cerrar);
         d.setAlConfirmar(guardar);

@@ -8,6 +8,7 @@ import com.cremerias.puntoventa.repository.DispositivoRepository;
 import com.cremerias.puntoventa.repository.SesionRepository;
 import com.cremerias.puntoventa.repository.SucursalRepository;
 import com.cremerias.puntoventa.security.PasswordHasher;
+import com.cremerias.puntoventa.service.AjusteService;
 import com.cremerias.puntoventa.service.AuthService;
 import com.cremerias.puntoventa.service.CajaService;
 import com.cremerias.puntoventa.service.CatalogoService;
@@ -18,9 +19,12 @@ import com.cremerias.puntoventa.service.VentaEsperaService;
 import com.cremerias.puntoventa.service.VentaService;
 import com.cremerias.puntoventa.service.admin.Administracion;
 import com.cremerias.puntoventa.service.DatosIniciales;
+import com.cremerias.puntoventa.service.DevolucionService;
 import com.cremerias.puntoventa.service.PreferenciasService;
+import com.cremerias.puntoventa.service.ReconciliacionService;
 import com.cremerias.puntoventa.service.SesionActual;
 import com.cremerias.puntoventa.service.SinVentaService;
+import com.cremerias.puntoventa.service.TransformacionService;
 import com.cremerias.puntoventa.sync.CajaNueva;
 import com.cremerias.puntoventa.sync.ClienteSupabase;
 import com.cremerias.puntoventa.sync.ConexionCaja;
@@ -52,6 +56,10 @@ public final class AppContext implements AutoCloseable {
     private final VentaEsperaService ventasEspera;
     private final InventarioSucursalService inventarioSucursal;
     private final SinVentaService sinVenta;
+    private final AjusteService ajustes;
+    private final TransformacionService transformaciones;
+    private final DevolucionService devoluciones;
+    private final ReconciliacionService reconciliacion;
     private final IndicadoresService indicadores;
     private final Administracion administracion;
     /** Proyecto con el que esta computadora se puede conectar a la nube; nulo si ya está conectada. */
@@ -71,6 +79,10 @@ public final class AppContext implements AutoCloseable {
         this.ventasEspera = new VentaEsperaService(database);
         this.inventarioSucursal = new InventarioSucursalService(database);
         this.sinVenta = new SinVentaService(database, Clock.systemDefaultZone());
+        this.ajustes = new AjusteService(database, caja.dispositivoId());
+        this.transformaciones = new TransformacionService(database, caja.dispositivoId());
+        this.devoluciones = new DevolucionService(database, caja.dispositivoId());
+        this.reconciliacion = new ReconciliacionService(database, caja.dispositivoId());
         this.indicadores = new IndicadoresService(database, caja.dispositivoId(), administracion.gastos(),
                 administracion.nomina(), administracion.credito());
         this.administracion = administracion;
@@ -248,6 +260,26 @@ public final class AppContext implements AutoCloseable {
 
     public InventarioSucursalService inventarioSucursal() {
         return inventarioSucursal;
+    }
+
+    /** Ajustes de inventario del almacén y de las sucursales. */
+    public AjusteService ajustes() {
+        return ajustes;
+    }
+
+    /** Transformaciones de un producto en otro con existencia propia. */
+    public TransformacionService transformaciones() {
+        return transformaciones;
+    }
+
+    /** Devoluciones y cambios de clientes sobre un ticket. */
+    public DevolucionService devoluciones() {
+        return devoluciones;
+    }
+
+    /** Existencias negativas por ventas sin conexión en varias cajas y su reacomodo. */
+    public ReconciliacionService reconciliacion() {
+        return reconciliacion;
     }
 
     /** Productos que llevan su plazo sin venderse (avisos para ofertarlos). */

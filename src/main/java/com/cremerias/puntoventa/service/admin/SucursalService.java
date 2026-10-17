@@ -2,9 +2,11 @@ package com.cremerias.puntoventa.service.admin;
 
 import com.cremerias.puntoventa.db.Database;
 import com.cremerias.puntoventa.model.AccionBitacora;
+import com.cremerias.puntoventa.model.ReglaPrecio;
 import com.cremerias.puntoventa.model.Sucursal;
 import com.cremerias.puntoventa.model.Usuario;
 import com.cremerias.puntoventa.repository.BitacoraRepository;
+import com.cremerias.puntoventa.service.Permisos;
 import com.cremerias.puntoventa.util.Ids;
 import com.cremerias.puntoventa.util.Tiempo;
 
@@ -61,6 +63,36 @@ public class SucursalService {
             }
             return lista;
         }
+    }
+
+    /** Lista de precios con la que se le surte (cremerías o ruta de la Sierra). */
+    public ReglaPrecio.Canal canal(String sucursalId) {
+        return database.con(c -> SurtidoService.canal(c, sucursalId));
+    }
+
+    /**
+     * Cambia la lista de precios con la que se surte a la sucursal: cremería (bodega a cremerías) o
+     * ruta de la Sierra. Solo cambia los surtidos siguientes; los anteriores conservan su precio.
+     */
+    public String cambiarCanal(Sucursal sucursal, ReglaPrecio.Canal canal, Usuario quien) {
+        Permisos.exigirAdministrador(quien, "cambiar la lista de precios de una sucursal");
+        if (canal == ReglaPrecio.Canal.PUBLICO) {
+            throw new IllegalArgumentException("Una sucursal se surte con la lista de cremerías o de la ruta.");
+        }
+        if (sucursal.esAlmacen()) {
+            throw new IllegalArgumentException("El almacén no se surte a sí mismo.");
+        }
+        return database.enTransaccion(c -> {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "UPDATE sucursales SET canal_precio = ?, actualizado_en = ? WHERE id = ?")) {
+                ps.setString(1, canal.name());
+                ps.setString(2, Tiempo.ahora());
+                ps.setString(3, sucursal.id());
+                ps.executeUpdate();
+            }
+            return bitacora.registrar(c, AccionBitacora.SUCURSAL_EDITADA, quien, dispositivoId, "sucursales",
+                    sucursal.id(), sucursal.nombre() + ": se surte con la lista «" + canal.nombre() + "»");
+        });
     }
 
     /** Crea (id nulo) o edita una sucursal. Devuelve el folio. */

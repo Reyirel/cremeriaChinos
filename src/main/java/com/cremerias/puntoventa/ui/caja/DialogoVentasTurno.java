@@ -19,7 +19,7 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-/** Ventas del turno con opción de reimprimir o cancelar. */
+/** Ventas del turno con opción de reimprimir, cancelar o registrar una devolución. */
 final class DialogoVentasTurno {
 
     private static final DateTimeFormatter HORA = DateTimeFormatter.ofPattern("HH:mm");
@@ -29,7 +29,7 @@ final class DialogoVentasTurno {
 
     /** @return acción para refrescar el listado después de cancelar. */
     static Runnable mostrar(Dialogos dialogos, Supplier<List<VentaResumen>> cargar, Consumer<VentaResumen> verTicket,
-                            Consumer<VentaResumen> cancelar) {
+                            Consumer<VentaResumen> cancelar, Consumer<VentaResumen> devolver) {
         Dialogo d = new Dialogo("Ventas del turno", "Doble clic para ver el ticket", "mdi2h-history",
                 Dialogo.Tono.INFO);
         d.setPrefWidth(820);
@@ -79,6 +79,8 @@ final class DialogoVentasTurno {
 
         Button cancelarVenta = d.agregarBoton("Cancelar venta", "mdi2c-close-circle-outline",
                 () -> cancelar.accept(tabla.getSelectionModel().getSelectedItem()), "danger", "flat");
+        Button devolverVenta = d.agregarBoton("Devolución", "mdi2k-keyboard-return",
+                () -> devolver.accept(tabla.getSelectionModel().getSelectedItem()), "flat");
         d.separarBotones();
         Button ver = d.agregarBoton("Ver ticket", "mdi2r-receipt-text-outline",
                 () -> verTicket.accept(tabla.getSelectionModel().getSelectedItem()), "");
@@ -88,6 +90,7 @@ final class DialogoVentasTurno {
                     VentaResumen v = tabla.getSelectionModel().getSelectedItem();
                     return v != null && v.cancelada();
                 }, tabla.getSelectionModel().selectedItemProperty())));
+        devolverVenta.disableProperty().bind(cancelarVenta.disableProperty());
         ver.disableProperty().bind(tabla.getSelectionModel().selectedItemProperty().isNull());
         d.setAlCancelar(d::cerrar);
         d.setAlConfirmar(() -> {

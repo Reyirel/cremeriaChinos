@@ -236,7 +236,21 @@ public class IndicadoresService {
         for (IndicadoresRepository.VentaFila v : ventas) {
             porDia.merge(v.fecha().atZone(zona).toLocalDate(), v.totalCentavos(), Long::sum);
         }
+        // Lo reembolsado por devoluciones se resta el día que se devolvió, igual que en la venta neta.
+        for (IndicadoresRepository.VentaFila r : database.con(c -> indicadores.reembolsosDelPeriodo(c, sucursalId,
+                periodo.inicio(), periodo.fin()))) {
+            porDia.merge(r.fecha().atZone(zona).toLocalDate(), -r.totalCentavos(), Long::sum);
+        }
         return porDia.entrySet().stream().map(e -> new VentaDia(e.getKey(), e.getValue())).toList();
+    }
+
+    /** Devoluciones, ajustes de inventario y diferencias de caja del periodo, para revisar la operación. */
+    public IndicadoresRepository.Operacion calcularOperacion(Usuario quien, String sucursalId, LocalDate desde,
+                                                             LocalDate hasta) {
+        validarAlcance(quien, sucursalId);
+        validarRango(desde, hasta);
+        Rango periodo = rango(desde, hasta, ZoneId.systemDefault());
+        return database.con(c -> indicadores.operacion(c, sucursalId, periodo.inicio(), periodo.fin()));
     }
 
     /** Kilos vendidos del periodo (gramaje neto) contra la meta de kilos, si el periodo es un solo mes. */

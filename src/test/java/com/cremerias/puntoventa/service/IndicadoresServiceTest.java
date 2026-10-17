@@ -17,9 +17,11 @@ import com.cremerias.puntoventa.model.TipoGasto;
 import com.cremerias.puntoventa.model.Turno;
 import com.cremerias.puntoventa.model.Usuario;
 import com.cremerias.puntoventa.repository.DispositivoRepository;
+import com.cremerias.puntoventa.repository.IndicadoresRepository;
 import com.cremerias.puntoventa.security.PasswordHasher;
 import com.cremerias.puntoventa.service.admin.Administracion;
 import com.cremerias.puntoventa.service.admin.ProductoAdminService;
+import com.cremerias.puntoventa.util.Ids;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -54,6 +56,8 @@ class IndicadoresServiceTest {
     private VentaService ventas;
     private Administracion adm;
     private IndicadoresService indicadores;
+    private DevolucionService devoluciones;
+    private AjusteService ajustes;
     private Sesion sesionCajero;
     private Usuario admin;
     private Usuario supervisor;
@@ -73,6 +77,8 @@ class IndicadoresServiceTest {
         caja = new CajaService(db, dispositivo);
         ventas = new VentaService(db, dispositivo);
         adm = new Administracion(db, hasher, Clock.systemUTC(), dispositivo);
+        devoluciones = new DevolucionService(db, dispositivo);
+        ajustes = new AjusteService(db, dispositivo);
         indicadores = new IndicadoresService(db, dispositivo, adm.gastos(), adm.nomina(), adm.credito());
         sesionCajero = ((ResultadoLogin.Exitoso) auth.iniciarSesion("cajero", "cajero123".toCharArray(),
                 ModoConexion.OFFLINE)).sesion();
@@ -131,6 +137,43 @@ class IndicadoresServiceTest {
         assertEquals(indicadores.calcular(admin, matriz, desde, hoy).ventaNeta(),
                 dias.stream().mapToLong(IndicadoresService.VentaDia::totalCentavos).sum());
         assertThrows(IllegalStateException.class, () -> indicadores.ventaPorDia(supervisor, admin.sucursalId(), hoy, hoy));
+    }
+
+    /**
+     * 10 bolillos vendidos en 3000 (costo 2100). El cliente regresa 4 en buen estado (vuelven al
+     * inventario) y 1 aplastado (se tira): se reembolsan 1500. La venta neta queda en 1500 y el costo
+     * en 6 × 210 = 1260 (lo aplastado sigue siendo costo: se perdió). La venta por día cuadra.
+     */
+    @Test
+    void lasDevolucionesRestanVentaYSoloLoVendibleRegresaElCosto() {
+        Turno turno = caja.abrir(sesionCajero, 0);
+        Producto bolillo = catalogo.buscar("bolillo", 1).getFirst();
+        Ticket t = ventas.registrar(List.of(new VentaService.Renglon(bolillo, new BigDecimal("10"))),
+                List.of(new Pago(MetodoPago.EFECTIVO, 3000, null)), sesionCajero, turno);
+        String detalle = devoluciones.buscarVenta(t.folio(), matriz).orElseThrow().renglones().getFirst().ventaDetalleId();
+        devoluciones.registrar(Ids.nuevo(), t.ventaId(), List.of(
+                        new DevolucionService.LineaDevolucion(detalle, new BigDecimal("4"), DevolucionService.EstadoProducto.VENDIBLE),
+                        new DevolucionService.LineaDevolucion(detalle, BigDecimal.ONE, DevolucionService.EstadoProducto.DANADO)),
+                DevolucionService.Tipo.DEVOLUCION, DevolucionService.Metodo.EFECTIVO, "Venían aplastados", turno,
+                sesionCajero.usuario(), supervisor);
+        ajustes.registrar(Ids.nuevo(), sucursalMatriz(), productoAdmin("Bolillo"), AjusteService.Motivo.FALTANTE,
+                new BigDecimal("-1"), null, null, null, admin);
+
+        LocalDate hoy = LocalDate.now();
+        IndicadoresService.Resumen r = indicadores.calcular(admin, matriz, hoy, hoy);
+        assertEquals(1500, r.ventaNeta());
+        assertEquals(1260, r.costoVenta());
+        assertEquals(240, r.utilidadBruta());
+        assertEquals(r.ventaNeta(), indicadores.ventaPorDia(admin, matriz, hoy, hoy).stream()
+                .mapToLong(IndicadoresService.VentaDia::totalCentavos).sum());
+
+        IndicadoresRepository.Operacion op = indicadores.calcularOperacion(admin, matriz, hoy, hoy);
+        assertEquals(1, op.devoluciones());
+        assertEquals(1500, op.reembolsadoCentavos());
+        assertEquals(210, op.costoNoVendibleCentavos());
+        assertEquals(210, op.ajustesPerdidaCentavos());
+        assertEquals(0, op.ajustesSobranteCentavos());
+        assertThrows(IllegalStateException.class, () -> indicadores.calcularOperacion(supervisor, admin.sucursalId(), hoy, hoy));
     }
 
     @Test

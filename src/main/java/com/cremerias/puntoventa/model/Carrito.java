@@ -81,15 +81,27 @@ public class Carrito {
         lineas.setAll(nuevas);
     }
 
-    /** Recalcula importes: los renglones consumen los lotes en orden, como se guardará la venta. */
+    /**
+     * Recalcula importes: los renglones consumen los lotes en orden, como se guardará la venta, y
+     * el nivel de mayoreo se decide con la cantidad total de cada producto en la venta (en unidades
+     * base: una caja de 12 cuenta 12 piezas). Es el mismo cálculo que hace {@code VentaService}.
+     */
     private void recalcular() {
         long suma = 0;
         BigDecimal piezas = BigDecimal.ZERO;
+        java.util.Map<String, BigDecimal> totalesBase = new java.util.HashMap<>();
+        for (LineaVenta linea : lineas) {
+            totalesBase.merge(linea.producto().productoId(), linea.producto().base(linea.getCantidad()), BigDecimal::add);
+        }
+        java.time.LocalDate hoy = java.time.LocalDate.now();
         java.util.Map<String, BigDecimal> consumido = new java.util.HashMap<>();
         for (LineaVenta linea : lineas) {
-            linea.setImporte(linea.producto().cotizar(consumido, linea.getCantidad()).totalCentavos());
+            Producto p = linea.producto();
+            long lista = p.cotizar(consumido, linea.getCantidad()).totalCentavos();
+            Escala escala = Escalas.aplicable(p.escalas(), hoy, totalesBase.get(p.productoId()));
+            linea.aplicar(Escalas.aplicar(lista, linea.getCantidad(), escala));
             suma += linea.getImporte();
-            piezas = piezas.add(linea.producto().unidad().esGranel() ? BigDecimal.ONE : linea.getCantidad());
+            piezas = piezas.add(p.unidad().esGranel() ? BigDecimal.ONE : linea.getCantidad());
         }
         total.set(suma);
         articulos.set(piezas);

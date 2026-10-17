@@ -186,11 +186,28 @@ public class TurnoRepository {
             }
         }
 
+        int devoluciones = 0;
+        long devuelto = 0;
+        long reembolsosEfectivo = 0;
+        try (PreparedStatement ps = c.prepareStatement("""
+                SELECT COUNT(*), COALESCE(SUM(reembolso_centavos), 0),
+                       COALESCE(SUM(CASE WHEN metodo_reembolso = 'EFECTIVO' THEN reembolso_centavos ELSE 0 END), 0)
+                FROM devoluciones_venta WHERE turno_id = ?""")) {
+            ps.setString(1, turno.id());
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    devoluciones = rs.getInt(1);
+                    devuelto = rs.getLong(2);
+                    reembolsosEfectivo = rs.getLong(3);
+                }
+            }
+        }
+
         return new ResumenTurno(turno, ventas, canceladas, total, totalCancelado,
                 porMetodo.getOrDefault(MetodoPago.EFECTIVO, 0L),
                 porMetodo.getOrDefault(MetodoPago.TARJETA, 0L),
                 porMetodo.getOrDefault(MetodoPago.TRANSFERENCIA, 0L),
-                entradas, retiros, Instant.now());
+                entradas, retiros, Instant.now(), devoluciones, devuelto, reembolsosEfectivo);
     }
 
     public void cerrar(Connection c, String turnoId, long esperado, long contado, String notas, String cerradoPor)

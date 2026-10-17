@@ -16,6 +16,10 @@ public class Administracion {
     private final OrdenService ordenes;
     private final LimitesService limites;
     private final CreditoService credito;
+    private final PreciosService precios;
+    private final CompraService compras;
+    private final RecepcionSurtidoService recepciones;
+    private final DevolucionSucursalService devolucionesSucursal;
     private final ComisionService comisiones;
     private final GastoService gastos;
     private final NominaService nomina;
@@ -28,7 +32,11 @@ public class Administracion {
         this.usuarios = new UsuarioService(database, hasher, dispositivoId);
         this.productos = new ProductoAdminService(database, reloj, dispositivoId);
         this.almacen = new AlmacenService(database, dispositivoId, almacenId);
-        this.surtidos = new SurtidoService(database, dispositivoId, almacen);
+        this.precios = new PreciosService(database, dispositivoId, almacenId);
+        this.surtidos = new SurtidoService(database, dispositivoId, almacen, precios);
+        this.compras = new CompraService(database, dispositivoId, almacenId);
+        this.recepciones = new RecepcionSurtidoService(database, dispositivoId, almacenId);
+        this.devolucionesSucursal = new DevolucionSucursalService(database, dispositivoId, almacenId);
         this.ordenes = new OrdenService(database, dispositivoId);
         this.limites = new LimitesService(database, dispositivoId);
         this.credito = new CreditoService(database, dispositivoId);
@@ -69,6 +77,22 @@ public class Administracion {
 
     public CreditoService credito() {
         return credito;
+    }
+
+    public PreciosService precios() {
+        return precios;
+    }
+
+    public CompraService compras() {
+        return compras;
+    }
+
+    public RecepcionSurtidoService recepciones() {
+        return recepciones;
+    }
+
+    public DevolucionSucursalService devolucionesSucursal() {
+        return devolucionesSucursal;
     }
 
     public ComisionService comisiones() {

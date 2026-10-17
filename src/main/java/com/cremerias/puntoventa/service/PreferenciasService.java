@@ -59,6 +59,15 @@ public class PreferenciasService {
         marcar(ConfigLocalRepository.MENU_COMPACTO, compacto);
     }
 
+    /** Imprimir todo el ticket en negritas (sale más oscuro en térmicas con poco contraste). */
+    public boolean ticketEnNegritas() {
+        return marcada(ConfigLocalRepository.TICKET_NEGRITAS);
+    }
+
+    public void guardarTicketEnNegritas(boolean negritas) {
+        marcar(ConfigLocalRepository.TICKET_NEGRITAS, negritas);
+    }
+
     private boolean marcada(String clave) {
         return database.con(c -> config.obtener(c, clave)).map("1"::equals).orElse(false);
     }

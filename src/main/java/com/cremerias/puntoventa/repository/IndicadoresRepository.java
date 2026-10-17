@@ -33,14 +33,97 @@ public class IndicadoresRepository {
     public record MarcaKilos(String marca, BigDecimal gramos) {
     }
 
-    /** Suma de ventas completadas (no canceladas) del periodo. */
+    /**
+     * Ventas completadas (no canceladas) del periodo menos lo reembolsado a clientes por devoluciones
+     * en el periodo (la devolución cuenta el día en que se hace, como en el corte de caja).
+     */
     public long ventaNeta(Connection c, String sucursalId, Instant desde, Instant hastaExclusivo) throws SQLException {
         try (PreparedStatement ps = c.prepareStatement("""
-                SELECT COALESCE(SUM(total_centavos), 0) FROM ventas
-                WHERE sucursal_id = ? AND estado = 'COMPLETADA' AND fecha >= ? AND fecha < ?""")) {
+                SELECT COALESCE((SELECT SUM(total_centavos) FROM ventas
+                                 WHERE sucursal_id = ? AND estado = 'COMPLETADA' AND fecha >= ? AND fecha < ?), 0)
+                     - COALESCE((SELECT SUM(reembolso_centavos) FROM devoluciones_venta
+                                 WHERE sucursal_id = ? AND fecha >= ? AND fecha < ?), 0)""")) {
+            for (int i = 0; i < 2; i++) {
+                ps.setString(1 + i * 3, sucursalId);
+                ps.setString(2 + i * 3, Tiempo.formatear(desde));
+                ps.setString(3 + i * 3, Tiempo.formatear(hastaExclusivo));
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getLong(1);
+            }
+        }
+    }
+
+    /** Fecha y monto de cada reembolso a clientes del periodo (para restarlo por día). */
+    public List<VentaFila> reembolsosDelPeriodo(Connection c, String sucursalId, Instant desde, Instant hastaExclusivo)
+            throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement("""
+                SELECT fecha, reembolso_centavos FROM devoluciones_venta
+                WHERE sucursal_id = ? AND fecha >= ? AND fecha < ?""")) {
             ps.setString(1, sucursalId);
             ps.setString(2, Tiempo.formatear(desde));
             ps.setString(3, Tiempo.formatear(hastaExclusivo));
+            try (ResultSet rs = ps.executeQuery()) {
+                List<VentaFila> filas = new ArrayList<>();
+                while (rs.next()) {
+                    filas.add(new VentaFila(Tiempo.leer(rs.getString(1)), rs.getLong(2)));
+                }
+                return filas;
+            }
+        }
+    }
+
+    /** Devoluciones, ajustes y diferencias de caja del periodo (todo al costo, salvo lo reembolsado). */
+    public record Operacion(int devoluciones, long reembolsadoCentavos, long costoNoVendibleCentavos,
+                            long ajustesPerdidaCentavos, long ajustesSobranteCentavos, long faltantesCajaCentavos,
+                            long sobrantesCajaCentavos) {
+    }
+
+    public Operacion operacion(Connection c, String sucursalId, Instant desde, Instant hastaExclusivo) throws SQLException {
+        String d = Tiempo.formatear(desde);
+        String h = Tiempo.formatear(hastaExclusivo);
+        int devoluciones;
+        long reembolsado;
+        try (PreparedStatement ps = c.prepareStatement("""
+                SELECT COUNT(*), COALESCE(SUM(reembolso_centavos), 0) FROM devoluciones_venta
+                WHERE sucursal_id = ? AND fecha >= ? AND fecha < ?""")) {
+            ps.setString(1, sucursalId);
+            ps.setString(2, d);
+            ps.setString(3, h);
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                devoluciones = rs.getInt(1);
+                reembolsado = rs.getLong(2);
+            }
+        }
+        long noVendible = suma(c, """
+                SELECT COALESCE(SUM(x.costo_centavos), 0) FROM devolucion_venta_detalle x
+                JOIN devoluciones_venta v ON v.id = x.devolucion_id
+                WHERE v.sucursal_id = ? AND v.fecha >= ? AND v.fecha < ? AND x.estado_producto <> 'VENDIBLE'""",
+                sucursalId, d, h);
+        long perdida = -suma(c, """
+                SELECT COALESCE(SUM(costo_centavos), 0) FROM ajustes_inventario
+                WHERE sucursal_id = ? AND fecha >= ? AND fecha < ? AND cantidad < 0""", sucursalId, d, h);
+        long sobrante = suma(c, """
+                SELECT COALESCE(SUM(costo_centavos), 0) FROM ajustes_inventario
+                WHERE sucursal_id = ? AND fecha >= ? AND fecha < ? AND cantidad > 0""", sucursalId, d, h);
+        long faltantesCaja = -suma(c, """
+                SELECT COALESCE(SUM(diferencia_centavos), 0) FROM turnos_caja
+                WHERE sucursal_id = ? AND cerrado_en >= ? AND cerrado_en < ? AND diferencia_centavos < 0""",
+                sucursalId, d, h);
+        long sobrantesCaja = suma(c, """
+                SELECT COALESCE(SUM(diferencia_centavos), 0) FROM turnos_caja
+                WHERE sucursal_id = ? AND cerrado_en >= ? AND cerrado_en < ? AND diferencia_centavos > 0""",
+                sucursalId, d, h);
+        return new Operacion(devoluciones, reembolsado, noVendible, perdida, sobrante, faltantesCaja, sobrantesCaja);
+    }
+
+    private static long suma(Connection c, String sql, String... parametros) throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement(sql)) {
+            for (int i = 0; i < parametros.length; i++) {
+                ps.setString(i + 1, parametros[i]);
+            }
             try (ResultSet rs = ps.executeQuery()) {
                 rs.next();
                 return rs.getLong(1);
@@ -66,7 +149,12 @@ public class IndicadoresRepository {
             ps.setString(3, Tiempo.formatear(hastaExclusivo));
             try (ResultSet rs = ps.executeQuery()) {
                 rs.next();
-                return rs.getLong(1);
+                // Lo que un cliente devolvió en buen estado regresó al inventario: ya no es costo de lo vendido.
+                return rs.getLong(1) - suma(c, """
+                        SELECT COALESCE(SUM(ROUND(mi.cantidad * l.costo_unitario_centavos)), 0)
+                        FROM movimientos_inventario mi JOIN lotes l ON l.id = mi.lote_id
+                        WHERE mi.tipo = 'DEVOLUCION_CLIENTE' AND mi.sucursal_id = ? AND mi.fecha >= ? AND mi.fecha < ?""",
+                        sucursalId, Tiempo.formatear(desde), Tiempo.formatear(hastaExclusivo));
             }
         }
     }

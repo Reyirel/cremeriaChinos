@@ -48,6 +48,8 @@ final class DialogoProducto {
         final TextField contenido = new TextField();
         final Label unidadContenido = new Label();
         final TextField codigo = new TextField();
+        /** Merma al preparar cada venta (derivados como queso rallado); vacío = sin merma. */
+        final TextField merma = new TextField();
         final RadioButton principal = new RadioButton();
         final CheckBox activa = new CheckBox();
         final Button quitar = new Button(null, new FontIcon("mdi2t-trash-can-outline"));
@@ -61,7 +63,7 @@ final class DialogoProducto {
         Dialogo d = new Dialogo(nuevo ? "Nuevo producto" : "Editar producto",
                 nuevo ? "Captura sus datos y las presentaciones en que se vende." : p.nombre(),
                 "mdi2p-package-variant-closed", Dialogo.Tono.ACENTO);
-        d.setPrefWidth(880);
+        d.setPrefWidth(960);
 
         TextField nombre = new TextField(nuevo ? "" : p.nombre());
         nombre.setPromptText("Ej. Queso Oaxaca");
@@ -233,7 +235,8 @@ final class DialogoProducto {
         };
         redibujar[0] = () -> {
             grid.getChildren().clear();
-            String[] titulos = {"Principal", "Nombre", "Se vende", "Contenido", "", "Código de barras", "Activa", ""};
+            String[] titulos = {"Principal", "Nombre", "Se vende", "Contenido", "", "Merma %", "Código de barras", "Activa",
+                    ""};
             for (int i = 0; i < titulos.length; i++) {
                 Label l = new Label(titulos[i]);
                 l.getStyleClass().add("grid-surtido-encabezado");
@@ -242,7 +245,8 @@ final class DialogoProducto {
             }
             int r = 1;
             for (Fila f : filas) {
-                grid.addRow(r++, f.principal, f.nombre, f.tipo, f.contenido, f.unidadContenido, f.codigo, f.activa, f.quitar);
+                grid.addRow(r++, f.principal, f.nombre, f.tipo, f.contenido, f.unidadContenido, f.merma, f.codigo, f.activa,
+                        f.quitar);
             }
         };
         if (nuevo) {
@@ -255,6 +259,7 @@ final class DialogoProducto {
                 f.tipo.setValue(pr.granel() ? "A granel" : "Por unidad");
                 f.contenido.setText(Cantidades.aCaptura(p.unidad(), pr.factor()));
                 f.codigo.setText(pr.codigoBarras() == null ? "" : pr.codigoBarras());
+                f.merma.setText(pr.mermaPct().signum() == 0 ? "" : pr.mermaPct().stripTrailingZeros().toPlainString());
                 f.principal.setSelected(pr.principal());
                 f.activa.setSelected(pr.activo());
                 f.quitar.setOnAction(e -> {
@@ -292,7 +297,9 @@ final class DialogoProducto {
         });
         VBox seccionPresentaciones = Formulario.seccionSeparada("Presentaciones",
                 "«Contenido» es cuánto trae cada presentación en la unidad del producto: piezas (ej. Caja = 12) o "
-                        + "gramos (ej. Pieza de queso = 400). A granel siempre es 1000 g = 1 kg.",
+                        + "gramos (ej. Pieza de queso = 400). A granel siempre es 1000 g = 1 kg. «Merma %» es solo para "
+                        + "lo que se prepara al venderse (ej. queso rallado): al vender se descuenta además ese porcentaje "
+                        + "del inventario y queda registrado como merma.",
                 grid, masPresentacion);
 
         VBox generales = Formulario.seccion(null, null,
@@ -316,7 +323,7 @@ final class DialogoProducto {
                 BigDecimal factor = granel ? BigDecimal.ONE
                         : Cantidades.desdeCaptura(unidad.getValue(), f.contenido.getText()).orElse(null);
                 lista.add(new Presentacion(f.id, nuevo ? null : p.id(), f.nombre.getText(), granel, factor,
-                        f.codigo.getText(), f.principal.isSelected(), f.activa.isSelected()));
+                        f.codigo.getText(), f.principal.isSelected(), f.activa.isSelected(), porcentaje(f.merma.getText())));
             }
             AvisoSinVenta aviso = avisar.isSelected() ? new AvisoSinVenta(entero(plazo.getText()),
                     unidadPlazo.getValue(), avisarAdmin.isSelected(), avisarSupervisor.isSelected(),
@@ -355,6 +362,18 @@ final class DialogoProducto {
         }
     }
 
+    /** Porcentaje capturado; vacío o inválido = 0 (el servicio valida el rango). */
+    private static BigDecimal porcentaje(String texto) {
+        if (texto == null || texto.isBlank()) {
+            return BigDecimal.ZERO;
+        }
+        try {
+            return new BigDecimal(texto.strip());
+        } catch (NumberFormatException e) {
+            return BigDecimal.ZERO;
+        }
+    }
+
     private static Fila nuevaFila(ToggleGroup principales, Unidad unidad) {
         Fila f = new Fila();
         f.principal.setToggleGroup(principales);
@@ -365,6 +384,12 @@ final class DialogoProducto {
         f.contenido.setAlignment(Pos.CENTER_RIGHT);
         Campos.soloNumeros(f.contenido, 0);
         f.codigo.setPromptText("Opcional");
+        f.merma.setPromptText("0");
+        f.merma.setPrefColumnCount(4);
+        f.merma.setAlignment(Pos.CENTER_RIGHT);
+        f.merma.setAccessibleText("Merma al preparar, en porcentaje");
+        f.merma.setTooltip(new Tooltip("Solo para lo que se prepara al venderse (ej. rallado). Déjalo vacío si no aplica."));
+        Campos.soloNumeros(f.merma, 2);
         f.tipo.setPrefWidth(140);
         f.tipo.setMinWidth(140);
         f.unidadContenido.setMinWidth(Region.USE_PREF_SIZE);

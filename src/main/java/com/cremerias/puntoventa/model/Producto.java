@@ -1,6 +1,7 @@
 package com.cremerias.puntoventa.model;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -18,6 +19,8 @@ import java.util.Map;
  * @param inventarioMinimo mínimo configurado para la sucursal (0 si no hay)
  * @param tramos          lotes con existencia y su precio, del más antiguo al más nuevo
  * @param tramoExtra      lote y precio para cotizar lo que exceda la existencia (no se deja vender)
+ * @param escalas         escalas de mayoreo que cubren esta presentación en la sucursal
+ * @param mermaPct        merma del derivado: al venderlo se descuenta además este % del original
  */
 public record Producto(
         String id,
@@ -34,8 +37,26 @@ public record Producto(
         BigDecimal existencia,
         BigDecimal inventarioMinimo,
         List<Tarifa.Tramo> tramos,
-        Tarifa.Tramo tramoExtra
+        Tarifa.Tramo tramoExtra,
+        List<Escala> escalas,
+        BigDecimal mermaPct
 ) {
+
+    private static final BigDecimal CIEN = BigDecimal.valueOf(100);
+
+    public Producto {
+        escalas = escalas == null ? List.of() : List.copyOf(escalas);
+        mermaPct = mermaPct == null ? BigDecimal.ZERO : mermaPct;
+    }
+
+    /** Artículo sin escalas de mayoreo ni merma. */
+    public Producto(String id, String productoId, String codigoBarras, String clave, String codigoInventario,
+                    String nombre, String categoria, Unidad unidad, Unidad unidadBase, BigDecimal factor,
+                    long precioCentavos, BigDecimal existencia, BigDecimal inventarioMinimo,
+                    List<Tarifa.Tramo> tramos, Tarifa.Tramo tramoExtra) {
+        this(id, productoId, codigoBarras, clave, codigoInventario, nombre, categoria, unidad, unidadBase, factor,
+                precioCentavos, existencia, inventarioMinimo, tramos, tramoExtra, List.of(), BigDecimal.ZERO);
+    }
 
     public boolean sinExistencia() {
         return existencia.signum() <= 0;
@@ -43,6 +64,19 @@ public record Producto(
 
     public boolean existenciaBaja() {
         return !sinExistencia() && inventarioMinimo.signum() > 0 && existencia.compareTo(inventarioMinimo) <= 0;
+    }
+
+    /** Unidades base que salen del inventario al vender esta cantidad (sin merma). */
+    public BigDecimal base(BigDecimal cantidad) {
+        return unidad.normalizar(cantidad).multiply(factor);
+    }
+
+    /** Merma que se descuenta del producto original al vender esta cantidad (0 si no es derivado con merma). */
+    public BigDecimal mermaBase(BigDecimal cantidad) {
+        if (mermaPct.signum() <= 0) {
+            return BigDecimal.ZERO;
+        }
+        return base(cantidad).multiply(mermaPct).divide(CIEN, 3, RoundingMode.HALF_UP);
     }
 
     /** Importe de esta cantidad considerando lo ya tomado de cada lote por otros renglones. */

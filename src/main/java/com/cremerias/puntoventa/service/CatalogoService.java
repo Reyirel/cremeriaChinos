@@ -1,9 +1,12 @@
 package com.cremerias.puntoventa.service;
 
 import com.cremerias.puntoventa.db.Database;
+import com.cremerias.puntoventa.model.Escala;
+import com.cremerias.puntoventa.model.Escalas;
 import com.cremerias.puntoventa.model.Producto;
 import com.cremerias.puntoventa.model.Unidad;
 import com.cremerias.puntoventa.repository.LoteRepository;
+import com.cremerias.puntoventa.repository.PreciosRepository;
 import com.cremerias.puntoventa.util.CodigoBarras;
 
 import java.math.BigDecimal;
@@ -40,6 +43,7 @@ public class CatalogoService {
     private final Database database;
     private volatile String sucursalId;
     private final LoteRepository lotes = new LoteRepository();
+    private final PreciosRepository preciosRepo = new PreciosRepository();
 
     private volatile List<Indexado> indice = List.of();
     private volatile Map<String, Producto> porCodigo = Map.of();
@@ -109,6 +113,11 @@ public class CatalogoService {
                 }
             }
         }
+        // Escalas de mayoreo que pueden aplicar en la sucursal, por producto.
+        Map<String, List<Escala>> escalasPorProducto = new HashMap<>();
+        for (Escala e : preciosRepo.escalasDeSucursal(c, sucursalId)) {
+            escalasPorProducto.computeIfAbsent(e.productoId(), k -> new ArrayList<>()).add(e);
+        }
         Map<String, BigDecimal> minimos = new HashMap<>();
         try (PreparedStatement ps = c.prepareStatement(
                 "SELECT producto_id, minimo FROM limites_sucursal WHERE sucursal_id = ?")) {
@@ -123,7 +132,8 @@ public class CatalogoService {
         List<Producto> lista = new ArrayList<>();
         try (PreparedStatement ps = c.prepareStatement("""
                 SELECT pr.id, pr.producto_id, pr.nombre AS presentacion, pr.tipo, pr.factor, pr.codigo_barras,
-                       pr.es_principal, p.nombre, p.clave, p.codigo_inventario, p.unidad, c.nombre AS categoria
+                       pr.es_principal, pr.merma_pct, p.nombre, p.clave, p.codigo_inventario, p.unidad,
+                       c.nombre AS categoria
                 FROM presentaciones pr
                 JOIN productos p ON p.id = pr.producto_id
                 LEFT JOIN categorias c ON c.id = p.categoria_id
@@ -148,7 +158,10 @@ public class CatalogoService {
                         tramos.precioActual(),
                         existencias.getOrDefault(productoId, BigDecimal.ZERO.setScale(3)),
                         minimos.getOrDefault(productoId, BigDecimal.ZERO),
-                        tramos.tramos(), tramos.extra()));
+                        tramos.tramos(), tramos.extra(),
+                        Escalas.deArticulo(escalasPorProducto.getOrDefault(productoId, List.of()), rs.getString("id"),
+                                sucursalId),
+                        BigDecimal.valueOf(rs.getDouble("merma_pct"))));
             }
         }
         return lista;

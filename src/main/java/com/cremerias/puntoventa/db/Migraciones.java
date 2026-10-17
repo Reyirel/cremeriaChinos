@@ -43,7 +43,13 @@ public class Migraciones {
             "V11__temporada_productos.sql",
             "V12__metas_kpi.sql",
             "V13__gastos_y_nomina.sql",
-            "V14__marca_productos.sql"
+            "V14__marca_productos.sql",
+            "V15__movimientos_credito_y_precios.sql",
+            "V16__reglas_y_escalas_de_precio.sql",
+            "V17__compras_y_proveedores.sql",
+            "V18__ajustes_y_transformaciones.sql",
+            "V19__devoluciones.sql",
+            "V20__recepcion_y_cancelacion_de_surtidos.sql"
     );
 
     private final Database database;
@@ -53,10 +59,17 @@ public class Migraciones {
     }
 
     public void aplicar() {
+        aplicarHasta(Integer.MAX_VALUE);
+    }
+
+    /** Aplica las migraciones hasta la versión indicada (inclusive). Visible para probar la migración de bases viejas. */
+    void aplicarHasta(int versionMaxima) {
         database.con(conexion -> {
             crearTablaControl(conexion);
             for (String archivo : MIGRACIONES) {
-                aplicarSiFalta(conexion, archivo);
+                if (version(archivo) <= versionMaxima) {
+                    aplicarSiFalta(conexion, archivo);
+                }
             }
             return null;
         });

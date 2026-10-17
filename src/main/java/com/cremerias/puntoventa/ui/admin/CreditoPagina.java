@@ -10,6 +10,7 @@ import com.cremerias.puntoventa.ui.componentes.EstadoVacio;
 import com.cremerias.puntoventa.ui.componentes.Etiqueta;
 import com.cremerias.puntoventa.ui.componentes.Formulario;
 import com.cremerias.puntoventa.ui.componentes.ResumenMetricas;
+import com.cremerias.puntoventa.ui.componentes.Segmentado;
 import com.cremerias.puntoventa.ui.componentes.TablaDatos;
 import com.cremerias.puntoventa.ui.componentes.TicketTexto;
 import com.cremerias.puntoventa.ui.componentes.Texto;
@@ -22,25 +23,40 @@ import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Crédito de cada sucursal con el almacén: cargos por surtidos a crédito, abonos y saldo. */
+/**
+ * Crédito de cada sucursal con el almacén: cargos por surtidos a crédito (a precio interno),
+ * abonos, notas de crédito (devoluciones, diferencias de entrega, cancelaciones), las notas que
+ * siguen pendientes y la antigüedad del saldo.
+ */
 public class CreditoPagina extends Pagina {
 
     /** Movimiento con el saldo que dejó (se calcula en orden cronológico con los movimientos reales). */
     private record Linea(CreditoService.Movimiento movimiento, long saldoDespues) {
     }
 
+    private enum Vista { MOVIMIENTOS, PENDIENTES }
+
+    /** Lo que se carga de la sucursal elegida. */
+    private record DatosSucursal(List<CreditoService.Movimiento> movimientos, List<CreditoService.NotaPendiente> pendientes,
+                                 CreditoService.Antiguedad antiguedad) {
+    }
+
     private final Cargador carga = new Cargador();
     private final Cargador cargaMovimientos = new Cargador();
     private TablaDatos<CreditoService.Saldo> saldos;
     private TablaDatos<Linea> movimientos;
+    private TablaDatos<CreditoService.NotaPendiente> pendientes;
+    private Label antiguedad;
     private ResumenMetricas.Metrica metricaTotal;
     private ResumenMetricas.Metrica metricaConAdeudo;
     private Label titulo;
@@ -62,7 +78,7 @@ public class CreditoPagina extends Pagina {
     @Override
     protected Node construir() {
         VBox pagina = Ui.pagina("Crédito de sucursales",
-                "Los surtidos a crédito se cargan al saldo de la sucursal; los abonos lo reducen.");
+                "Los surtidos a crédito se cargan a precio interno; los abonos y las notas de crédito reducen el saldo.");
         ResumenMetricas resumen = new ResumenMetricas();
         metricaTotal = resumen.agregar("Total por cobrar").principal();
         metricaConAdeudo = resumen.agregar("Sucursales con adeudo");
@@ -115,9 +131,8 @@ public class CreditoPagina extends Pagina {
         movimientos.setClave(l -> l.movimiento().id());
         movimientos.fecha("Fecha", l -> l.movimiento().fecha(), Formatos.FECHA,
                 l -> Formatos.HORA.format(l.movimiento().fecha().atZone(java.time.ZoneId.systemDefault()))).ancho(108);
-        movimientos.dosLineas("Movimiento", l -> "CARGO".equals(l.movimiento().tipo()) ? "Surtido a crédito" : "Abono",
-                l -> l.movimiento().folio()).ancho(164);
-        movimientos.formato("Monto", l -> "CARGO".equals(l.movimiento().tipo()) ? l.movimiento().montoCentavos()
+        movimientos.dosLineas("Movimiento", l -> l.movimiento().concepto().nombre(), l -> l.movimiento().folio()).ancho(250);
+        movimientos.formato("Monto", l -> l.movimiento().esCargo() ? l.movimiento().montoCentavos()
                         : -l.movimiento().montoCentavos(),
                 (l, v) -> (v < 0 ? "−" : "+") + Dinero.formatear(Math.abs(v))).numero().ancho(116)
                 .ayuda("Los cargos suben el saldo (+) y los abonos lo bajan (−).");
@@ -128,9 +143,31 @@ public class CreditoPagina extends Pagina {
                 "Aparecen al surtirle a crédito o al registrar abonos.").compacto());
         movimientos.setSinResultados(new EstadoVacio("mdi2c-credit-card-clock-outline", "Sin movimientos.", null));
 
-        VBox panelDetalle = new VBox(cabecera, movimientos.tabla());
+        pendientes = new TablaDatos<>(Diseno.Densidad.NORMAL);
+        pendientes.setClave(CreditoService.NotaPendiente::cargoId);
+        pendientes.fecha("Fecha", CreditoService.NotaPendiente::fecha, Formatos.FECHA).ancho(100);
+        pendientes.texto("Surtido", CreditoService.NotaPendiente::folio).flexible(150);
+        pendientes.dinero("Importe", CreditoService.NotaPendiente::importeCentavos).ancho(108);
+        pendientes.dinero("Pagado", CreditoService.NotaPendiente::abonadoCentavos).ancho(108)
+                .ayuda("Abonos y notas de crédito aplicados a esta nota (los abonos van primero a la más antigua).");
+        pendientes.dinero("Pendiente", CreditoService.NotaPendiente::pendienteCentavos).ancho(108).clase("columna-fuerte");
+        pendientes.etiqueta("Antigüedad", CreditoService.NotaPendiente::dias, d -> d + (d == 1 ? " día" : " días"),
+                d -> d > 60 ? Etiqueta.Tono.PELIGRO : d > 30 ? Etiqueta.Tono.AVISO : Etiqueta.Tono.NEUTRO).ancho(104);
+        pendientes.setVacio(new EstadoVacio("mdi2c-check-circle-outline", "Sin notas pendientes.",
+                "Todos los surtidos a crédito de esta sucursal están pagados.").compacto());
+        Segmentado<Vista> vista = new Segmentado<Vista>().opcion(Vista.MOVIMIENTOS, "Movimientos")
+                .opcion(Vista.PENDIENTES, "Notas pendientes");
+        antiguedad = Ui.texto("", "campo-ayuda");
+        HBox barraVista = new HBox(12, vista, antiguedad);
+        barraVista.setAlignment(Pos.CENTER_LEFT);
+        barraVista.setStyle("-fx-padding: 0 20 12 20;");
+        StackPane tablas = new StackPane(movimientos.tabla());
+        vista.valorProperty().addListener((o, x, v) -> tablas.getChildren().setAll(v == Vista.PENDIENTES
+                ? pendientes.tabla() : movimientos.tabla()));
+
+        VBox panelDetalle = new VBox(cabecera, barraVista, tablas);
         panelDetalle.getStyleClass().add("panel-tabla");
-        VBox.setVgrow(movimientos.tabla(), Priority.ALWAYS);
+        VBox.setVgrow(tablas, Priority.ALWAYS);
         Diseno.recortarRedondeado(panelDetalle, Diseno.RADIO_PANEL);
         HBox.setHgrow(panelDetalle, Priority.ALWAYS);
         panelDetalle.setMinWidth(0);
@@ -170,17 +207,31 @@ public class CreditoPagina extends Pagina {
             abonar.setDisable(true);
             sinAdeudo.setVisible(false);
             movimientos.setDatos(List.of());
+            pendientes.setDatos(List.of());
+            antiguedad.setText("");
             return;
         }
         titulo.setText(s.sucursal().nombre());
         subtitulo.setText("Código " + s.sucursal().codigo());
         saldo.setText(Dinero.formatear(s.saldo()));
-        detalleSaldo.setText("Cargos " + Dinero.formatear(s.cargos()) + " · Abonos " + Dinero.formatear(s.abonos()));
+        detalleSaldo.setText("Cargos " + Dinero.formatear(s.cargos()) + " · Abonos y notas de crédito "
+                + Dinero.formatear(s.abonos()));
         abonar.setDisable(s.saldo() <= 0);
         sinAdeudo.setVisible(s.saldo() <= 0);
         movimientos.cargando("Cargando movimientos…");
-        cargaMovimientos.cargar(() -> a.admin().credito().movimientos(s.sucursal().id()),
-                lista -> movimientos.setDatos(conSaldo(lista)),
+        pendientes.cargando("Cargando notas…");
+        String id = s.sucursal().id();
+        LocalDate hoy = LocalDate.now();
+        cargaMovimientos.cargar(() -> new DatosSucursal(a.admin().credito().movimientos(id),
+                        a.admin().credito().notasPendientes(id, hoy), a.admin().credito().antiguedad(id, hoy)),
+                datos -> {
+                    movimientos.setDatos(conSaldo(datos.movimientos()));
+                    pendientes.setDatos(datos.pendientes());
+                    CreditoService.Antiguedad an = datos.antiguedad();
+                    antiguedad.setText(an.total() == 0 ? "" : "Por días: 0–30 " + Dinero.formatear(an.de0a30())
+                            + " · 31–60 " + Dinero.formatear(an.de31a60()) + " · 61–90 " + Dinero.formatear(an.de61a90())
+                            + " · +90 " + Dinero.formatear(an.masDe90()));
+                },
                 e -> movimientos.error("No se pudieron cargar los movimientos.", AdminContexto.mensaje(e), () -> mostrar(s)));
     }
 
@@ -191,7 +242,7 @@ public class CreditoPagina extends Pagina {
         Map<String, Long> saldoPorId = new HashMap<>();
         long acumulado = 0;
         for (CreditoService.Movimiento m : cronologico) {
-            acumulado += "CARGO".equals(m.tipo()) ? m.montoCentavos() : -m.montoCentavos();
+            acumulado += m.esCargo() ? m.montoCentavos() : -m.montoCentavos();
             saldoPorId.put(m.id(), acumulado);
         }
         return lista.stream().map(m -> new Linea(m, saldoPorId.get(m.id()))).toList();

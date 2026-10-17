@@ -193,6 +193,24 @@ class CajaYVentasTest {
     }
 
     @Test
+    void cancelarExigeMotivoYQueAutoriceUnSupervisorOAdministrador() {
+        Turno turno = caja.abrir(sesion, 10000);
+        Producto p = producto("refresco");
+        Ticket t = ventas.registrar(List.of(new VentaService.Renglon(p, BigDecimal.ONE)),
+                List.of(new Pago(MetodoPago.EFECTIVO, 2000, null)), sesion, turno);
+        Usuario supervisor = ((ResultadoAutorizacion.Autorizado) auth.autorizar("supervisor", "super123".toCharArray(),
+                EnumSet.of(Rol.SUPERVISOR, Rol.ADMINISTRADOR), "prueba")).autorizador();
+
+        assertThrows(IllegalArgumentException.class,
+                () -> ventas.cancelar(t.ventaId(), turno, sesion.usuario(), supervisor, "  "));
+        // El cajero no se autoriza a sí mismo aunque la pantalla se equivoque.
+        assertThrows(IllegalStateException.class,
+                () -> ventas.cancelar(t.ventaId(), turno, sesion.usuario(), sesion.usuario(), "Error de captura"));
+        ventas.cancelar(t.ventaId(), turno, sesion.usuario(), supervisor, "Error de captura");
+        assertTrue(ventas.ticket(t.ventaId()).cancelada());
+    }
+
+    @Test
     void unCajeroNoPuedeAutorizar() {
         var resultado = auth.autorizar("cajero", "cajero123".toCharArray(), EnumSet.of(Rol.SUPERVISOR), "prueba");
         assertInstanceOf(ResultadoAutorizacion.Denegado.class, resultado);
@@ -201,10 +219,16 @@ class CajaYVentasTest {
     @Test
     void movimientosYCorteDeCaja() {
         Turno turno = caja.abrir(sesion, 50000);
+        Usuario supervisor = ((ResultadoAutorizacion.Autorizado) auth.autorizar("supervisor", "super123".toCharArray(),
+                EnumSet.of(Rol.SUPERVISOR, Rol.ADMINISTRADOR), "prueba")).autorizador();
         caja.registrarMovimiento(turno, CajaService.TipoMovimiento.ENTRADA, 10000, "Morralla", sesion.usuario(), null);
-        caja.registrarMovimiento(turno, CajaService.TipoMovimiento.RETIRO, 30000, "Retiro parcial", sesion.usuario(), null);
+        // Un cajero no retira efectivo sin que lo autorice un supervisor o el administrador.
+        assertThrows(IllegalStateException.class, () -> caja.registrarMovimiento(turno,
+                CajaService.TipoMovimiento.RETIRO, 30000, "Retiro parcial", sesion.usuario(), null));
+        caja.registrarMovimiento(turno, CajaService.TipoMovimiento.RETIRO, 30000, "Retiro parcial", sesion.usuario(),
+                supervisor);
         assertThrows(IllegalArgumentException.class, () -> caja.registrarMovimiento(turno,
-                CajaService.TipoMovimiento.RETIRO, 999999, "Demasiado", sesion.usuario(), null));
+                CajaService.TipoMovimiento.RETIRO, 999999, "Demasiado", sesion.usuario(), supervisor));
 
         ResumenTurno cierre = caja.cerrar(turno, 29000, "Faltaron 10 pesos", sesion.usuario());
         assertEquals(30000, cierre.efectivoEsperado());

@@ -6,6 +6,7 @@ import atlantafx.base.util.Animations;
 import com.cremerias.puntoventa.AppContext;
 import com.cremerias.puntoventa.model.AvisoSinVenta;
 import com.cremerias.puntoventa.model.Carrito;
+import com.cremerias.puntoventa.model.Escala;
 import com.cremerias.puntoventa.model.LineaVenta;
 import com.cremerias.puntoventa.model.Pago;
 import com.cremerias.puntoventa.model.Producto;
@@ -21,6 +22,7 @@ import com.cremerias.puntoventa.model.VentaResumen;
 import com.cremerias.puntoventa.repository.VentaEsperaRepository;
 import com.cremerias.puntoventa.service.CajaService.TipoMovimiento;
 import com.cremerias.puntoventa.service.CatalogoService;
+import com.cremerias.puntoventa.service.DevolucionService;
 import com.cremerias.puntoventa.service.SinVentaService;
 import com.cremerias.puntoventa.service.VentaService;
 import com.cremerias.puntoventa.ui.Navegador;
@@ -30,6 +32,7 @@ import com.cremerias.puntoventa.ui.componentes.DialogoConfirmacion;
 import com.cremerias.puntoventa.ui.componentes.DialogoTexto;
 import com.cremerias.puntoventa.ui.componentes.DialogoTicket;
 import com.cremerias.puntoventa.ui.componentes.Dialogos;
+import com.cremerias.puntoventa.ui.componentes.Etiqueta;
 import com.cremerias.puntoventa.ui.componentes.Impresion;
 import com.cremerias.puntoventa.ui.componentes.TicketTexto;
 import com.cremerias.puntoventa.util.Dinero;
@@ -109,7 +112,7 @@ public class CajaController {
     private static final int MAX_RESULTADOS = 40;
     private static final String[] TOOLTIPS_ACCIONES = {"Cambiar cantidad o peso del producto seleccionado",
             "Quitar el producto seleccionado", "Pausar la venta para atender a otro cliente",
-            "Retomar una venta en espera", "Ventas del turno: reimprimir o cancelar",
+            "Retomar una venta en espera", "Ventas del turno: reimprimir, cancelar o devolver (F7: devolución de otro ticket)",
             "Entrada o retiro de efectivo", "Cancelar la venta en curso", "Corte de caja y cierre del turno"};
 
     private final Navegador navegador;
@@ -126,6 +129,8 @@ public class CajaController {
 
     private Timeline animacionTotal;
     private Turno turno;
+    /** Devolución tipo «cambio» que se liga a la siguiente venta que se cobre. */
+    private String cambioPendiente;
     private BigDecimal multiplicadorPendiente;
     private boolean restaurando;
     private Label textoRecuperar;
@@ -274,15 +279,7 @@ public class CajaController {
         });
 
         TableColumn<LineaVenta, LineaVenta> precio = columna("Precio", 120);
-        precio.setCellFactory(c -> new TableCell<>() {
-            @Override
-            protected void updateItem(LineaVenta item, boolean vacio) {
-                super.updateItem(item, vacio);
-                setText(vacio || item == null ? null : Dinero.formatear(item.producto().precioCentavos())
-                        + (item.producto().unidad() == Unidad.KG ? " /kg" : ""));
-                getStyleClass().add("celda-precio");
-            }
-        });
+        precio.setCellFactory(c -> new CeldaPrecio());
 
         TableColumn<LineaVenta, LineaVenta> cantidad = columna("Cantidad", 170);
         cantidad.setCellFactory(c -> new CeldaCantidad());
@@ -352,6 +349,55 @@ public class CajaController {
         c.setReorderable(false);
         c.setResizable(false);
         return c;
+    }
+
+    /**
+     * Precio por unidad. Con mayoreo muestra el precio que se cobra y el nivel alcanzado; se
+     * actualiza solo al cambiar la cantidad (el carrito recalcula el nivel).
+     */
+    private static final class CeldaPrecio extends TableCell<LineaVenta, LineaVenta> {
+        private final Label valor = new Label();
+        private final Label nivel = Etiqueta.de("", Etiqueta.Tono.ACENTO);
+        private final VBox caja = new VBox(2, valor, nivel);
+        private final javafx.beans.InvalidationListener repintar = o -> pintar();
+        private LineaVenta actual;
+
+        CeldaPrecio() {
+            valor.getStyleClass().add("celda-precio");
+            nivel.managedProperty().bind(nivel.visibleProperty());
+            caja.setAlignment(Pos.CENTER_LEFT);
+        }
+
+        @Override
+        protected void updateItem(LineaVenta item, boolean vacio) {
+            super.updateItem(item, vacio);
+            if (actual != null) {
+                actual.importeProperty().removeListener(repintar);
+                actual.nivelProperty().removeListener(repintar);
+            }
+            actual = vacio ? null : item;
+            if (actual == null) {
+                setGraphic(null);
+                return;
+            }
+            actual.importeProperty().addListener(repintar);
+            actual.nivelProperty().addListener(repintar);
+            pintar();
+            setGraphic(caja);
+        }
+
+        private void pintar() {
+            if (actual == null) {
+                return;
+            }
+            boolean mayoreo = actual.getNivel() != null && actual.getNivel() != Escala.Nivel.MENUDEO;
+            long precio = mayoreo ? actual.precioAplicado() : actual.producto().precioCentavos();
+            valor.setText(Dinero.formatear(precio) + (actual.producto().unidad() == Unidad.KG ? " /kg" : ""));
+            nivel.setVisible(mayoreo);
+            if (mayoreo) {
+                Etiqueta.aplicar(nivel, actual.getNivel().nombre(), Etiqueta.Tono.ACENTO);
+            }
+        }
     }
 
     /** Cantidad con botones − / + (piezas) o botón para capturar el peso (granel). */
@@ -611,6 +657,7 @@ public class CajaController {
             case F4 -> recuperarEspera();
             case F5 -> verVentasTurno();
             case F6 -> movimientoCaja();
+            case F7 -> devolucion();
             case F8 -> cancelarVenta();
             case F9 -> corteCaja();
             case F12 -> onCobrar();
@@ -1028,6 +1075,7 @@ public class CajaController {
         }
         carrito.vaciar();
         ocultarUltimo();
+        ligarCambio(ticket);
         ctx.catalogo().recargar();
         raiz.fireEvent(new Event(VENTA_REGISTRADA));
         ctx.sincronizador().revisarAhora();
@@ -1156,7 +1204,80 @@ public class CajaController {
         }
         Runnable[] refrescar = new Runnable[1];
         refrescar[0] = DialogoVentasTurno.mostrar(dialogos, () -> ctx.ventas().delTurno(turno.id()),
-                this::verTicket, v -> cancelarVentaRegistrada(v, refrescar[0]));
+                this::verTicket, v -> cancelarVentaRegistrada(v, refrescar[0]), v -> devolver(v.id(), refrescar[0]));
+    }
+
+    // =====================================================================
+    // Devoluciones de clientes
+    // =====================================================================
+
+    /** F7: devolución de un ticket de esta sucursal (de este turno o de días anteriores), por su folio. */
+    private void devolucion() {
+        if (!cajaAbierta()) {
+            return;
+        }
+        DialogoTexto.mostrar(dialogos, "Devolución", "Escribe el folio del ticket que trae el cliente.",
+                "mdi2k-keyboard-return", "Folio del ticket", "Ej. VTA-0001-000123", true, "Buscar", folio -> {
+                    Optional<DevolucionService.VentaDevolvible> venta;
+                    try {
+                        venta = ctx.devoluciones().buscarVenta(folio.strip(), sesion.usuario().sucursalId());
+                    } catch (RuntimeException e) {
+                        avisos.error(mensaje(e));
+                        return;
+                    }
+                    if (venta.isEmpty()) {
+                        avisos.advertencia("No encontramos el ticket " + folio.strip() + " en esta sucursal.");
+                        return;
+                    }
+                    abrirDevolucion(venta.get(), () -> { });
+                });
+    }
+
+    private void devolver(String ventaId, Runnable refrescar) {
+        DevolucionService.VentaDevolvible venta;
+        try {
+            venta = ctx.devoluciones().venta(ventaId);
+        } catch (RuntimeException e) {
+            avisos.error(mensaje(e));
+            return;
+        }
+        abrirDevolucion(venta, refrescar);
+    }
+
+    private void abrirDevolucion(DevolucionService.VentaDevolvible venta, Runnable refrescar) {
+        if (venta.cancelada()) {
+            avisos.advertencia("La venta " + venta.folio() + " está cancelada: no hay nada que devolver.");
+            return;
+        }
+        if (!venta.algoPorDevolver()) {
+            avisos.advertencia("Del ticket " + venta.folio() + " ya se devolvió todo.");
+            return;
+        }
+        DialogoDevolucion.mostrar(dialogos, avisos, ctx.devoluciones(), venta, turno, sesion.usuario(),
+                ctx.nombreSucursal(sesion.usuario().sucursalId()), this::autorizar, resultado -> {
+                    if (resultado.tipo() == DevolucionService.Tipo.CAMBIO) {
+                        cambioPendiente = resultado.id();
+                        avisos.info("Cobra los productos del cambio: la siguiente venta quedará ligada a "
+                                + resultado.folio() + ".");
+                    }
+                    refrescar.run();
+                    ctx.catalogo().recargar();
+                    actualizarInfoTurno();
+                    ctx.sincronizador().revisarAhora();
+                });
+    }
+
+    /** La venta que se cobra después de un cambio queda ligada a la devolución. */
+    private void ligarCambio(Ticket ticket) {
+        if (cambioPendiente == null) {
+            return;
+        }
+        try {
+            ctx.devoluciones().ligarCambio(cambioPendiente, ticket.ventaId(), sesion.usuario());
+        } catch (RuntimeException e) {
+            log.warn("No se pudo ligar el cambio {} con la venta {}", cambioPendiente, ticket.folio(), e);
+        }
+        cambioPendiente = null;
     }
 
     private void verTicket(VentaResumen venta) {

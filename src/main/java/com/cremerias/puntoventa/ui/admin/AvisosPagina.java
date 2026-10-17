@@ -41,7 +41,8 @@ public class AvisosPagina extends Pagina {
 
     /** Todo lo que se muestra, cargado de una vez fuera del hilo de la interfaz. */
     private record Pendientes(List<OrdenRepository.Orden> ordenes, List<AccesoService.Bloqueo> bloqueos,
-                              List<SinVentaService.SinVenta> sinVenta, List<Sucursal> sucursales) {
+                              List<SinVentaService.SinVenta> sinVenta, List<Sucursal> sucursales, int negativos,
+                              int diferencias) {
     }
 
     private final Cargador carga = new Cargador();
@@ -111,15 +112,21 @@ public class AvisosPagina extends Pagina {
     @Override
     public void alMostrar() {
         carga.cargar(() -> new Pendientes(a.admin().ordenes().pendientes(), a.ctx().auth().accesos().pendientes(),
-                a.admin().alertas().productosSinVenta(), a.admin().sucursales().activas()), this::pintar,
+                a.admin().alertas().productosSinVenta(), a.admin().sucursales().activas(),
+                a.ctx().reconciliacion().negativos(a.usuario()).size(),
+                a.admin().recepciones().diferencias(true, a.usuario()).size()), this::pintar,
                 e -> secciones.getChildren().setAll(EstadoVacio.error("No se pudieron revisar los pendientes.",
                         AdminContexto.mensaje(e), this::alMostrar)));
     }
 
     private void pintar(Pendientes p) {
         List<Node> nodos = new ArrayList<>();
-        if (p.ordenes().isEmpty() && p.bloqueos().isEmpty() && p.sinVenta().isEmpty()) {
+        if (p.ordenes().isEmpty() && p.bloqueos().isEmpty() && p.sinVenta().isEmpty() && p.negativos() == 0
+                && p.diferencias() == 0) {
             nodos.add(todoAlDia());
+        }
+        if (p.negativos() > 0 || p.diferencias() > 0) {
+            nodos.add(seccionInventario(p.negativos(), p.diferencias()));
         }
         if (!p.ordenes().isEmpty()) {
             nodos.add(seccionOrdenes(p.ordenes()));
@@ -166,6 +173,43 @@ public class AvisosPagina extends Pagina {
         h.getStyleClass().add("todo-al-dia");
         h.setAlignment(Pos.CENTER_LEFT);
         return h;
+    }
+
+    /** Existencias que quedaron negativas al sincronizar y diferencias de entrega sin aclarar. */
+    private Node seccionInventario(int negativos, int diferencias) {
+        VBox lista = new VBox();
+        if (negativos > 0) {
+            lista.getChildren().add(tarea(Texto.plural(negativos, "producto con existencia negativa",
+                            "productos con existencia negativa"),
+                    "Dos cajas vendieron lo mismo sin conexión. Reacomoda los lotes o cuenta y ajusta.", "Revisar",
+                    () -> a.irA().accept("ajustes")));
+        }
+        if (diferencias > 0) {
+            lista.getChildren().add(tarea(Texto.plural(diferencias, "diferencia de surtido por aclarar",
+                            "diferencias de surtido por aclarar"),
+                    "Una sucursal recibió menos de lo enviado: decide si regresó a la bodega o se perdió.", "Aclarar",
+                    () -> a.irA().accept("surtidos")));
+        }
+        VBox panel = Ui.panel("Inventario y surtidos", "Diferencias que no se corrigen solas.", null, lista);
+        quitarRelleno(panel);
+        return panel;
+    }
+
+    private static HBox tarea(String titulo, String detalle, String accion, Runnable ir) {
+        Label t = new Label(titulo);
+        t.getStyleClass().add("tarea-titulo");
+        Label d = new Label(detalle);
+        d.getStyleClass().add("tarea-detalle");
+        d.setWrapText(true);
+        VBox textos = new VBox(2, t, d);
+        textos.setMinWidth(0);
+        HBox.setHgrow(textos, Priority.ALWAYS);
+        Button boton = Ui.boton(accion, null, "small");
+        boton.setOnAction(e -> ir.run());
+        HBox fila = new HBox(12, textos, boton);
+        fila.getStyleClass().add("tarea");
+        fila.setAlignment(Pos.CENTER_LEFT);
+        return fila;
     }
 
     private Node seccionOrdenes(List<OrdenRepository.Orden> ordenes) {

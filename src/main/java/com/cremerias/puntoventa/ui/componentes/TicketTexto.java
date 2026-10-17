@@ -55,7 +55,8 @@ public final class TicketTexto {
                 out.agregar(linea);
             }
             String detalle = "  " + r.unidad().formatear(r.cantidad()) + " x "
-                    + Dinero.formatear(r.precioCentavos()) + (r.unidad() == Unidad.KG ? "/kg" : "");
+                    + Dinero.formatear(r.precioCentavos()) + (r.unidad() == Unidad.KG ? "/kg" : "")
+                    + (r.nivel() == null ? "" : " " + r.nivel().nombre().toLowerCase());
             out.ambos(detalle, Dinero.formatear(r.importeCentavos()));
         }
         out.separador();
@@ -104,6 +105,9 @@ public final class TicketTexto {
         out.ambos("Ventas en efectivo", Dinero.formatear(r.ventasEfectivo()));
         out.ambos("+ Entradas", Dinero.formatear(r.entradas()));
         out.ambos("- Retiros", Dinero.formatear(r.retiros()));
+        if (r.reembolsosEfectivo() > 0) {
+            out.ambos("- Devoluciones en efectivo", Dinero.formatear(r.reembolsosEfectivo()));
+        }
         out.ambos("= Efectivo esperado", Dinero.formatear(r.efectivoEsperado()), Enfasis.DESTACADO);
         out.ambos("Efectivo contado", Dinero.formatear(contado));
         long diferencia = contado - r.efectivoEsperado();
@@ -115,6 +119,10 @@ public final class TicketTexto {
         out.ambos("TOTAL VENDIDO", Dinero.formatear(r.totalVentas()), Enfasis.DESTACADO);
         out.ambos("Número de ventas", String.valueOf(r.numeroVentas()));
         out.ambos("Canceladas (" + r.numeroCanceladas() + ")", Dinero.formatear(r.totalCancelado()));
+        if (r.numeroDevoluciones() > 0) {
+            out.ambos("Devoluciones (" + r.numeroDevoluciones() + ")", Dinero.formatear(r.totalDevuelto()));
+            out.ambos("VENTA NETA", Dinero.formatear(r.ventaNeta()), Enfasis.DESTACADO);
+        }
         if (notas != null && !notas.isBlank()) {
             out.separador();
             out.agregar("Notas:");
@@ -215,6 +223,45 @@ public final class TicketTexto {
         out.centrar("______________________");
         out.centrar("Firma");
         return out;
+    }
+
+    /** Comprobante de una devolución de cliente (lo firma quien recibe el reembolso). */
+    public static List<Linea> lineasDevolucion(com.cremerias.puntoventa.service.DevolucionService.Resultado d,
+                                               String sucursal) {
+        Renglones out = new Renglones();
+        out.centrar(NEGOCIO, Enfasis.DESTACADO);
+        if (sucursal != null) {
+            out.centrar(sucursal, Enfasis.DESTACADO);
+        }
+        out.centrar(d.tipo() == com.cremerias.puntoventa.service.DevolucionService.Tipo.CAMBIO
+                ? "CAMBIO DE MERCANCÍA" : "DEVOLUCIÓN", Enfasis.DESTACADO);
+        out.separador();
+        out.agregar("Folio:    " + d.folio());
+        out.agregar("Ticket:   " + d.ventaFolio());
+        out.agregar("Fecha:    " + fecha(d.fecha()));
+        out.agregar("Atendió:  " + d.usuario());
+        if (d.autorizo() != null && !d.autorizo().equals(d.usuario())) {
+            out.agregar("Autorizó: " + d.autorizo());
+        }
+        out.separador();
+        for (com.cremerias.puntoventa.service.DevolucionService.Resultado.Renglon r : d.renglones()) {
+            for (String linea : ajustar(r.descripcion(), ANCHO)) {
+                out.agregar(linea);
+            }
+            out.ambos("  " + r.unidad().formatear(r.cantidad()) + " · " + r.estado().corto().toLowerCase(),
+                    Dinero.formatear(r.importeCentavos()));
+        }
+        out.separador();
+        out.ambos("REEMBOLSO", Dinero.formatear(d.reembolsoCentavos()), Enfasis.DESTACADO);
+        out.agregar("Forma: " + d.metodo().nombre());
+        for (String linea : ajustar("Motivo: " + d.motivo(), ANCHO)) {
+            out.agregar(linea);
+        }
+        out.agregar("");
+        out.agregar("");
+        out.centrar("______________________");
+        out.centrar("Firma del cliente");
+        return out.lineas();
     }
 
     private static String fecha(Instant instante) {

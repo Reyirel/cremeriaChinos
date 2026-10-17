@@ -32,7 +32,7 @@ public class AdminController implements ConMenuLateral {
     }
 
     /** Lo que cuentan los avisos del menú. */
-    private record Conteos(int ordenes, int bloqueos, int sinVenta) {
+    private record Conteos(int ordenes, int bloqueos, int sinVenta, int inventario) {
     }
 
     private final Navegador navegador;
@@ -71,13 +71,17 @@ public class AdminController implements ConMenuLateral {
         opcion("avisos", "Avisos", "mdi2b-bell-outline", AvisosPagina::new);
         menu.grupo("Almacén");
         opcion("productos", "Productos", "mdi2p-package-variant-closed", ProductosPagina::new);
+        opcion("precios", "Precios y márgenes", "mdi2p-percent-outline", PreciosPagina::new);
         opcion("almacen", "Inventario", "mdi2w-warehouse", AlmacenPagina::new);
+        opcion("compras", "Compras", "mdi2c-cart-arrow-down", ComprasPagina::new);
+        opcion("ajustes", "Ajustes de inventario", "mdi2c-clipboard-edit-outline", AjustesPagina::new);
         opcion("surtidos", "Surtidos", "mdi2t-truck-delivery-outline", SurtidosPagina::new);
         opcion("ordenes", "Órdenes de reabasto", "mdi2c-clipboard-list-outline", OrdenesPagina::new);
         menu.grupo("Sucursales");
         opcion("sucursales", "Sucursales", "mdi2s-storefront-outline", SucursalesPagina::new);
         opcion("productos-sucursal", "Productos por sucursal", "mdi2v-view-list-outline", ProductosSucursalPagina::new);
         opcion("limites", "Mínimos y máximos", "mdi2t-tune-vertical", LimitesPagina::new);
+        opcion("devoluciones", "Devoluciones", "mdi2k-keyboard-return", DevolucionesPagina::new);
         menu.grupo("Finanzas");
         opcion("credito", "Crédito", "mdi2c-credit-card-clock-outline", CreditoPagina::new);
         opcion("gastos", "Gastos", "mdi2c-cash-minus", GastosPagina::new);
@@ -197,10 +201,12 @@ public class AdminController implements ConMenuLateral {
             contexto.admin().productos().revisarTemporadas();
             return new Conteos(contexto.admin().ordenes().contarPendientes(),
                     contexto.ctx().auth().accesos().contarPendientes(),
-                    contexto.admin().alertas().productosSinVenta().size());
+                    contexto.admin().alertas().productosSinVenta().size(),
+                    contexto.ctx().reconciliacion().negativos(contexto.usuario()).size()
+                            + contexto.admin().recepciones().diferencias(true, contexto.usuario()).size());
         }, c -> {
             menu.setContador("ordenes", c.ordenes());
-            menu.setContador("avisos", c.ordenes() + c.bloqueos() + c.sinVenta());
+            menu.setContador("avisos", c.ordenes() + c.bloqueos() + c.sinVenta() + c.inventario());
             if (ordenesAnteriores >= 0 && c.ordenes() > ordenesAnteriores) {
                 contexto.avisos().conAccion("Llegó una nueva orden de reabastecimiento.", "Ver", () -> ir("ordenes"));
             }

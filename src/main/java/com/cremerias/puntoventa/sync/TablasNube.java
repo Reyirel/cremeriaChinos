@@ -13,9 +13,13 @@ final class TablasNube {
      */
     static final List<String> ORDEN = List.of(
             "sucursales", "dispositivo", "usuarios", "usuarios_credenciales", "categorias", "productos",
-            "presentaciones", "lotes", "lote_precios", "turnos_caja", "movimientos_caja", "ventas",
-            "venta_detalle", "venta_pagos", "movimientos_inventario", "surtidos", "surtido_detalle",
-            "movimientos_credito", "mermas", "limites_sucursal", "ordenes_reabastecimiento", "reglas_comision",
+            "presentaciones", "reglas_precio", "escalas_precio", "proveedores", "lotes", "lote_precios",
+            "turnos_caja", "movimientos_caja", "ventas", "venta_detalle", "venta_pagos", "movimientos_inventario",
+            "surtidos", "surtido_detalle", "movimientos_credito", "mermas", "compras", "compra_detalle",
+            "devoluciones_proveedor", "devolucion_proveedor_detalle", "ajustes_inventario", "transformaciones",
+            "devoluciones_venta", "devolucion_venta_detalle", "devoluciones_sucursal", "devolucion_sucursal_detalle",
+            "recepciones_surtido", "recepcion_surtido_detalle", "aclaraciones_surtido", "cancelaciones_surtido",
+            "limites_sucursal", "ordenes_reabastecimiento", "reglas_comision",
             "metas_sucursal", "gastos", "nomina_semanal", "horarios", "bloqueos_acceso", "configuracion_general",
             "alertas_sucursal", "bitacora", "sesiones", "bitacora_accesos");
 
@@ -28,7 +32,12 @@ final class TablasNube {
     static final Map<String, List<Hija>> HIJAS = Map.of(
             "ventas", List.of(new Hija("venta_detalle", "venta_id"), new Hija("venta_pagos", "venta_id")),
             "lotes", List.of(new Hija("lote_precios", "lote_id")),
-            "surtidos", List.of(new Hija("surtido_detalle", "surtido_id")));
+            "surtidos", List.of(new Hija("surtido_detalle", "surtido_id")),
+            "compras", List.of(new Hija("compra_detalle", "compra_id")),
+            "devoluciones_proveedor", List.of(new Hija("devolucion_proveedor_detalle", "devolucion_id")),
+            "devoluciones_venta", List.of(new Hija("devolucion_venta_detalle", "devolucion_id")),
+            "devoluciones_sucursal", List.of(new Hija("devolucion_sucursal_detalle", "devolucion_id")),
+            "recepciones_surtido", List.of(new Hija("recepcion_surtido_detalle", "recepcion_id")));
 
     record Hija(String tabla, String columnaPadre) {
     }

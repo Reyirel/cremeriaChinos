@@ -64,6 +64,10 @@ public class CajaService {
         if (concepto == null || concepto.isBlank()) {
             throw new IllegalArgumentException("Escribe el concepto del movimiento.");
         }
+        // Un cajero no retira efectivo solo: lo autoriza un supervisor de la sucursal o el administrador.
+        if (tipo == TipoMovimiento.RETIRO && usuario.rol() == Rol.CAJERO) {
+            Permisos.exigirAutorizador(autorizador, turno.sucursalId(), "retirar efectivo");
+        }
         database.enTransaccion(c -> {
             if (tipo == TipoMovimiento.RETIRO) {
                 long disponible = turnos.resumen(c, turno).efectivoEsperado();

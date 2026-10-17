@@ -438,7 +438,7 @@ public class ProductosSucursalPagina extends Pagina {
                         if (l.existencia().signum() <= 0) {
                             continue;
                         }
-                        filas.add(PanelDetalle.filaLista(Formatos.origenLote(l.origen()) + " · " + Formatos.fechaCorta(l.fechaIngreso()),
+                        filas.add(PanelDetalle.filaLista(Formatos.origenLote(l.origen(), l.folio()) + " · " + Formatos.fechaCorta(l.fechaIngreso()),
                                 "Costo " + Dinero.formatear(l.costoUnitarioCentavos()) + Formatos.porUnidad(p.unidad()),
                                 Cantidades.formatear(p.unidad(), l.existencia()), null));
                     }

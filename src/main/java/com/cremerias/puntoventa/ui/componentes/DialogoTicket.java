@@ -1,5 +1,6 @@
 package com.cremerias.puntoventa.ui.componentes;
 
+import atlantafx.base.controls.ToggleSwitch;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
@@ -27,7 +28,10 @@ public final class DialogoTicket {
         scroll.setFitToWidth(true);
         scroll.setPrefViewportHeight(Math.min(460, 17 * texto.lines().count() + 48));
         scroll.getStyleClass().add("ticket-scroll");
-        d.setContenido(scroll);
+        ToggleSwitch negritas = new ToggleSwitch("Imprimir todo en negritas (más oscuro)");
+        negritas.setSelected(Impresion.todoEnNegritas());
+        negritas.selectedProperty().addListener((o, antes, ahora) -> Impresion.setTodoEnNegritas(ahora));
+        d.setContenido(scroll, negritas);
 
         Runnable cerrar = () -> {
             d.cerrar();

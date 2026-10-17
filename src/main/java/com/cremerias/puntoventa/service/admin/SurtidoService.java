@@ -4,6 +4,7 @@ import com.cremerias.puntoventa.db.Database;
 import com.cremerias.puntoventa.model.AccionBitacora;
 import com.cremerias.puntoventa.model.Presentacion;
 import com.cremerias.puntoventa.model.ProductoCatalogo;
+import com.cremerias.puntoventa.model.ReglaPrecio;
 import com.cremerias.puntoventa.model.Sucursal;
 import com.cremerias.puntoventa.model.Unidad;
 import com.cremerias.puntoventa.model.Usuario;
@@ -12,6 +13,7 @@ import com.cremerias.puntoventa.repository.InventarioRepository;
 import com.cremerias.puntoventa.repository.LoteRepository;
 import com.cremerias.puntoventa.repository.OrdenRepository;
 import com.cremerias.puntoventa.repository.ProductoRepository;
+import com.cremerias.puntoventa.service.Permisos;
 import com.cremerias.puntoventa.util.Cantidades;
 import com.cremerias.puntoventa.util.Dinero;
 import com.cremerias.puntoventa.util.Ids;
@@ -19,8 +21,10 @@ import com.cremerias.puntoventa.util.Tiempo;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -29,11 +33,22 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Surtido del almacén a una sucursal. La mercancía sale de los lotes más antiguos del almacén
  * (su costo es lo que se envía) y entra a la sucursal como un lote nuevo con el precio de venta
- * de cada presentación. Puede ser en efectivo o a crédito (se carga al saldo de la sucursal).
+ * de cada presentación. Puede ser en efectivo o a crédito.
+ *
+ * <p>Tres importes distintos por surtido:
+ * <ul>
+ *   <li><b>Costo</b>: lo que le costó a la empresa (lotes PEPS del almacén). Es el costo del lote
+ *       en la sucursal, para que la utilidad consolidada no cuente dos veces el margen de bodega.</li>
+ *   <li><b>Precio interno</b>: lo que la sucursal le debe a la bodega = costo con la regla del canal
+ *       de la sucursal ({@code BODEGA_SUCURSAL} o {@code RUTA_SIERRA}). Sin regla es igual al costo.
+ *       Es lo que se carga al crédito.</li>
+ *   <li><b>Valor de venta</b>: lo que vale a los precios al público que se fijan en la sucursal.</li>
+ * </ul>
  */
 public class SurtidoService {
 
@@ -65,13 +80,21 @@ public class SurtidoService {
                          boolean suficiente) {
     }
 
+    /**
+     * @param internoCentavos precio interno de bodega a sucursal (en surtidos anteriores a las reglas
+     *                        de precio, igual al costo)
+     */
     public record Resumen(String id, String folio, Instant fecha, String sucursal, FormaPago formaPago,
                           long costoCentavos, long ventaCentavos, int productos, String usuario, String ordenFolio,
-                          String sucursalId) {
+                          String sucursalId, long internoCentavos) {
     }
 
     public record DetalleLinea(String producto, Unidad unidad, BigDecimal cantidad, long costoCentavos,
-                               long ventaCentavos, Map<String, Long> precios) {
+                               long ventaCentavos, Map<String, Long> precios, long internoCentavos) {
+    }
+
+    /** Precio interno de una línea y la regla con la que se calculó ({@code null} = al costo). */
+    public record PrecioInterno(long importeCentavos, ReglaPrecio regla) {
     }
 
     public record Detalle(Resumen resumen, List<DetalleLinea> lineas, String notas, long saldoCredito) {
@@ -80,15 +103,44 @@ public class SurtidoService {
     private final Database database;
     private final String dispositivoId;
     private final AlmacenService almacen;
+    private final PreciosService precios;
     private final LoteRepository lotes = new LoteRepository();
     private final InventarioRepository inventario = new InventarioRepository();
     private final OrdenRepository ordenes = new OrdenRepository();
     private final BitacoraRepository bitacora = new BitacoraRepository();
 
-    public SurtidoService(Database database, String dispositivoId, AlmacenService almacen) {
+    public SurtidoService(Database database, String dispositivoId, AlmacenService almacen, PreciosService precios) {
         this.database = database;
         this.dispositivoId = dispositivoId;
         this.almacen = almacen;
+        this.precios = precios;
+    }
+
+    /** Canal de precios con el que se surte a la sucursal (cremerías o ruta de la Sierra). */
+    public ReglaPrecio.Canal canal(String sucursalId) {
+        return database.con(c -> canal(c, sucursalId));
+    }
+
+    static ReglaPrecio.Canal canal(Connection c, String sucursalId) throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement("SELECT canal_precio FROM sucursales WHERE id = ?")) {
+            ps.setString(1, sucursalId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() && rs.getString(1) != null
+                        ? ReglaPrecio.Canal.valueOf(rs.getString(1)) : ReglaPrecio.Canal.BODEGA_SUCURSAL;
+            }
+        }
+    }
+
+    /** Precio interno que tendría una línea con este costo (para mostrarlo antes de registrar). */
+    public PrecioInterno precioInterno(Sucursal sucursal, ProductoCatalogo producto, long costoCentavos) {
+        return database.con(c -> precioInterno(c, sucursal.id(), producto, costoCentavos));
+    }
+
+    private PrecioInterno precioInterno(Connection c, String sucursalId, ProductoCatalogo producto,
+                                        long costoCentavos) throws SQLException {
+        Optional<ReglaPrecio> regla = precios.reglaAplicable(c, canal(c, sucursalId), producto.id(),
+                producto.categoriaId(), null, sucursalId, LocalDate.now());
+        return new PrecioInterno(PreciosService.precio(regla, costoCentavos), regla.orElse(null));
     }
 
     /** Costo de la cantidad según los lotes del almacén (primero el más antiguo). */
@@ -216,26 +268,33 @@ public class SurtidoService {
                 }
             }
         }
+        Permisos.exigirAdministrador(quien, "surtir sucursales");
         String surtidoId = Ids.nuevo();
         database.enTransaccion(c -> {
             String folio = bitacora.siguienteFolio(c, AccionBitacora.SURTIDO.prefijo(), dispositivoId);
+            ReglaPrecio.Canal canal = canal(c, sucursal.id());
             List<long[]> totales = new ArrayList<>();
+            List<PrecioInterno> internos = new ArrayList<>();
             long costoTotal = 0;
             long ventaTotal = 0;
+            long internoTotal = 0;
             List<List<AlmacenService.SalidaLote>> salidasPorLinea = new ArrayList<>();
             for (Linea l : lineas) {
                 List<AlmacenService.SalidaLote> salidas = almacen.salidaPeps(c, l.producto(), almacen.almacenId(), l.cantidad());
                 long costo = salidas.stream().mapToLong(AlmacenService.SalidaLote::costoCentavos).sum();
                 long venta = valorVenta(l.producto(), l.cantidad(), l.precios());
+                PrecioInterno interno = precioInterno(c, sucursal.id(), l.producto(), costo);
                 salidasPorLinea.add(salidas);
                 totales.add(new long[]{costo, venta});
+                internos.add(interno);
                 costoTotal += costo;
                 ventaTotal += venta;
+                internoTotal += interno.importeCentavos();
             }
             try (PreparedStatement ps = c.prepareStatement("""
                     INSERT INTO surtidos (id, folio, sucursal_id, forma_pago, total_costo_centavos, total_venta_centavos,
-                                          usuario_id, fecha, notas)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""")) {
+                                          usuario_id, fecha, notas, total_interno_centavos, canal, requiere_recepcion)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)""")) {
                 ps.setString(1, surtidoId);
                 ps.setString(2, folio);
                 ps.setString(3, sucursal.id());
@@ -245,6 +304,8 @@ public class SurtidoService {
                 ps.setString(7, quien.id());
                 ps.setString(8, Tiempo.ahora());
                 ps.setString(9, notas == null || notas.isBlank() ? null : notas.strip());
+                ps.setLong(10, internoTotal);
+                ps.setString(11, canal.name());
                 ps.executeUpdate();
             }
             for (int i = 0; i < lineas.size(); i++) {
@@ -262,10 +323,12 @@ public class SurtidoService {
                 }
                 inventario.registrar(c, l.producto().id(), sucursal.id(), lote, "SURTIDO_ENTRADA", l.cantidad(),
                         surtidoId, quien.id(), "Surtido " + folio);
+                PrecioInterno interno = internos.get(i);
                 try (PreparedStatement ps = c.prepareStatement("""
                         INSERT INTO surtido_detalle (id, surtido_id, renglon, producto_id, cantidad, costo_total_centavos,
-                                                     valor_venta_centavos, lote_destino_id)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)""")) {
+                                                     valor_venta_centavos, lote_destino_id, importe_interno_centavos,
+                                                     regla_precio_id)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""")) {
                     ps.setString(1, Ids.nuevo());
                     ps.setString(2, surtidoId);
                     ps.setInt(3, i + 1);
@@ -274,22 +337,15 @@ public class SurtidoService {
                     ps.setLong(6, costo);
                     ps.setLong(7, totales.get(i)[1]);
                     ps.setString(8, lote);
+                    ps.setLong(9, interno.importeCentavos());
+                    ps.setString(10, interno.regla() == null ? null : interno.regla().id());
                     ps.executeUpdate();
                 }
             }
-            if (formaPago == FormaPago.CREDITO && costoTotal > 0) {
-                try (PreparedStatement ps = c.prepareStatement("""
-                        INSERT INTO movimientos_credito (id, folio, sucursal_id, tipo, monto_centavos, surtido_id, usuario_id, fecha)
-                        VALUES (?, ?, ?, 'CARGO', ?, ?, ?, ?)""")) {
-                    ps.setString(1, Ids.nuevo());
-                    ps.setString(2, folio);
-                    ps.setString(3, sucursal.id());
-                    ps.setLong(4, costoTotal);
-                    ps.setString(5, surtidoId);
-                    ps.setString(6, quien.id());
-                    ps.setString(7, Tiempo.ahora());
-                    ps.executeUpdate();
-                }
+            // Lo que la sucursal debe es el precio interno (costo + margen de bodega), no el valor al público.
+            if (formaPago == FormaPago.CREDITO && internoTotal > 0) {
+                CreditoService.insertarMovimiento(c, Ids.nuevo(), folio, sucursal.id(), "CARGO", "SURTIDO", internoTotal,
+                        surtidoId, surtidoId, null, quien.id());
             }
             String orden = "";
             if (ordenId != null) {
@@ -298,8 +354,9 @@ public class SurtidoService {
             }
             bitacora.registrar(c, AccionBitacora.SURTIDO, quien, dispositivoId, "surtidos", surtidoId,
                     "A " + sucursal.nombre() + " (" + formaPago.nombre().toLowerCase() + "): " + lineas.size()
-                            + " producto(s), costo " + Dinero.formatear(costoTotal) + ", valor de venta "
-                            + Dinero.formatear(ventaTotal) + orden, folio);
+                            + " producto(s), costo " + Dinero.formatear(costoTotal)
+                            + (internoTotal == costoTotal ? "" : ", precio interno " + Dinero.formatear(internoTotal))
+                            + ", valor de venta " + Dinero.formatear(ventaTotal) + orden, folio);
             return null;
         });
         return detalle(surtidoId);
@@ -351,7 +408,8 @@ public class SurtidoService {
             }
             List<DetalleLinea> lineas = new ArrayList<>();
             try (PreparedStatement ps = c.prepareStatement("""
-                    SELECT d.lote_destino_id, p.nombre, p.unidad, d.cantidad, d.costo_total_centavos, d.valor_venta_centavos
+                    SELECT d.lote_destino_id, p.nombre, p.unidad, d.cantidad, d.costo_total_centavos, d.valor_venta_centavos,
+                           COALESCE(d.importe_interno_centavos, d.costo_total_centavos) AS interno
                     FROM surtido_detalle d JOIN productos p ON p.id = d.producto_id
                     WHERE d.surtido_id = ? ORDER BY d.renglon""")) {
                 ps.setString(1, surtidoId);
@@ -371,7 +429,7 @@ public class SurtidoService {
                         }
                         lineas.add(new DetalleLinea(rs.getString(2), Unidad.valueOf(rs.getString(3)),
                                 BigDecimal.valueOf(rs.getDouble(4)).setScale(3, RoundingMode.HALF_UP), rs.getLong(5),
-                                rs.getLong(6), precios));
+                                rs.getLong(6), precios, rs.getLong("interno")));
                     }
                 }
             }
@@ -382,6 +440,7 @@ public class SurtidoService {
     private static final String SELECT_RESUMEN = """
             SELECT t.id, t.folio, t.fecha, s.nombre AS sucursal, t.forma_pago, t.total_costo_centavos,
                    t.total_venta_centavos, t.notas, t.sucursal_id, u.nombre_completo AS usuario,
+                   COALESCE(t.total_interno_centavos, t.total_costo_centavos) AS total_interno,
                    (SELECT COUNT(*) FROM surtido_detalle d WHERE d.surtido_id = t.id) AS productos,
                    (SELECT o.folio FROM ordenes_reabastecimiento o WHERE o.surtido_id = t.id LIMIT 1) AS orden
             FROM surtidos t
@@ -393,7 +452,7 @@ public class SurtidoService {
         return new Resumen(rs.getString("id"), rs.getString("folio"), Tiempo.leer(rs.getString("fecha")),
                 rs.getString("sucursal"), FormaPago.valueOf(rs.getString("forma_pago")),
                 rs.getLong("total_costo_centavos"), rs.getLong("total_venta_centavos"), rs.getInt("productos"),
-                rs.getString("usuario"), rs.getString("orden"), rs.getString("sucursal_id"));
+                rs.getString("usuario"), rs.getString("orden"), rs.getString("sucursal_id"), rs.getLong("total_interno"));
     }
 
     /** Texto para mostrar una cantidad capturada con su unidad (g o pzas). */

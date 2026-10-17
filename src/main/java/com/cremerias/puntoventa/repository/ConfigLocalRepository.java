@@ -12,6 +12,7 @@ public class ConfigLocalRepository {
     public static final String TEMA = "ui.tema";
     public static final String MOVIMIENTO_REDUCIDO = "ui.movimiento_reducido";
     public static final String MENU_COMPACTO = "ui.menu_compacto";
+    public static final String TICKET_NEGRITAS = "ticket.todo_en_negritas";
 
     public Optional<String> obtener(Connection c, String clave) throws SQLException {
         try (PreparedStatement ps = c.prepareStatement("SELECT valor FROM config_local WHERE clave = ?")) {

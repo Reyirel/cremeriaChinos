@@ -167,12 +167,16 @@ public class HistorialPagina extends Pagina {
 
     private static Etiqueta.Tono tono(AccionBitacora accion) {
         String nombre = accion.name();
-        if (nombre.contains("ELIMINAD") || nombre.contains("CANCELADA") || nombre.contains("BLOQUEADO")
-                || nombre.contains("RECHAZADA") || nombre.equals("MERMA")) {
+        if (nombre.contains("ELIMINAD") || nombre.contains("CANCELADA") || nombre.contains("CANCELACION")
+                || nombre.contains("BLOQUEADO") || nombre.contains("RECHAZADA") || nombre.equals("MERMA")) {
             return Etiqueta.Tono.PELIGRO;
         }
+        if (nombre.startsWith("DEVOLUCION") || nombre.equals("NOTA_CREDITO") || nombre.equals("AJUSTE_INVENTARIO")
+                || nombre.equals("ACLARACION_SURTIDO")) {
+            return Etiqueta.Tono.AVISO;
+        }
         if (nombre.contains("CREAD") || nombre.contains("SURTIDO") || nombre.contains("ENTRADA") || nombre.contains("ABONO")
-                || nombre.contains("AUTORIZADO")) {
+                || nombre.contains("AUTORIZADO") || nombre.equals("COMPRA")) {
             return Etiqueta.Tono.EXITO;
         }
         return Etiqueta.Tono.NEUTRO;

@@ -5,6 +5,10 @@ import com.cremerias.puntoventa.model.Sesion;
 import com.cremerias.puntoventa.service.InventarioSucursalService.Bajo;
 import com.cremerias.puntoventa.ui.ConMenuLateral;
 import com.cremerias.puntoventa.ui.Navegador;
+import com.cremerias.puntoventa.ui.admin.AdminContexto;
+import com.cremerias.puntoventa.ui.admin.AjustesPagina;
+import com.cremerias.puntoventa.ui.admin.DevolucionesPagina;
+import com.cremerias.puntoventa.ui.admin.Pagina;
 import com.cremerias.puntoventa.ui.caja.CajaController;
 import com.cremerias.puntoventa.ui.componentes.IndicadoresVista;
 import com.cremerias.puntoventa.ui.componentes.MenuLateral;
@@ -24,8 +28,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Panel del supervisor: puede vender como un cajero, hacer el corte de las cajas de su sucursal
- * y consultar (sin editar) los productos de su sucursal.
+ * Panel del supervisor: puede vender como un cajero, hacer el corte de las cajas de su sucursal,
+ * confirmar los surtidos que llegan, ajustar el inventario de su sucursal, consultar sus
+ * devoluciones y consultar (sin editar) los productos de su sucursal.
  * Las vistas se crean una sola vez para no perder la venta en curso al cambiar de sección.
  */
 public class SupervisorController implements ConMenuLateral {
@@ -38,6 +43,9 @@ public class SupervisorController implements ConMenuLateral {
     private ProductosVista vistaProductos;
     private IndicadoresVista vistaIndicadores;
     private AccesosVista vistaAccesos;
+    private RecepcionVista vistaRecepcion;
+    private Pagina paginaAjustes;
+    private Pagina paginaDevoluciones;
     private int bloqueosAnteriores = -1;
     /** Productos en su mínimo de los que ya se avisó; nulo hasta la primera revisión. */
     private Set<String> minimosAvisados;
@@ -61,6 +69,12 @@ public class SupervisorController implements ConMenuLateral {
         menu.setDetalle("caja", "Vender y cobrar", false);
         menu.opcion("cortes", "Cortes de caja", "mdi2c-calculator-variant-outline", this::onCortes);
         menu.setDetalle("cortes", "De tu sucursal", false);
+        menu.opcion("recepcion", "Recepción", "mdi2t-truck-check-outline", this::onRecepcion);
+        menu.setDetalle("recepcion", "Surtidos que llegan", false);
+        menu.opcion("ajustes", "Ajustes", "mdi2c-clipboard-edit-outline", this::onAjustes);
+        menu.setDetalle("ajustes", "Inventario de tu sucursal", false);
+        menu.opcion("devoluciones", "Devoluciones", "mdi2k-keyboard-return", this::onDevoluciones);
+        menu.setDetalle("devoluciones", "De tus clientes", false);
         menu.opcion("productos", "Productos", "mdi2p-package-variant-closed", this::onProductos);
         menu.setDetalle("productos", "Existencias y precios", false);
         menu.opcion("indicadores", "Indicadores", "mdi2c-chart-line", this::onIndicadores);
@@ -120,6 +134,53 @@ public class SupervisorController implements ConMenuLateral {
         actualizarContador();
     }
 
+    private void onRecepcion() {
+        menu.seleccionar("recepcion");
+        if (vistaRecepcion == null) {
+            vistaRecepcion = new RecepcionVista(navegador, this::actualizarContador);
+        }
+        vistaRecepcion.actualizar();
+        contenido.getChildren().setAll(vistaRecepcion.nodo());
+        actualizarContador();
+    }
+
+    private void onAjustes() {
+        menu.seleccionar("ajustes");
+        if (paginaAjustes == null) {
+            paginaAjustes = new AjustesPagina(contextoSucursal(), sucursal());
+        }
+        mostrar(paginaAjustes);
+    }
+
+    private void onDevoluciones() {
+        menu.seleccionar("devoluciones");
+        if (paginaDevoluciones == null) {
+            paginaDevoluciones = new DevolucionesPagina(contextoSucursal(), sucursal());
+        }
+        mostrar(paginaDevoluciones);
+    }
+
+    private void mostrar(Pagina pagina) {
+        contenido.getChildren().setAll(pagina.vista());
+        try {
+            pagina.alMostrar();
+        } catch (RuntimeException e) {
+            navegador.avisos().error(AdminContexto.mensaje(e));
+        }
+    }
+
+    /** Las páginas compartidas con el administrador, limitadas a la sucursal del supervisor. */
+    private AdminContexto contextoSucursal() {
+        return new AdminContexto(navegador, navegador.contexto(), navegador.contexto().admin(), sesion.usuario(),
+                navegador.dialogos(), navegador.avisos(), this::actualizarContador, clave -> { });
+    }
+
+    private com.cremerias.puntoventa.model.Sucursal sucursal() {
+        String id = sesion.usuario().sucursalId();
+        return navegador.contexto().admin().sucursales().listar().stream().filter(s -> s.id().equals(id)).findFirst()
+                .orElseThrow(() -> new IllegalStateException("Tu usuario no tiene una sucursal asignada."));
+    }
+
     private void onIndicadores() {
         menu.seleccionar("indicadores");
         if (vistaIndicadores == null) {
@@ -148,6 +209,11 @@ public class SupervisorController implements ConMenuLateral {
         menu.setContador("productos", ofertar);
         int bloqueos = sucursal == null ? 0 : navegador.contexto().auth().accesos().pendientesDeSucursal(sucursal).size();
         menu.setContador("accesos", bloqueos);
+        int porRecibir = sucursal == null ? 0
+                : navegador.contexto().admin().recepciones().pendientes(sucursal, sesion.usuario()).size();
+        menu.setContador("recepcion", porRecibir);
+        menu.setDetalle("recepcion", porRecibir == 0 ? "Surtidos que llegan"
+                : porRecibir == 1 ? "1 surtido por confirmar" : porRecibir + " surtidos por confirmar", porRecibir > 0);
         if (bloqueosAnteriores >= 0 && bloqueos > bloqueosAnteriores) {
             navegador.avisos().conAccion("Un empleado de tu sucursal tiene el acceso bloqueado.", "Ver",
                     this::onAccesos);

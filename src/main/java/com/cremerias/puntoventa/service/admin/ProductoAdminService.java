@@ -103,7 +103,7 @@ public class ProductoAdminService {
             }
             for (Presentacion p : d.presentaciones()) {
                 Presentacion normal = new Presentacion(p.id() == null ? Ids.nuevo() : p.id(), id, p.nombre().strip(),
-                        p.granel(), p.factor(), p.codigoBarras(), p.principal(), p.activo());
+                        p.granel(), p.factor(), p.codigoBarras(), p.principal(), p.activo(), p.mermaPct());
                 if (p.id() == null) {
                     productos.insertarPresentacion(c, normal);
                 } else {
@@ -265,6 +265,9 @@ public class ProductoAdminService {
             }
             if (p.granel() && d.unidad() != Unidad.KG) {
                 throw new IllegalArgumentException("Solo los productos por kilo se pueden vender a granel.");
+            }
+            if (p.mermaPct() == null || p.mermaPct().signum() < 0 || p.mermaPct().compareTo(BigDecimal.valueOf(100)) >= 0) {
+                throw new IllegalArgumentException("La merma de \"" + p.nombre() + "\" debe ser de 0 % a menos de 100 %.");
             }
             if (p.codigoBarras() != null && !p.codigoBarras().isBlank() && !codigos.add(p.codigoBarras().strip())) {
                 throw new IllegalArgumentException("El código " + p.codigoBarras() + " está repetido.");

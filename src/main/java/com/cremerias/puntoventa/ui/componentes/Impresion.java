@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * Impresión de tickets en la impresora predeterminada del sistema.
@@ -29,6 +30,10 @@ import java.util.List;
  * <p>Una impresora térmica solo tiene un color (el del papel al quemarse), así que el
  * contraste se logra con negritas: lo que marca {@link TicketTexto.Enfasis#DESTACADO} sale en
  * negrita y el resto en regular, ambos en negro puro, en vez de un gris parejo y desvaído.</p>
+ *
+ * <p>Si aun así sale tenue (cabezal gastado, papel de baja sensibilidad o densidad baja en el
+ * controlador), se puede pedir todo en negritas: es una preferencia del equipo. La densidad del
+ * controlador y el tipo de papel no se pueden corregir desde aquí.</p>
  */
 public final class Impresion {
 
@@ -40,7 +45,25 @@ public final class Impresion {
     private static final double TOLERANCIA_ANCHO_MM = 15;
     private static final double TAMANO_FUENTE = 9;
 
+    private static volatile boolean todoEnNegritas;
+    private static volatile Consumer<Boolean> guardarPreferencia = valor -> { };
+
     private Impresion() {
+    }
+
+    /** Preferencia del equipo al arrancar y cómo guardarla cuando se cambie desde un ticket. */
+    public static void configurar(boolean negritas, Consumer<Boolean> guardar) {
+        todoEnNegritas = negritas;
+        guardarPreferencia = guardar == null ? valor -> { } : guardar;
+    }
+
+    public static boolean todoEnNegritas() {
+        return todoEnNegritas;
+    }
+
+    public static void setTodoEnNegritas(boolean negritas) {
+        todoEnNegritas = negritas;
+        guardarPreferencia.accept(negritas);
     }
 
     /** @return mensaje de error, o {@code null} si se envió a imprimir. */
@@ -95,8 +118,8 @@ public final class Impresion {
     }
 
     private static Font fuente(TicketTexto.Enfasis enfasis) {
-        return Font.font("Monospaced", enfasis == TicketTexto.Enfasis.DESTACADO ? FontWeight.BOLD : FontWeight.NORMAL,
-                TAMANO_FUENTE);
+        boolean negrita = todoEnNegritas || enfasis == TicketTexto.Enfasis.DESTACADO;
+        return Font.font("Monospaced", negrita ? FontWeight.BOLD : FontWeight.NORMAL, TAMANO_FUENTE);
     }
 
     /** Busca, entre los papeles que reporta la impresora, el más parecido al rollo térmico de
