@@ -6,7 +6,9 @@ import com.cremerias.puntoventa.model.Unidad;
 import com.cremerias.puntoventa.service.admin.CompraService;
 import com.cremerias.puntoventa.ui.componentes.CampoDinero;
 import com.cremerias.puntoventa.ui.componentes.Campos;
+import com.cremerias.puntoventa.ui.componentes.Cargador;
 import com.cremerias.puntoventa.ui.componentes.Dialogo;
+import com.cremerias.puntoventa.ui.componentes.DialogoConfirmacion;
 import com.cremerias.puntoventa.ui.componentes.Formulario;
 import com.cremerias.puntoventa.util.Cantidades;
 import com.cremerias.puntoventa.util.Dinero;
@@ -103,6 +105,25 @@ final class DialogoCompra {
     }
 
     private DialogoCompra() {
+    }
+
+    /**
+     * Abre una compra nueva con los proveedores al día. Es la única forma de meter mercancía al
+     * almacén (Compras y el inventario del almacén la usan); sin proveedores, pide agregar uno.
+     */
+    static void abrir(AdminContexto a, Runnable alTerminar) {
+        Cargador.ejecutar(() -> new Object[]{a.admin().compras().proveedores(), a.admin().compras().politica()},
+                datos -> {
+                    @SuppressWarnings("unchecked")
+                    List<CompraService.Proveedor> lista = (List<CompraService.Proveedor>) datos[0];
+                    if (lista.stream().noneMatch(CompraService.Proveedor::activo)) {
+                        DialogoConfirmacion.mostrar(a.dialogos(), "Primero agrega un proveedor",
+                                "Cada compra queda ligada a su proveedor. Agrega el primero y luego registra la compra.",
+                                "Agregar proveedor", false, () -> proveedor(a, null, alTerminar));
+                        return;
+                    }
+                    mostrar(a, lista, (CompraService.PoliticaBonificacion) datos[1], alTerminar);
+                }, e -> a.avisos().error("No se pudo abrir la compra: " + AdminContexto.mensaje(e)));
     }
 
     static void mostrar(AdminContexto a, List<CompraService.Proveedor> proveedores, CompraService.PoliticaBonificacion politica,

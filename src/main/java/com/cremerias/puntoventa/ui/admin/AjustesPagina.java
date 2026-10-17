@@ -235,6 +235,16 @@ public class AjustesPagina extends Pagina {
 
     /** Ajuste nuevo; los parámetros (opcionales) llegan desde «Existencias negativas». */
     private void ajustar(Sucursal ubicacionFija, ProductoCatalogo productoFijo, AjusteService.Motivo motivoInicial) {
+        nuevoAjuste(a, ubicaciones, productos, ubicacionFija, productoFijo, motivoInicial, this::cargar);
+    }
+
+    /**
+     * Diálogo de ajuste nuevo. Es la única forma de registrar mermas, caducidades y daños: el
+     * inventario del almacén lo abre con el producto y el motivo ya elegidos.
+     */
+    static void nuevoAjuste(AdminContexto a, List<Sucursal> ubicaciones, List<ProductoCatalogo> productos,
+                            Sucursal ubicacionFija, ProductoCatalogo productoFijo, AjusteService.Motivo motivoInicial,
+                            Runnable alGuardar) {
         Dialogo d = new Dialogo("Nuevo ajuste de inventario",
                 "Corrige la existencia de un producto con su motivo. Queda en el historial con su valor al costo.",
                 "mdi2c-clipboard-edit-outline", Dialogo.Tono.ACENTO);
@@ -370,7 +380,7 @@ public class AjustesPagina extends Pagina {
             String doc = documento.getText();
             String texto = nota.getText();
             a.guardar(d, "Ajuste registrado: " + p.nombre(), () -> a.ctx().ajustes().registrar(ajusteId, s, p, m, conSigno,
-                    null, doc, texto, a.usuario()), this::cargar);
+                    null, doc, texto, a.usuario()), alGuardar);
         };
         d.agregarBoton("Cancelar", null, d::cancelar, "flat");
         d.agregarBoton("Registrar ajuste", "mdi2c-check", guardar, "accent");

@@ -159,19 +159,21 @@ public class IndicadoresRepository {
         }
     }
 
-    /** Mermas valuadas al costo (PEPS) del periodo, para la utilidad neta. */
+    /**
+     * Mermas valuadas al costo (PEPS) del periodo, para la utilidad neta: las registradas como merma
+     * (antes, desde el inventario del almacén) más los ajustes por caducidad o producto dañado, que
+     * es como se registran ahora. Los ajustes de salida guardan su costo en negativo.
+     */
     public long mermasCentavos(Connection c, String sucursalId, Instant desde, Instant hastaExclusivo) throws SQLException {
-        try (PreparedStatement ps = c.prepareStatement("""
+        String d = Tiempo.formatear(desde);
+        String h = Tiempo.formatear(hastaExclusivo);
+        return suma(c, """
                 SELECT COALESCE(SUM(costo_centavos), 0) FROM mermas
-                WHERE sucursal_id = ? AND fecha >= ? AND fecha < ?""")) {
-            ps.setString(1, sucursalId);
-            ps.setString(2, Tiempo.formatear(desde));
-            ps.setString(3, Tiempo.formatear(hastaExclusivo));
-            try (ResultSet rs = ps.executeQuery()) {
-                rs.next();
-                return rs.getLong(1);
-            }
-        }
+                WHERE sucursal_id = ? AND fecha >= ? AND fecha < ?""", sucursalId, d, h)
+                - suma(c, """
+                SELECT COALESCE(SUM(costo_centavos), 0) FROM ajustes_inventario
+                WHERE sucursal_id = ? AND fecha >= ? AND fecha < ? AND motivo IN ('CADUCIDAD', 'DANO')""",
+                sucursalId, d, h);
     }
 
     /**

@@ -5,11 +5,11 @@ import com.cremerias.puntoventa.model.ProductoCatalogo;
 import com.cremerias.puntoventa.model.Sucursal;
 import com.cremerias.puntoventa.model.Unidad;
 import com.cremerias.puntoventa.repository.LoteRepository;
+import com.cremerias.puntoventa.service.AjusteService;
 import com.cremerias.puntoventa.service.InventarioSucursalService;
 import com.cremerias.puntoventa.service.admin.AlmacenService;
 import com.cremerias.puntoventa.ui.componentes.BarraHerramientas;
 import com.cremerias.puntoventa.ui.componentes.Cargador;
-import com.cremerias.puntoventa.ui.componentes.Campos;
 import com.cremerias.puntoventa.ui.componentes.Diseno;
 import com.cremerias.puntoventa.ui.componentes.Dialogo;
 import com.cremerias.puntoventa.ui.componentes.EstadoVacio;
@@ -28,19 +28,15 @@ import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.TextField;
-import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * Inventario del almacén central por lotes. Pantalla de referencia del sistema de diseño:
  * resumen compacto, tabla con búsqueda y filtros, y detalle del producto elegido con sus
- * presentaciones, lotes y últimos movimientos. Registrar entrada, ver lotes y registrar merma.
+ * presentaciones, lotes y últimos movimientos. Lleva a la compra (única entrada) y al ajuste (merma).
  */
 public class AlmacenPagina extends Pagina {
 
@@ -88,7 +84,6 @@ public class AlmacenPagina extends Pagina {
     private ResumenMetricas.Metrica metricaAgotados;
     private PanelDetalle detalle;
     private MaestroDetalle maestro;
-    private Map<String, BigDecimal> existencias = Map.of();
 
     public AlmacenPagina(AdminContexto a) {
         super(a);
@@ -106,8 +101,8 @@ public class AlmacenPagina extends Pagina {
 
     @Override
     protected Node construir() {
-        Button registrar = Ui.principal("Registrar entrada", "mdi2t-tray-arrow-down");
-        registrar.setOnAction(e -> registrarEntrada(null));
+        Button registrar = Ui.principal("Nueva compra", "mdi2c-cart-arrow-down");
+        registrar.setOnAction(e -> nuevaCompra());
         VBox pagina = Ui.pagina("Inventario del almacén",
                 "Existencias por lote, valuadas al costo. Al surtir sale primero el lote más antiguo.", registrar);
 
@@ -139,13 +134,12 @@ public class AlmacenPagina extends Pagina {
                 .ayuda("Existencia de cada lote por su costo.");
         var columnaEstado = tabla.etiqueta("Estado", this::situacion, s -> s.texto, s -> s.tono).ancho(130);
         var columnaAcciones = tabla.acciones(
-                Accion.<AlmacenService.Existencia>boton("mdi2t-tray-arrow-down", "Registrar entrada",
-                        e -> registrarEntrada(e.producto())),
+                Accion.<AlmacenService.Existencia>boton("mdi2c-cart-arrow-down", "Nueva compra", e -> nuevaCompra()),
                 Accion.<AlmacenService.Existencia>boton("mdi2l-layers-outline", "Ver lotes", e -> lotes(e.producto())),
-                Accion.<AlmacenService.Existencia>menu("mdi2d-delete-variant", e -> "Registrar merma", e -> merma(e.producto()))
-                        .si(e -> e.producto().sujetoMerma()).peligrosa());
+                Accion.<AlmacenService.Existencia>menu("mdi2c-clipboard-edit-outline", e -> "Ajustar existencia",
+                        e -> ajustar(e.producto())));
         tabla.setVacio(new EstadoVacio("mdi2p-package-variant", "Aún no hay productos en el catálogo.",
-                "Da de alta los productos para registrar sus entradas al almacén.")
+                "Da de alta los productos para registrar sus compras al almacén.")
                 .accion("Ir a Productos", "mdi2a-arrow-right", () -> a.irA().accept("productos")));
         tabla.setSinResultados(EstadoVacio.sinResultados("No encontramos productos con estos filtros.", barra::limpiar));
         tabla.setAlActivar(e -> {
@@ -182,8 +176,6 @@ public class AlmacenPagina extends Pagina {
     private void cargar() {
         tabla.cargando("Cargando inventario…");
         carga.cargar(() -> a.admin().almacen().existencias(), lista -> {
-            existencias = lista.stream().collect(Collectors.toMap(e -> e.producto().id(),
-                    AlmacenService.Existencia::existencia, (x, y) -> x));
             actualizarCategorias(lista);
             actualizarResumen(lista);
             tabla.setDatos(lista.stream().filter(e -> e.producto().activo() || e.existencia().signum() > 0).toList());
@@ -305,17 +297,13 @@ public class AlmacenPagina extends Pagina {
         VBox movimientos = PanelDetalle.seccion("Últimos movimientos", Ui.texto("Cargando movimientos…", "texto-secundario"));
         detalle.setContenido(existencia, datos, presentaciones, lotes, movimientos);
 
-        Button entrada = Ui.principal("Registrar entrada", "mdi2t-tray-arrow-down");
-        entrada.setOnAction(x -> registrarEntrada(p));
+        Button compra = Ui.principal("Nueva compra", "mdi2c-cart-arrow-down");
+        compra.setOnAction(x -> nuevaCompra());
         Button verLotes = Ui.secundario("Ver lotes", "mdi2l-layers-outline");
         verLotes.setOnAction(x -> lotes(p));
-        List<Node> acciones = new ArrayList<>(List.of(entrada, verLotes));
-        if (p.sujetoMerma()) {
-            Button merma = Ui.boton("Merma", "mdi2d-delete-variant", "flat", "danger");
-            merma.setOnAction(x -> merma(p));
-            acciones.add(merma);
-        }
-        detalle.setAcciones(acciones.toArray(Node[]::new));
+        Button ajuste = Ui.boton("Ajustar", "mdi2c-clipboard-edit-outline", "flat");
+        ajuste.setOnAction(x -> ajustar(p));
+        detalle.setAcciones(compra, verLotes, ajuste);
 
         String almacen = a.admin().almacen().almacenId();
         cargaDetalle.cargar(() -> new DatosDetalle(a.admin().almacen().lotes(p.id(), almacen),
@@ -374,8 +362,9 @@ public class AlmacenPagina extends Pagina {
 
     // ------------------------------------------------------------------ acciones
 
-    private void registrarEntrada(ProductoCatalogo fijo) {
-        DialogoEntradaAlmacen.mostrar(a, fijo, existencias::get, this::cargar);
+    /** La mercancía entra al almacén solo por compras: quedan ligadas a su proveedor y su documento. */
+    private void nuevaCompra() {
+        DialogoCompra.abrir(a, this::cargar);
     }
 
     private void lotes(ProductoCatalogo producto) {
@@ -423,64 +412,20 @@ public class AlmacenPagina extends Pagina {
         a.dialogos().mostrar(d);
     }
 
-    private void merma(ProductoCatalogo producto) {
-        Dialogo d = new Dialogo("Registrar merma", producto.nombre(), "mdi2d-delete-variant", Dialogo.Tono.PELIGRO);
-        d.setPrefWidth(540);
-        List<Sucursal> ubicaciones = a.admin().sucursales().ubicaciones();
-        ComboBox<Sucursal> ubicacion = new ComboBox<>(FXCollections.observableArrayList(ubicaciones));
-        ubicacion.setConverter(Combos.sucursal());
-        ubicacion.setValue(ubicaciones.isEmpty() ? null : ubicaciones.getFirst());
-        Formulario.Campo campoUbicacion = Formulario.campo("Ubicación", ubicacion);
-        TextField cantidad = new TextField();
-        Campos.soloNumeros(cantidad, 0);
-        cantidad.setAlignment(javafx.geometry.Pos.CENTER_RIGHT);
-        cantidad.setPromptText("0");
-        Formulario.Campo campoCantidad = Formulario.campo("Cantidad que se pierde",
-                Formulario.conUnidad(cantidad, Cantidades.unidadCaptura(producto.unidad())));
-        TextField motivo = new TextField();
-        motivo.setPromptText("Ej. Se echó a perder, se cayó, caducó");
-        Formulario.Campo campoMotivo = Formulario.campo("Motivo", motivo);
-        Runnable actualizar = () -> {
-            Sucursal u = ubicacion.getValue();
-            if (u == null) {
-                return;
-            }
-            Cargador.ejecutar(() -> a.admin().almacen().existencia(producto.id(), u.id()),
-                    ex -> campoUbicacion.ayuda("Existencia en " + u.nombre() + ": " + Cantidades.formatear(producto.unidad(), ex)),
-                    err -> campoUbicacion.ayuda(null));
-        };
-        ubicacion.valueProperty().addListener((o, x, y) -> actualizar.run());
-        cantidad.textProperty().addListener((o, x, y) -> campoCantidad.setError(null));
-        motivo.textProperty().addListener((o, x, y) -> campoMotivo.setError(null));
-        actualizar.run();
-        d.setContenido(Formulario.nota("mdi2a-alert-outline",
-                        "Se descuenta del lote más antiguo de esa ubicación y queda en el historial con su costo.", "peligro"),
-                campoUbicacion, campoCantidad, campoMotivo);
-        Runnable guardar = () -> {
-            BigDecimal c = Cantidades.desdeCaptura(producto.unidad(), cantidad.getText()).orElse(BigDecimal.ZERO);
-            boolean valido = true;
-            if (c.signum() <= 0) {
-                campoCantidad.setError("Escribe una cantidad mayor a cero.");
-                valido = false;
-            }
-            if (motivo.getText() == null || motivo.getText().isBlank()) {
-                campoMotivo.setError("Escribe por qué se pierde.");
-                valido = false;
-            }
-            Sucursal u = ubicacion.getValue();
-            if (!valido || u == null) {
-                return;
-            }
-            String texto = motivo.getText();
-            a.guardar(d, "Merma registrada: " + producto.nombre(),
-                    () -> a.admin().almacen().registrarMerma(producto, u, c, texto, a.usuario()), this::cargar);
-        };
-        d.agregarBoton("Cancelar", null, d::cancelar, "flat");
-        d.agregarBoton("Registrar merma", "mdi2c-check", guardar, "danger");
-        d.setAlCancelar(d::cerrar);
-        d.setAlConfirmar(guardar);
-        d.setFocoInicial(cantidad);
-        d.vigilarCambios(cantidad, motivo);
-        a.dialogos().mostrar(d);
+    /**
+     * Merma, caducidad, daño o conteo físico: todo es un ajuste de inventario (un solo registro que
+     * resta de la utilidad en Indicadores). En el almacén y con caducidad si el producto se merma.
+     */
+    private record Ubicaciones(List<Sucursal> ubicaciones, List<ProductoCatalogo> productos) {
+    }
+
+    private void ajustar(ProductoCatalogo producto) {
+        Cargador.ejecutar(() -> new Ubicaciones(a.admin().sucursales().ubicaciones(),
+                a.admin().productos().listar().stream().filter(ProductoCatalogo::activo).toList()), datos -> {
+            Sucursal almacen = datos.ubicaciones().stream().filter(u -> u.id().equals(a.admin().almacen().almacenId()))
+                    .findFirst().orElse(null);
+            AjustesPagina.nuevoAjuste(a, datos.ubicaciones(), datos.productos(), almacen, producto,
+                    producto.sujetoMerma() ? AjusteService.Motivo.CADUCIDAD : null, this::cargar);
+        }, e -> a.avisos().error("No se pudo abrir el ajuste: " + AdminContexto.mensaje(e)));
     }
 }

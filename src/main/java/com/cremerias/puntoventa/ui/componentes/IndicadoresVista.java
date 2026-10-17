@@ -427,7 +427,7 @@ public class IndicadoresVista {
             grupoUtilidad.agregar("bruta", "Utilidad bruta");
             grupoUtilidad.agregar("gastos", "Gastos del periodo");
             grupoUtilidad.agregar("nomina", "Nómina del periodo");
-            grupoUtilidad.agregar("mermas", "Mermas (al costo)");
+            grupoUtilidad.agregar("mermas", "Mermas y caducidades (al costo)");
             grupoUtilidad.agregar("neta", "Utilidad neta");
             grupoUtilidad.agregar("margen", "Margen neto");
             grid.add(grupoUtilidad, 0, 1);

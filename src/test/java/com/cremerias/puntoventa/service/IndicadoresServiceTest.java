@@ -367,6 +367,24 @@ class IndicadoresServiceTest {
     }
 
     /**
+     * La merma se registra ahora como ajuste: caducidad y producto dañado restan de la utilidad neta
+     * igual que una merma; un faltante físico no (queda en la revisión de la operación).
+     */
+    @Test
+    void lasCaducidadesYDanosCuentanComoMerma() {
+        ajustes.registrar(Ids.nuevo(), sucursalMatriz(), productoAdmin("Bolillo"), AjusteService.Motivo.CADUCIDAD,
+                new BigDecimal("-1"), null, null, null, admin);
+        ajustes.registrar(Ids.nuevo(), sucursalMatriz(), productoAdmin("Bolillo"), AjusteService.Motivo.DANO,
+                new BigDecimal("-2"), null, null, null, admin);
+        ajustes.registrar(Ids.nuevo(), sucursalMatriz(), productoAdmin("Bolillo"), AjusteService.Motivo.FALTANTE,
+                new BigDecimal("-1"), null, null, null, admin);
+
+        LocalDate hoy = LocalDate.now();
+        IndicadoresService.UtilidadResumen u = indicadores.calcularUtilidad(admin, matriz, hoy, hoy);
+        assertEquals(3 * 210L, u.mermasCentavos());
+    }
+
+    /**
      * Los datos de ejemplo (DatosDemo) se siembran "ahora", igual que la venta de la prueba: no se
      * puede comparar contra un inventario inicial de antes de hoy. En vez de eso, se mide el valor
      * del inventario de hoy antes y después de la venta, y se compara la diferencia.

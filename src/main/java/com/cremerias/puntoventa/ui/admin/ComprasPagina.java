@@ -318,18 +318,7 @@ public class ComprasPagina extends Pagina {
     }
 
     private void nuevaCompra() {
-        Cargador.ejecutar(() -> new Object[]{a.admin().compras().proveedores(), a.admin().compras().politica()},
-                datos -> {
-                    @SuppressWarnings("unchecked")
-                    List<CompraService.Proveedor> lista = (List<CompraService.Proveedor>) datos[0];
-                    if (lista.stream().noneMatch(CompraService.Proveedor::activo)) {
-                        DialogoConfirmacion.mostrar(a.dialogos(), "Primero agrega un proveedor",
-                                "Cada compra queda ligada a su proveedor. Agrega el primero y luego registra la compra.",
-                                "Agregar proveedor", false, () -> DialogoCompra.proveedor(a, null, this::cargar));
-                        return;
-                    }
-                    DialogoCompra.mostrar(a, lista, (CompraService.PoliticaBonificacion) datos[1], this::cargar);
-                }, e -> a.avisos().error("No se pudo abrir la compra: " + AdminContexto.mensaje(e)));
+        DialogoCompra.abrir(a, this::cargar);
     }
 
     // ------------------------------------------------------------------ proveedores
